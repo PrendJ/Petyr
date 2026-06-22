@@ -34,7 +34,7 @@ async function logout(request: Request) {
     }
   }
 
-  return NextResponse.redirect(new URL("/forecasting", request.url));
+  return NextResponse.redirect(new URL("/forecasting", config.callbackUrl ?? request.url));
 }
 
 export async function GET(request: Request) {

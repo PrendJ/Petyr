@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   const config = readPetyrAuthConfig();
 
   if (config.mode === "disabled") {
-    return NextResponse.redirect(new URL("/forecasting", request.url));
+    return NextResponse.redirect(new URL("/forecasting", config.callbackUrl ?? request.url));
   }
 
   const url = new URL(request.url);
@@ -58,5 +58,5 @@ export async function GET(request: Request) {
     secure: process.env.NODE_ENV === "production"
   });
 
-  return NextResponse.redirect(new URL("/forecasting", request.url));
+  return NextResponse.redirect(new URL("/forecasting", config.callbackUrl ?? request.url));
 }
