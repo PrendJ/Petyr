@@ -1,0 +1,770 @@
+# Forecasting product spec
+
+## Product goal
+
+Create a forecasting workspace for UNGUESS that helps CSMs and management understand:
+- expected monthly revenue;
+- closed revenue;
+- agreement residuals;
+- customer-level trends;
+- business unit distribution;
+- forecast accuracy;
+- risk signals.
+
+## Users
+
+### CSM
+
+Needs:
+- see assigned companies;
+- understand active agreements;
+- see monthly campaign/revenue history;
+- enter or revise forecast;
+- add notes;
+- understand risks.
+
+### Management / C-level
+
+Needs:
+- see total forecast;
+- compare AI forecast, CSM forecast and closed revenue;
+- track accuracy;
+- analyze trends by business unit;
+- detect risks early.
+
+## MVP pages
+
+### `/forecasting`
+
+Company-level workspace.
+
+The management-approved visual rendering is data-bound through:
+
+```txt
+apps/forecasting-app/src/services/petyrApprovedRenderingAdapter.ts
+```
+
+The adapter reads Petyr PostgreSQL services and passes serializable props into
+`PetyrMVPRendering.tsx`. If Redash materialized data or field mappings are
+missing, `/forecasting` must show diagnostics/empty values instead of silently
+falling back to illustrative mock data. When company ownership is empty or
+incomplete but real PostgreSQL campaign, agreement or forecast rows exist,
+Management View, CSM Overview and Company Detail must render those real rows with
+fallback CSM attribution and Branch `Unassigned Branch`; the diagnostics are
+warnings, not blocking issues.
+On `/forecasting`, rendering diagnostics for admins must stay available through
+a compact fixed bottom-right `Data diagnostics` menu instead of occupying the
+main Management View dashboard body. Blocking issues and warnings must be
+grouped and counted in the menu, and the menu must link to `/petyr-admin` Data
+Health. The floating diagnostics menu and its operator links are visible only to
+users with `petyr:admin`.
+
+The Petyr workspace shell must be shared across Management View, CSM Overview, Company Detail and Forecast Entry: one descriptive header card, one section navigator and route-aware links. The header card title and supporting copy must describe what the active view offers, so users can understand the page immediately. The top-level workspace switches Management/CSM through `?view=management|csm`; Company Detail and Forecast Entry use dedicated routes with query parameters when context is available.
+
+The top-level `/forecasting` menu must send users directly to the complete
+operational routes for Forecast Entry and Company Detail. It must not render
+partial preview tabs that look like the complete editing/detail workspaces.
+When company/CSM/year/month context is available from the dashboard data, links
+to `/forecasting/entry` and `/forecasting/company/[companyName]` should include
+query parameters that prefill the dedicated route context.
+
+When Petyr has an authenticated Access Layer identity whose `displayName`
+normalizes to exactly one canonical Company Ownership CSM name, CSM filters in
+Petyr workspaces should use that CSM as the initial non-binding default. Query
+parameters and later user changes take precedence. If the Access Layer display
+name does not match, or matches ambiguously after trim/case/space/accent
+normalization, Petyr keeps the existing default filter behavior. This is a UI
+preselection only; it does not introduce row-level access restrictions, new
+permissions, schema changes or email-based CSM mapping.
+
+Forecast Entry uses the shared workspace header as the only page title. Its
+CSM/company navigator stays sticky during editor scroll, and the company
+previous/next control must not repeat the selected CSM name.
+
+Columns:
+- Company;
+- CSM;
+- campaigns count;
+- agreements count;
+- current year revenue;
+- active agreements count;
+- residual agreement value;
+- last campaign end date;
+- data quality status.
+
+The company-level Petyr data service lives in:
+
+```txt
+apps/forecasting-app/src/services/petyrDataService.ts
+```
+
+It reads from PostgreSQL materialized Redash latest tables and Petyr forecast tables.
+When materialized Redash columns cannot be resolved through `redash_column_mapping`,
+the service returns diagnostics and keeps the UI on a safe fallback path.
+
+Current service read models:
+- `getManagementView(year)`;
+- `getCsmOverview(csmName, year)`;
+- `getCsmOverviewWorkspace(year)`;
+- `getCompanyDetail(companyName, year)`;
+- `getForecastEntryContext(csmName, companyName, year, month)`;
+- `getBusinessUnitSummary(year)`.
+
+CSM Overview is read-only. It is populated through `getCsmOverviewWorkspace(year)`
+from PostgreSQL materialized Redash latest tables plus Petyr forecast tables. It shows
+assigned companies, current month, next month, an optional third selected month,
+CSM forecast by Business Unit, AI forecast by Business Unit and relevant insights.
+Relevant insights are computed from real company data for forecast update reminders,
+agreements expiring within 60 days, high agreement residuals and Business Units below
+historical pace. Inactive-company and locked-past-month/past-month-logged categories
+must not appear in CSM Overview relevant insights. Opening a relevant insight shows at
+most the first four affected rows by default, with an explicit control to expand all
+affected rows when there are more. Company names inside the affected list link to
+Company Detail. Company cards link to company detail; forecast/action cards link to
+the related company or Forecast Entry. The Client View includes a company filter next
+to the optional third-month selector. Its description states once that the view is
+read-only and edits happen in Forecast Entry; individual month cards do not repeat
+that copy. Within each company card, the active agreement title, total agreement
+value, residual and expiry date are shown as one combined agreement evidence chip,
+and the CSM chip is omitted because the CSM scope is already selected in the page
+filter. Inline forecast editing is not allowed here. Agreement expiry relevant
+insights must include only agreements whose expiry date is
+greater than or equal to today and less than or equal to today plus 60 days; already
+expired agreements can remain visible in Company Detail as historical/status data but
+must not appear in operational expiring-soon actions. High residual operational alerts
+use active, non-expired agreement residual values. High residual affected-company
+evidence must use the active residual agreement expiring closest to today, showing
+that agreement's total value, residual, expiry and deal link when available instead
+of a current-month chip.
+Expired agreements with residual value must appear, when implemented, in a separate
+informational/operational category named `Expired agreement with residual`, showing
+the residual value and not mixed with `expiring within 60 days`.
+
+Rule-based Petyr alerts live in:
+
+```txt
+apps/forecasting-app/src/services/petyrAlertService.ts
+```
+
+They are deterministic and do not use an LLM. Alerts read PostgreSQL-backed Petyr
+read models and cover agreement expiry within 60 days, high residuals, inactive
+companies, missing forecast updates, locked past months, closed revenue under forecast,
+CSM forecast materially below AI forecast and Business Units below historical pace.
+CSM Overview and Company Detail can display each alert with severity, evidence,
+suggested action and a target link. CSM Overview hides inactive-company and locked
+past-month alerts from its CSM-facing alert list.
+
+Monthly Forecast Entry editability is centralized in:
+
+```txt
+apps/forecasting-app/src/lib/forecastEntryMode.ts
+```
+
+The helper returns whether the selected month is editable, the only editable
+monthly forecast type (`previous_month` or `ongoing`), and a lock reason.
+Past months, AI forecast values and closed revenue are never editable. The internal
+diagnostic endpoint is:
+
+```txt
+GET /api/petyr/forecast-entry-mode-diagnostics
+```
+
+These read models use `redash_raw_master_campaigns_latest`,
+`redash_raw_master_agreements_latest`, `redash_raw_company_ownership_latest`,
+`forecast_monthly`, `forecast_annual`, `company_forecast_status` and
+`ai_forecast_cache`. They do not call Redash and
+do not read `RedashSnapshot.payload` directly.
+
+### `/forecasting/entry`
+
+Dedicated monthly Forecast Entry workspace.
+
+For the current Petyr alignment cycle, Forecast Entry's functional content is
+substantially correct. The task is visual/layout alignment to the Petyr MVP
+Rendering golden master, not a rewrite of monthly or annual forecast logic.
+
+This is the only area where monthly CSM forecast values can be edited. It reads
+company context, official Business Units, Redash-derived closed revenue, previous-month
+forecast, ongoing forecast, AI forecast, company active status and recent save
+history through:
+
+```txt
+GET /api/petyr/forecast-entry
+```
+
+`/forecasting/entry` must be directly navigable without manually constructing query
+parameters. When company, CSM, year or month are missing, Petyr loads the default
+current context from PostgreSQL and shows selection controls for CSM, company, year
+and month. Links from read-only views should still prefill the context when possible.
+
+Forecast Entry uses the shared Petyr workspace shell. Its Data diagnostics must be available only to admins from the floating bottom-right menu instead of a body support card. Forecast Entry is the only UI route that may expose the manual AI Forecast apply flow, and that support-tool section is visible only to users with `petyr:admin`. Forecast Entry's Monthly forecast tab may expose a CSM-facing `Intelligence` section for users with `petyr:forecast:write`; this section may request OpenRouter-backed Forecast Intelligence for the selected company/year, render only validated consultative JSON and must not expose apply controls, raw prompt payloads or OpenRouter I/O diagnostics. The shared workspace header must expose a top-right `?` help control in every workspace section and link to the dedicated `/forecasting/entry/faq` page. The FAQ page explains forecast urgency ordering, monthly editability, deterministic preview, baseline calculations, residual pressure, rule-based alerts and Forecast Intelligence boundaries without changing formulas or persistence behavior. It must keep the same four-section workspace header/navigation available so users can continue navigating, preserving selected Forecast Entry/Company Detail query context when present.
+
+The save endpoint is:
+
+```txt
+POST /api/petyr/forecast-entry/save
+```
+
+Save rules:
+- editability is validated with `getForecastEntryMode`;
+- past months are locked;
+- only the currently editable monthly forecast type is saved;
+- closed revenue and AI forecast values are read-only;
+- one save creates one `forecast_save_session`;
+- one modified Business Unit creates one `forecast_change_log` row;
+- submitted values are upserted into `forecast_monthly`;
+- if at least one submitted monthly forecast value differs from the current saved value,
+  the save requires a non-empty CSM note and blank/whitespace notes are rejected;
+- the save note is stored on the save session;
+- company active/inactive status is stored in `company_forecast_status` and
+  snapshotted on the save session.
+
+One-time 2026 closed-revenue alignment:
+- Petyr has an explicit DB-only script for the exceptional 2026 alignment requested by product;
+- execution surface: `/petyr-admin` contains a protected `2026 closed revenue alignment` section with dry-run and apply buttons that call `/api/petyr/admin/backfill-2026-ongoing-from-closed` using `APP_INTERNAL_SECRET`;
+- fallback command: `npm run backfill:2026-ongoing-from-closed -- --dry-run`, then `npm run backfill:2026-ongoing-from-closed -- --apply` after reviewing the JSON preview;
+- it copies already closed 2026 Redash campaign revenue through the selected execution date into monthly `forecast_monthly` rows with both `forecast_type=previous_month` and `forecast_type=ongoing`, keeping the two monthly forecast values equal to real closed revenue for those months, and into `forecast_annual` rows that feed Management View Ongoing Forecast;
+- it is not a recurring feature, not a CSM workflow, not an import workflow and not a future scheduler;
+- it must not update Initial Forecast snapshots, Redash materialized closed revenue, AI forecast cache or Management Objectives.
+
+Petyr Admin Data Health must expose a PostgreSQL-only `Redash sync status` section for `master_campaigns`, `master_agreements` and `company_ownership`, showing source enabled state, latest sync status, run rows, finish time, error message, latest snapshot rows and materialized table rows. Forecasting app must not call Redash directly for this status.
+
+Forecast Entry also contains the annual forecast workflow for the selected
+company and year. It reads and writes Petyr-owned `forecast_annual` rows through:
+
+```txt
+GET /api/petyr/annual-forecast
+POST /api/petyr/annual-forecast/save-draft
+POST /api/petyr/annual-forecast/consolidate
+```
+
+Annual forecast rules:
+- granularity is company + Business Unit + year;
+- past years are read-only;
+- the current year is consultative and shows closed revenue/progress against annual values;
+- future years can be saved as draft;
+- consolidation is a separate explicit action;
+- only the next year can be consolidated, and only from December 15 through December 30;
+- consolidated rows store `consolidated_by` and `consolidated_at`;
+- consolidated rows are read-only unless the request is made by an admin.
+
+Initial Forecast rules:
+- 2026 has no historical Initial Forecast because it should have been defined in 2025;
+- 2026 requires a one-shot Excel export/import bootstrap compiled manually by CSMs;
+- the 2026 bootstrap import writes only Initial Forecast values and must not overwrite Ongoing Forecast;
+- Initial Forecast persists in `forecast_annual_snapshot` with `snapshot_type=initial`;
+- Ongoing Forecast remains the current/latest annual value in `forecast_annual`;
+- from 2027 onward, Initial Forecast is automatically frozen on January 1 in
+  `Europe/Rome` from the annual forecast in force for the newly started year or
+  service-defined annual cycle;
+- after freezing, later ongoing forecast updates must not modify Initial Forecast;
+- once an Initial Forecast snapshot is locked, later imports/consolidations must
+  not overwrite it unless a protected admin recovery call explicitly requests an
+  override;
+- the server-side consolidation service and protected manual endpoint are available;
+- real automatic scheduling mechanism and exact target-year/cutoff semantics remain backlog items.
+
+Management Objectives live at the bottom of Management View for users with
+`petyr:management:write`. The legacy direct route remains available as a
+management-only compatibility route:
+
+```txt
+/forecasting/entry/objectives
+```
+
+Suggested section name:
+
+```txt
+Management Objectives
+```
+
+This area is not monthly CSM forecast editing. It is for annual Branch and
+Business Unit objectives entered by management. Objective management has already
+been added/configured for the current MVP; do not add new objective tasks unless
+they address a specific bug. The objective page and API are protected by
+`petyr:management:write`; the old temporary hardcoded password gate is no longer
+used. Forecast Entry Annual Forecast remains the CSM-owned annual forecast and
+does not embed Management Objectives.
+
+The objective API routes are:
+
+```txt
+GET /api/petyr/management-objectives?year=YYYY
+POST /api/petyr/management-objectives
+```
+
+Persistence:
+- current values are stored in `management_objective`;
+- every save writes `management_objective_change_log`;
+- `updated_by` currently uses a placeholder until Petyr has authenticated manager identities.
+
+Validation:
+- `scope_type` accepts only `branch` or `business_unit`;
+- Business Unit scope keys are limited to the official closed list;
+- Branch scope keys must be present in Company Ownership `company_branch`, with `Unassigned Branch` allowed as the fallback Branch label;
+- `year` must be an integer between 2000 and 2100;
+- `value` must be numeric and greater than or equal to 0.
+
+### `/forecasting/company/[companyName]`
+
+Company detail.
+
+Company Detail uses the shared Petyr workspace shell and remains read-only for data edits. It must expose the Forecast Entry-style navigator for CSM filter, company selection, previous/next company and year load, using the same Forecast Entry company ordering. The year/load control appears to the left of previous/next company navigation; the previous/next helper must not repeat the CSM name. It must not expose the manual AI Forecast apply action. It may expose the same CSM-facing `Intelligence` section for users with `petyr:forecast:write`; this consultative action may call OpenRouter through the existing Forecast Intelligence path and may save/reuse only the sentinel Forecast Intelligence cache row, never numeric AI Forecast rows or CSM-owned forecast data.
+
+Sections:
+- Forecast Entry-style navigator with CSM filter, company selection, year/load on the left, and previous/next company navigation without repeating the CSM name;
+- read-only company summary with company name, assigned CSM context and an explicitly labelled Forecast status badge next to the Forecast Entry link;
+- primary KPI cards for Total agreement, Closed revenue YTD, Agreement residual and total Initial Forecast for the selected year;
+- active agreements, agreement value, agreement residual and agreement expiry date;
+- monthly revenue trend;
+- revenue by Business Unit, including closed-revenue bars, gray Initial Forecast markers and Previous-month forecast markers colored green when above Initial Forecast, yellow when below it and neutral when aligned;
+- Business Unit month-by-month view across 12 selected-year months with closed revenue, previous-month forecast, ongoing forecast and AI Forecast;
+- relevant company insights, showing only active rule-based insight categories and omitting zero-count categories;
+- campaign detail table with campaign name, status, Business Unit, agreement, value, costs, GM% and campaign link, ordered by End Date descending with missing End Date rows last;
+- agreement table ordered with active, non-expired agreements first and nearest expiry date first, then residual, total value and name tie-breakers;
+- forecast change history grouped by save session, placed directly below Agreements and residual evidence, showing the latest two save sessions by default with an explicit expansion control for older history;
+- monthly forecast rows: saved CSM monthly rows, read-only here;
+- annual forecast rows: CSM-owned annual forecast rows by Business Unit/year, draft or consolidated, not Management Objectives;
+- company active status;
+- AI forecast cache: generated suggestions in `ai_forecast_cache`, read-only here.
+
+This page reads PostgreSQL through `getCompanyDetail(companyName, year)` and does not
+call Redash directly. Forecast editing belongs only in `/forecasting/entry`;
+Company Detail must render these values read-only and link to Forecast Entry for
+monthly forecast edits.
+
+Company Detail Data diagnostics must be available through the fixed bottom-right menu and not as a support card in the body.
+Company Detail Data diagnostics must be visible only to users with
+`petyr:admin`.
+
+The Revenue by Business Unit section must use only `getCompanyDetail` data derived
+from PostgreSQL materialized Redash/Petyr tables. It reads Initial Forecast from
+`forecast_annual_snapshot` through the Company Detail read model when available,
+without changing Initial Forecast persistence. If no closed revenue or forecast
+values exist for the selected year, the chart area must show a diagnostic empty
+state instead of placeholder values. Planned future values, when available, remain
+visible in the table.
+
+Agreement links:
+- Master Agreements has no usable agreement link;
+- agreement/deal links must be derived from the first deterministic linked Master Campaigns deal link;
+- if no linked campaign deal link exists, show `n/a`.
+
+### `/forecasting/management`
+
+Management view.
+
+Sections:
+- read-only yearly view;
+- read-only monthly aggregate view;
+- aggregates by Branch, Business Unit and CSM;
+- trend of Petyr forecast, Redash closed revenue and closed revenue plus planned;
+- revenue mix by Business Unit;
+- risk breakdown.
+- Management Objectives for users with `petyr:management:write`;
+- admin-only Top 4 positive trends and Top 4 negative trends.
+
+Management metrics:
+- Branch Yearly Objective comes only from annual Branch objectives entered by management;
+- Business Unit Yearly Objective comes only from annual Business Unit objectives entered by management;
+- Branch objectives use the dynamic Branch list from Company Ownership `company_branch`;
+- Business Unit objectives use only the official closed Business Unit list;
+- if a Branch or Business Unit objective is missing, percentage cells show `n/a` and diagnostics report the missing objective;
+- Initial Forecast is the frozen annual baseline for the selected year and aggregate scope; for 2026 it comes from the one-shot Excel bootstrap, and from 2027 onward it comes from the automatic January 1 `Europe/Rome` consolidation;
+- Ongoing Forecast is the current/latest annual forecast for the selected year and aggregate scope;
+- if the frozen Initial Forecast baseline is missing, Management View shows `n/a`;
+- Closed revenue YTD comes from Redash campaign revenue rows through the current date;
+- Closed revenue + planned adds campaign revenue with campaign end date from tomorrow through year end only when `isValidPlannedFutureCampaign(...)` classifies the campaign status as planned future;
+- planned future campaign statuses are a closed allowlist: `Setup` and `Recruiting`;
+- `Running`, `Completed`, `Aborted`, `Cancelled`, `Canceled`, `Deleted`, `Rejected`, `Lost`, `Archived` and unknown/missing statuses are excluded from planned future; unknown/missing statuses are diagnosed and require a later business decision before inclusion;
+- forecast values are not used for planned-through-year-end and must not be confused with Yearly Objective.
+
+Objective rules:
+- Petyr must not invent Branch or Business Unit objectives;
+- Petyr must not use annual forecast values as objectives;
+- Petyr must not derive objectives from Redash, closed revenue, planned campaigns or AI forecast;
+- every objective update must be auditable with scope type, scope key, year,
+  previous value, new value, note, updated by and timestamp.
+
+CSM percentage rule:
+- CSM percentages use a dedicated CSM yearly objective only when one is explicitly configured;
+- if no CSM yearly objective exists, percentage cells show `n/a`;
+- Petyr must not create a fake CSM target from monthly forecasts, closed revenue or planned campaigns.
+
+Management UI copy/layout cleanup:
+- the aggregate-mode selector must not describe the monthly/yearly options as being under product evaluation;
+- Monthly Aggregate, Business Unit View and Single CSM View must avoid repeated section titles, low-value explanatory descriptions and non-actionable badges;
+- Revenue per Business Unit keeps the three-year Business Unit comparison but separates chart evidence from numeric values: the upper area shows axes, closed-revenue bars and forecast markers, while the lower area shows numeric Closed revenue, Initial Forecast and Previous-month forecast values;
+- Revenue per Business Unit closed-revenue bars use the same color as the Current year trend Closed revenue series; Initial Forecast markers are gray; Previous-month forecast markers are green when above Initial Forecast and yellow when below.
+
+### `/petyr-admin`
+
+Temporary internal admin area.
+
+Sections, in display order:
+- Data health diagnostics for the Redash Ingestor to PostgreSQL to Petyr service flow;
+- an operator link to the Redash Ingestor dashboard at `/redash-ingestor`;
+- PostgreSQL database backup export/import for server migration and controlled recovery;
+- AI model settings for the future OpenRouter-backed notes and forecast explanation flow;
+- Excel export/import for CSM-friendly monthly forecast templates and bulk updates;
+- one-time 2026 closed revenue alignment.
+
+The admin UI no longer exposes Initial Forecast baseline, legacy CSV forecast import/export or Redash field mapping diagnostics sections. Their existing endpoints/services may remain available for compatibility or controlled operations, but they are not part of the visible `/petyr-admin` workspace.
+
+The database backup export endpoint is:
+
+```txt
+GET /api/petyr/admin/database-backup/export
+```
+
+It requires `petyr:admin` and `x-app-secret: APP_INTERNAL_SECRET`, runs a native
+PostgreSQL SQL dump from the configured `DATABASE_URL`, and returns a downloadable
+`.sql` file. The dump is intended to preserve the shared PostgreSQL data hub for
+server migration or controlled recovery, including Redash snapshots/metadata,
+materialized Redash tables and Petyr-owned forecast/admin tables. It must not
+call Redash or export secrets from environment variables.
+
+The database backup import endpoint is:
+
+```txt
+POST /api/petyr/admin/database-backup/import
+```
+
+It requires `petyr:admin`, `x-app-secret: APP_INTERNAL_SECRET`, an uploaded `.sql`
+file generated by the backup workflow and explicit confirmation. Restore runs
+through PostgreSQL with stop-on-error behavior. Because exported dumps include
+clean/drop statements, restore can replace existing database objects and must be
+used only on a new target server, disposable environment or controlled recovery
+after taking a backup. This admin workflow is not a substitute for a production
+backup policy with retention, encryption, offsite storage or point-in-time
+recovery.
+
+The data health endpoint is:
+
+```txt
+GET /api/petyr/admin/data-health
+```
+
+It returns `ok`, Redash source metadata, materialized table existence, row counts,
+available columns, logical mapping diagnostics, blocking issues, warnings and
+Management Objective diagnostics for the current year. It reads only PostgreSQL
+and must not call Redash directly. Missing or empty
+`redash_raw_master_campaigns_latest`, missing campaign company/revenue columns
+and missing campaign end date are blocking because they prevent reliable Closed
+revenue / Closed revenue YTD diagnostics. Missing or empty agreements, missing
+or empty company ownership, missing `company_branch`, missing current CSM
+ownership, missing Branch or Business Unit objectives and optional GM%, cost or
+link columns are warnings. If Management Objective tables are missing, Data
+Health must tell operators to run `npm run db:sync` from `apps/forecasting-app`
+for local schema sync, or to apply reviewed
+migrations with `npx prisma migrate deploy`. Missing, unknown or non-official
+campaign Business Unit values that are normalized to `Other` are warnings.
+Management Objective data health exposes objective counts by year plus Branches
+and official Business Units without a configured objective for the current year.
+Initial Forecast data health warns when `forecast_annual_snapshot` is missing or
+when the current year has no `snapshot_type=initial` rows.
+
+The recommended monthly forecast Excel export endpoint is:
+
+```txt
+GET /api/petyr/admin/export-monthly-forecast-xlsx?year=2026&csmName=...
+```
+
+It creates a `.xlsx` workbook with:
+- `Instructions`;
+- `Forecast Input`;
+- `Reference - Business Units`;
+- `Reference - Companies`;
+- `Validation Rules`.
+
+`Forecast Input` is sorted CSM -> Company -> Business Unit -> Month and defaults
+to/focuses on year 2026 from the admin UI. It includes editable CSM-owned fields
+for previous-month forecast, ongoing forecast, company active status and note,
+plus read-only Closed revenue and AI forecast reference columns. The workbook uses
+Company Ownership for canonical Company/CSM/Branch reference data and does not call
+Redash directly.
+
+Company active status in the external workbook uses `active`, `inactive`, or an
+empty cell meaning do not modify. The export should show the current known status
+when available; verifying and correcting that export behavior is tracked in backlog.
+
+The recommended monthly forecast Excel import endpoint is:
+
+```txt
+POST /api/petyr/admin/import-monthly-forecast-xlsx
+```
+
+It accepts a multipart `.xlsx` upload, reads the `Forecast Input` sheet, validates
+required columns, official Business Units, Company Ownership company/CSM data,
+year/month and non-negative numeric forecast values. It imports only CSM-owned
+forecast fields, ignores read-only Closed revenue and AI forecast reference
+columns, creates one save session with source `Admin Excel Import`, logs changed
+values and returns imported/skipped row counts, errors, warnings and a preview of
+problematic rows when available.
+
+Excel import performance is outside this cycle. Do not add new import
+performance tasks in this package unless a later task explicitly selects that
+scope.
+
+The monthly template export endpoint is:
+
+```txt
+GET /api/petyr/admin/export-monthly-template?year=2026
+```
+
+It reads company and CSM pairs only from the latest materialized Company Ownership
+table, never from Redash directly, and expands them across the official Business Units
+and all 12 months. If the Company Ownership table or its canonical company/CSM columns
+are missing, the export must fail with a clear diagnostic instead of producing an
+ambiguous template.
+
+This CSV endpoint remains available as a legacy/advanced workflow. It must not be
+broken by the Excel workflow.
+
+Initial Forecast 2026 import/export is implemented as a separate one-shot
+workflow and must not change the existing monthly import behavior.
+
+The Initial Forecast Excel export endpoint is:
+
+```txt
+GET /api/petyr/admin/export-initial-forecast-xlsx?year=2026
+```
+
+It defaults to 2026 and creates a workbook with:
+
+- `Instructions`;
+- `Initial Forecast Input`;
+- `Reference - Business Units`;
+- `Reference - Companies`.
+
+`Initial Forecast Input` includes CSM, Company, Business Unit, Year, read-only
+Current annual forecast reference, editable Initial forecast value and Note.
+Closed revenue and management objective fields are not editable in this workbook.
+
+The Initial Forecast Excel import endpoint is:
+
+```txt
+POST /api/petyr/admin/import-initial-forecast-xlsx
+```
+
+It accepts only the Initial Forecast workbook shape, validates Company Ownership
+company/CSM data, official Business Units, year and non-negative numeric values,
+then writes only `forecast_annual_snapshot` rows and
+`forecast_annual_snapshot_change_log` audit entries. It must not write
+`forecast_annual`, `forecast_monthly`, closed revenue, AI forecast cache or
+management objectives.
+
+The protected manual consolidation endpoint for controlled operations is:
+
+```txt
+POST /api/petyr/admin/consolidate-initial-forecast
+```
+
+It requires `x-app-secret: APP_INTERNAL_SECRET`, calls
+`consolidateInitialAnnualForecast(year)`, writes source
+`year_end_consolidation`, and does not mutate Ongoing Forecast. The default
+business timezone is `Europe/Rome`. Without an explicit `year`, the service may
+infer the year only on January 1 in `Europe/Rome`; controlled manual recovery
+outside January 1 must pass the target `year`. Already locked Initial Forecast
+snapshots are skipped unless the protected request explicitly passes
+`overrideLocked=true`.
+
+The monthly forecast import endpoint is:
+
+```txt
+POST /api/petyr/admin/import-monthly-forecast
+```
+
+It accepts a multipart CSV upload with the monthly template columns, validates company,
+year, month and official Business Unit values, and resolves every row's CSM from
+Company Ownership before writing. The CSV `csmName` column is kept for compatibility,
+but import ignores it for persistence and reports how many rows were corrected to the
+canonical owner. Companies not found in Company Ownership are rejected. The import
+writes monthly forecast values to Petyr's forecast tables, stores company active status
+when provided, creates one save session with source `Admin CSV Import`, and logs changed
+values.
+
+This CSV endpoint remains available as a legacy/advanced workflow. It must not be
+broken by the Excel workflow.
+
+The AI model settings area shows the current selected OpenRouter model, defaults to
+`OPENROUTER_DEFAULT_MODEL` when no database setting exists, and persists changes in
+`app_setting`. The browser loads model options only through Petyr's internal endpoint:
+
+```txt
+GET /api/petyr/admin/openrouter-models
+```
+
+That endpoint may call the OpenRouter models API server-side with `OPENROUTER_API_KEY`.
+If the key is missing or OpenRouter is unavailable, it returns fallback model options and
+a diagnostic message for the UI. The OpenRouter API key must never be exposed to the browser.
+
+Petyr AI Forecasting has two accepted execution modes:
+
+- manual company-by-company actions from Forecast Entry and the protected
+  single-company endpoint;
+- nightly deterministic-only automation for active companies through the
+  `petyr-ai-forecast-worker` service.
+
+The nightly worker runs at `PETYR_AI_FORECAST_DAILY_TIME=01:00` in
+`Europe/Rome`, targets the current Rome year, excludes only companies explicitly
+marked inactive, waits `PETYR_AI_FORECAST_DELAY_MS=3000` between companies and
+saves local deterministic preview rows to `ai_forecast_cache` with daily
+append-only model versions such as `petyr_deterministic_preview_v1@YYYY-MM-DD`.
+It must not call OpenRouter or Forecast Intelligence and must not write CSM
+forecast, annual forecast, management objective, Initial Forecast, closed revenue
+or Redash data.
+
+Automated LLM/OpenRouter batch execution remains out of scope until a separate
+privacy, cost, quality and rate-limit decision is accepted.
+
+The protected manual AI Forecast company endpoint is:
+
+```txt
+POST /api/petyr/ai-forecast/company
+```
+
+It requires `x-app-secret: APP_INTERNAL_SECRET`.
+
+Payload:
+
+```json
+{
+  "companyName": "Company Name",
+  "year": 2026,
+  "dryRun": true
+}
+```
+
+Rules:
+
+- `dryRun` defaults to `true`;
+- `dryRun=true` builds a validated deterministic preview and writes no database rows;
+- the endpoint accepts one `companyName` and one target `year` per request;
+- array/global/all-company input is rejected;
+- `dryRun=false` calls OpenRouter server-side with strict JSON Schema
+  `response_format`, validates strict LLM JSON output, applies future-month and
+  privacy checks, and writes only validated rows to `ai_forecast_cache`;
+- OpenRouter requests must set provider parameter support enforcement so the
+  request is not routed to providers that would ignore the structured response
+  format. The provider-facing JSON Schema must stay within the selected
+  endpoint supported subset: Petyr may use it for structural shape, required
+  fields, types and string enums, while numeric ranges, non-empty strings, string
+  lengths, confidence bounds, duplicate/missing target rows and future-month
+  eligibility remain enforced by Petyr server-side validation after the model
+  returns. Petyr must avoid optional sampling parameters that are not supported
+  by the selected model endpoint, because `require_parameters=true` makes
+  unsupported request parameters a routing failure;
+- `dryRun=false` requires `OPENROUTER_API_KEY`; if no future months are eligible,
+  it skips without calling OpenRouter or writing rows;
+- non-dry-run persistence returns a report with saved row count, skipped row
+  count, validation errors and model version;
+- optional LLM preview can be requested with `llmPreview=true`, `useLlmPreview=true`
+  or `includeLlmPreview=true`; it may call OpenRouter only server-side when
+  `OPENROUTER_API_KEY` and the selected model are configured;
+- the deterministic dry-run response remains available when LLM preview is
+  not requested or cannot be called;
+- when optional LLM preview is requested, Petyr may perform one server-side
+  strict-JSON retry if the first OpenRouter response fails validation; only a
+  retry response that passes the same strict validation may be used. When LLM
+  preview passes validation, the current-run preview rows and aggregates must
+  use the validated OpenRouter output marked as `llm_current_run`. Validation
+  must reject missing or duplicate target rows against the deterministic
+  candidate set; when it fails validation, deterministic rows remain visible
+  with OpenRouter validation diagnostics. If the provider returns structured
+  `message.parsed`, Petyr validates that parsed object as the authoritative
+  response. Free-form commentary is accepted only when represented as structured
+  `warnings` objects inside the strict JSON response; prose outside JSON and
+  truncated/partial output remain invalid.
+
+The endpoint reads the selected model from `app_setting` key
+`petyr.openrouter.model`, falls back to `OPENROUTER_DEFAULT_MODEL`, and uses
+`OPENROUTER_API_KEY` only server-side. The MVP forecast grain is company +
+Business Unit + future month + year. It does not update CSM-owned
+`forecast_monthly`, `forecast_annual`, closed revenue, management objective or
+Initial Forecast data. Non-dry-run persistence may upsert only validated
+future-month rows for the selected company, Business Unit, year, month and model
+version in `ai_forecast_cache`; past and current months are excluded before any
+write.
+
+The OpenRouter prompt receives only the normalized Forecast Intelligence payload after Petyr local code has computed all metrics, integer-EUR forecast values, deltas, local risks, trend signals, agreement residual allocation and sanitized Business Unit attribution. Internal consultative scenarios may remain part of local deterministic data, but Forecast Intelligence must not request, validate, render or chart rounding/adjustment scenarios. OpenRouter is consultative only: it must return JSON business analysis limited to stakeholder notes, risks, watchouts and opportunities, each with payload-backed numeric evidence; it must not recalculate or modify `aiForecastValue`, invent numbers absent from the deterministic payload or return prescriptive operational instructions. CSM-entered monthly and annual forecast values are comparison reference data in the UI only; they must not be sent to OpenRouter and must not influence deterministic forecast values.
+
+Forecast Entry may expose `Generate deterministic preview`, `Generate AI forecast` and `Apply AI forecast` actions for the currently selected company and year only inside the admin-visible support tool. Forecast Entry and Company Detail may also expose a CSM-facing `Generate Intelligence` action for users with `petyr:forecast:write`; this consultative action calls the dry-run Forecast Intelligence path, renders validated JSON guidance and must not expose Apply, OpenRouter I/O, raw prompt payloads or prompt/debug JSON. Company Detail may show saved numeric `ai_forecast_cache` suggestions as read-only evidence, but must not generate or apply numeric AI Forecast rows. The deterministic preview must not call OpenRouter. The AI forecast and Intelligence actions may call OpenRouter only for validated Forecast Intelligence JSON and may save or reuse the intelligence cache sentinel row. The UI must show Business Unit/month deterministic forecast rows separately from compact Forecast Intelligence sections for stakeholder notes, risks, watchouts and opportunities only. It must not show status/confidence/as-of/eligible-month/provider-call tiles, selected-month eligibility warnings, executive summary, key insights, drivers, forecast cues, chart-comparison candidates or rounding scenarios. A non-dry-run apply may run only after explicit user confirmation and may write only through the validated manual company flow to `ai_forecast_cache`. Browser code must not
+receive or expose `APP_INTERNAL_SECRET`, `OPENROUTER_API_KEY` or any equivalent
+server-side secret.
+
+Petyr also provides a local read-only AI preview backtest command for calibration:
+
+```bash
+cd apps/forecasting-app
+npm run backtest:ai-preview -- --as-of=2026-03-15 --year=2026 --months=5,6 --top-revenue --limit=10
+```
+
+The backtest selects top-revenue companies from PostgreSQL-backed Redash materialized data, runs deterministic AI preview candidates with the selected server-side as-of date, filters to the requested months and compares those values with real closed revenue currently available in PostgreSQL. It is an operational validation report only: it does not call OpenRouter, does not save to `ai_forecast_cache`, does not update CSM forecast tables, does not modify Redash materialized data and does not establish an accepted accuracy threshold. Petyr Admin exposes the same workflow in an `AI preview backtest` card backed by `POST /api/petyr/admin/ai-preview-backtest`, protected with `x-app-secret: APP_INTERNAL_SECRET`, and showing selected companies, month aggregates, total aggregate, row-level comparison and diagnostics.
+
+Forecast Entry AI Forecast UI must show execution feedback immediately after `Generate deterministic preview`, `Generate AI forecast` or `Apply AI forecast` is clicked. Runtime or Server Action failures must render a visible error notice instead of leaving the card apparently idle; deterministic preview details remain in the same result panel once the action returns.
+
+The legacy route is disabled for the manual MVP and must not be used as a
+global/all-company operational workflow:
+
+```txt
+POST /api/petyr/admin/ai-forecast-batch
+```
+
+It returns a disabled/gone response and points operators to the single-company
+manual endpoint instead.
+
+AI Forecasting must be hybrid: deterministic local forecast + real business signals + consultative LLM intelligence. The LLM must not invent numbers without payload evidence, must not use CSM-entered forecast values as an anchor and must not change persisted forecast numbers.
+
+For the first manual MVP, complete anonymization through a dedicated tool/API is
+deferred and must not block a controlled company-by-company test. When that
+tool/API is available, OpenRouter/LLM payloads must no longer include company,
+CSM, campaign or agreement names, links, deal links or other identifying text.
+AI Forecast may generate/update only future months of the selected year and must
+never update past months or the current month.
+
+Current Forecast Intelligence implementation contract lives in:
+
+```txt
+docs/petyr/FORECAST_INTELLIGENCE_LAYER.md
+```
+
+Detailed historical and future implementation design lives in:
+
+```txt
+docs/petyr/AI_FORECASTING_DESIGN.md
+```
+
+Current Forecast Intelligence contract helpers live in:
+
+```txt
+apps/forecasting-app/src/services/petyrForecastIntelligenceService.ts
+apps/forecasting-app/src/services/petyrForecastIntelligenceCacheService.ts
+apps/forecasting-app/src/services/petyrAiForecastCompanyIntelligenceService.ts
+```
+
+These helpers build the normalized payload, prompt messages, OpenRouter JSON
+Schema response format, input hash, cache adapter and server-side validator for
+the interpretation layer. They validate strict JSON output against the accepted
+business-analysis schema and reject markdown, unexpected fields, prompt/internal
+implementation disclosures and numeric claims absent from the deterministic
+payload. OpenRouter cannot calculate or modify forecast values.
+
+## MVP constraints
+
+- Use only PostgreSQL / internal APIs.
+- Do not call Redash from UI.
+- Keep UI simple first.
+- Prioritize correctness over design.
+- Forecasting AI comes later.
+- OpenRouter API keys must come from `OPENROUTER_API_KEY`; never hardcode them.
+
+## Later features
+
+- AI forecast suggestions;
+- forecast confidence;
+- automatic anomaly detection;
+- Slack notifications;
+- forecast lock after the 15th of the current month;
+- forecast ongoing editable from the 16th;
+- revision logs.

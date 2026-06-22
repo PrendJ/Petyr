@@ -1,0 +1,601 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  PETYR_OPENROUTER_MODEL_SETTING_KEY,
+  resolvePetyrAiModelSettingRead
+} from "../src/services/petyrAiModelSettingsService";
+
+import {
+  PETYR_FORECAST_INTELLIGENCE_PAYLOAD_VERSION,
+  buildPetyrForecastIntelligencePrompt,
+  generatePetyrForecastIntelligence,
+  validatePetyrForecastIntelligenceOutput,
+  hashPetyrForecastIntelligencePayload,
+  type PetyrForecastIntelligenceCacheAdapter,
+  type PetyrForecastIntelligenceCacheWrite,
+  type PetyrForecastIntelligenceOutput,
+  type PetyrForecastIntelligencePayload
+} from "../src/services/petyrForecastIntelligenceService";
+import {
+  getPetyrCurrentYearInTimezone,
+  getPetyrDeterministicPreviewDailyModelVersion,
+  getPetyrNightlyForecastCacheKey,
+  isPetyrNightlyForecastCacheDuplicate,
+  normalizePetyrNightlyForecastCompanies,
+  parsePetyrAiForecastDelayMs,
+  runPetyrNightlyDeterministicAiForecastCore
+} from "../src/lib/petyr/nightlyDeterministicAiForecastCore";
+
+const baseOutput: PetyrForecastIntelligenceOutput = {
+  stakeholder_notes: [
+    {
+      title: "Residual timing is the main stakeholder point",
+      note: "The same delivery window has residual pressure and planned value in the payload.",
+      numeric_evidence: "Residual value is 300 EUR, monthly residual cap is 100 EUR and remaining months are 3."
+    }
+  ],
+  risks: [
+    {
+      type: "timing_risk",
+      severity: "medium",
+      description: "The current delivery timing can compress residual consumption into fewer remaining months.",
+      numeric_evidence: "Residual value is 300 EUR over 3 remaining months with a 100 EUR monthly cap."
+    }
+  ],
+  opportunities: [
+    {
+      title: "Planned work is above baseline",
+      severity: "medium",
+      evidence: "Planned value is above the local deterministic forecast for the month.",
+      numeric_evidence: "Planned campaign value is 120 EUR versus deterministic forecast value 100 EUR."
+    }
+  ],
+  watchouts: [
+    {
+      title: "Sparse historical context",
+      severity: "medium",
+      evidence: "The payload includes sparse_history.",
+      numeric_evidence: "Historical closed revenue has 2 points: 80 EUR and 90 EUR."
+    }
+  ]
+};
+
+test("falls back to the default OpenRouter model when app_setting cannot be read", () => {
+  const result = resolvePetyrAiModelSettingRead(null, new Error("relation app_setting does not exist"));
+
+  assert.equal(result.setting.settingKey, PETYR_OPENROUTER_MODEL_SETTING_KEY);
+  assert.equal(result.setting.selectedModel, "openai/gpt-4.1-mini");
+  assert.equal(result.setting.isUsingDefault, true);
+  assert.equal(result.setting.updatedAt, null);
+  assert.equal(result.diagnostics.length, 1);
+  assert.match(result.diagnostics[0], /app_setting/);
+  assert.match(result.diagnostics[0], /OPENROUTER_DEFAULT_MODEL/);
+  assert.match(result.diagnostics[0], /relation app_setting does not exist/);
+});
+
+test("uses a persisted OpenRouter model setting without diagnostics", () => {
+  const updatedAt = new Date("2026-06-16T08:30:00.000Z");
+  const result = resolvePetyrAiModelSettingRead({ settingValue: "anthropic/claude-sonnet-4", updatedAt });
+
+  assert.equal(result.setting.settingKey, PETYR_OPENROUTER_MODEL_SETTING_KEY);
+  assert.equal(result.setting.selectedModel, "anthropic/claude-sonnet-4");
+  assert.equal(result.setting.isUsingDefault, false);
+  assert.equal(result.setting.updatedAt, updatedAt.toISOString());
+  assert.deepEqual(result.diagnostics, []);
+});
+
+function createPayload(): PetyrForecastIntelligencePayload {
+  return {
+    schema_version: PETYR_FORECAST_INTELLIGENCE_PAYLOAD_VERSION,
+    task: "forecast_intelligence_company_analysis",
+    company_ref: "company_001",
+    forecast_year: 2026,
+    as_of_date: "2026-06-10",
+    currency: "EUR",
+    history_years: 3,
+    eligible_months: [7],
+    deterministic_forecast: {
+      algorithm: "petyr_hybrid_company_bu_month_v1",
+      rows: [
+        {
+          business_unit: "QA",
+          year: 2026,
+          month: 7,
+          deterministic_forecast_value: 100,
+          baseline_forecast: 100,
+          historical_weighted_baseline: 80,
+          seasonality_signal: 90,
+          run_rate_signal: 110,
+          planned_campaigns_value: 120,
+          residual_coverage_gap: 0,
+          residual_pressure_status: "covered",
+          rounded_forecast_value: 100,
+          rounding_granularity: 100,
+          trend_signal: {
+            direction: "growth",
+            recent_average: 115,
+            comparison_average: 100,
+            ratio: 1.15,
+            summer_slowdown: false,
+            over_consumption: false,
+            flags: ["recent_growth_signal"]
+          },
+          agreement_residual_allocation: {
+            active_agreement_count: 1,
+            residual_value: 300,
+            allocated_residual_value: 100,
+            monthly_residual_cap: 100,
+            historical_capacity_value: 100,
+            linked_planned_campaign_value: 120,
+            capped_linked_planned_campaign_value: 100,
+            planned_exceeds_residual: true,
+            remaining_months: 3,
+            months_to_expiry: 3,
+            attribution_method: "title_token",
+            matched_tokens: ["qa"],
+            status: "capped"
+          },
+          business_unit_attribution: {
+            method: "title_token",
+            confidence: "high",
+            matched_tokens: ["qa"],
+            share: 1
+          },
+          consultative_scenarios: [
+            { id: "floor_100", label: "Round down to 100 EUR", value: 100, direction: "down", reason: "Commercial conservative scenario rounded down to the nearest 100 EUR." },
+            { id: "nearest_100", label: "Round to nearest 100 EUR", value: 100, direction: "nearest", reason: "Neutral consultative scenario rounded to the nearest 100 EUR." },
+            { id: "ceil_100", label: "Round up to 100 EUR", value: 100, direction: "up", reason: "Growth or opportunity scenario rounded up to the nearest 100 EUR." }
+          ],
+          confidence_score: 0.62,
+          drivers: ["planned_campaigns"],
+          data_quality_flags: ["sparse_history"]
+        }
+      ],
+      totals: {
+        deterministic_forecast_value: 100,
+        baseline_forecast: 100,
+        planned_campaigns_value: 120,
+        residual_coverage_gap: 0
+      }
+    },
+    historical_closed_revenue: [
+      { business_unit: "QA", year: 2024, month: 7, closed_revenue: 80 },
+      { business_unit: "QA", year: 2025, month: 7, closed_revenue: 90 }
+    ],
+    selected_year_real_signals: [
+      {
+        business_unit: "QA",
+        year: 2026,
+        closed_revenue_ytd: 70,
+        planned_future_value: 120,
+        closed_revenue_campaigns_count: 2,
+        planned_future_campaigns_count: 1,
+        normalized_to_other_count: 0
+      }
+    ],
+    local_deltas: [
+      {
+        business_unit: "QA",
+        deterministic_minus_planned: -20,
+        deterministic_minus_closed_ytd: 30
+      }
+    ],
+    local_scenarios: [
+      { name: "deterministic", value: 100, description: "Local deterministic forecast total from Petyr math engine." },
+      { name: "planned_floor_only", value: 120, description: "Local planned future campaign floor total." },
+      { name: "history_signals_only", value: 93, description: "Local historical signal total before planned floor." }
+    ],
+    local_risk_signals: [
+      {
+        type: "data_quality",
+        severity: "medium",
+        metric: "historical_coverage",
+        evidence: "Sparse history flag is present."
+      }
+    ],
+    data_quality: {
+      diagnostics: ["Sparse history for QA."],
+      flags: ["sparse_history"]
+    },
+    llm_constraints: {
+      interpretation_only: true,
+      numbers_are_local_source_of_truth: true,
+      must_not_recalculate_forecast: true,
+      must_not_modify_forecast_values: true,
+      must_not_invent_numbers: true,
+      return_json_only: true
+    }
+  };
+}
+
+function createMemoryCache(seed: PetyrForecastIntelligenceOutput | null = null) {
+  let cached = seed;
+  const writes: PetyrForecastIntelligenceCacheWrite[] = [];
+  const adapter: PetyrForecastIntelligenceCacheAdapter = {
+    async findSuccessful() {
+      if (!cached) return null;
+      return {
+        output: cached,
+        createdAt: "2026-06-10T00:00:00.000Z",
+        updatedAt: "2026-06-10T00:00:00.000Z"
+      };
+    },
+    async save(write) {
+      writes.push(write);
+      if (write.status === "success" && write.validatedOutput) cached = write.validatedOutput;
+      return { action: writes.length === 1 ? "created" : "updated" };
+    }
+  };
+
+  return { adapter, writes };
+}
+
+test("accepts a valid strict JSON response and saves validated output", async () => {
+  const payload = createPayload();
+  const cache = createMemoryCache();
+  let calls = 0;
+
+  const result = await generatePetyrForecastIntelligence({
+    payload,
+    apiKey: "test-key",
+    model: "test/model",
+    cache: cache.adapter,
+    client: async (request) => {
+      calls += 1;
+      assert.equal(request.messages[0].role, "system");
+      return JSON.stringify(baseOutput);
+    }
+  });
+
+  assert.equal(calls, 1);
+  assert.equal(result.ok, true);
+  assert.equal(result.status, "success");
+  assert.equal(result.openRouterCalled, true);
+  assert.equal(result.retried, false);
+  assert.equal(result.cacheAction, "created");
+  assert.equal(cache.writes.length, 1);
+  assert.equal(cache.writes[0].status, "success");
+  assert.deepEqual(result.output, baseOutput);
+});
+
+test("repairs one invalid JSON response with a single retry", async () => {
+  const payload = createPayload();
+  const cache = createMemoryCache();
+  let calls = 0;
+
+  const result = await generatePetyrForecastIntelligence({
+    payload,
+    apiKey: "test-key",
+    model: "test/model",
+    cache: cache.adapter,
+    client: async () => {
+      calls += 1;
+      return calls === 1 ? "not json" : JSON.stringify(baseOutput);
+    }
+  });
+
+  assert.equal(calls, 2);
+  assert.equal(result.ok, true);
+  assert.equal(result.status, "success");
+  assert.equal(result.retried, true);
+  assert.equal(cache.writes[0].status, "success");
+});
+
+test("rejects missing required fields after one retry and saves failure state", async () => {
+  const payload = createPayload();
+  const cache = createMemoryCache();
+  const missingRequiredFields = JSON.stringify({
+    risks: [],
+    opportunities: [],
+    watchouts: []
+  });
+
+  const result = await generatePetyrForecastIntelligence({
+    payload,
+    apiKey: "test-key",
+    model: "test/model",
+    cache: cache.adapter,
+    client: async () => missingRequiredFields
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.status, "failed");
+  assert.equal(result.retried, true);
+  assert.ok(result.validationErrors.some((error) => error.path === "stakeholder_notes"));
+  assert.equal(cache.writes.length, 1);
+  assert.equal(cache.writes[0].status, "failed");
+});
+
+test("captures AI provider unavailability as a graceful failure", async () => {
+  const payload = createPayload();
+  const cache = createMemoryCache();
+
+  const result = await generatePetyrForecastIntelligence({
+    payload,
+    apiKey: "test-key",
+    model: "test/model",
+    cache: cache.adapter,
+    client: async () => {
+      throw new Error("network unavailable");
+    }
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.status, "failed");
+  assert.equal(result.openRouterCalled, true);
+  assert.equal(result.retried, false);
+  assert.match(result.errorMessage ?? "", /network unavailable/);
+  assert.equal(cache.writes[0].status, "failed");
+});
+
+test("reuses cached validated output for matching provider model prompt and input hash", async () => {
+  const payload = createPayload();
+  const cache = createMemoryCache(baseOutput);
+
+  const result = await generatePetyrForecastIntelligence({
+    payload,
+    apiKey: "test-key",
+    model: "test/model",
+    cache: cache.adapter,
+    client: async () => {
+      throw new Error("client should not be called for cached output");
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.status, "cached");
+  assert.equal(result.openRouterCalled, false);
+  assert.equal(result.cacheAction, "reused");
+  assert.equal(cache.writes.length, 0);
+  assert.deepEqual(result.output, baseOutput);
+});
+
+test("deterministic payload remains available when AI is not configured", async () => {
+  const payload = createPayload();
+  const cache = createMemoryCache();
+  const originalDeterministicValue = payload.deterministic_forecast.rows[0].deterministic_forecast_value;
+
+  const result = await generatePetyrForecastIntelligence({
+    payload,
+    apiKey: null,
+    model: "test/model",
+    cache: cache.adapter,
+    client: async () => {
+      throw new Error("client should not be called without an API key");
+    }
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.status, "failed");
+  assert.equal(result.openRouterCalled, false);
+  assert.match(result.errorMessage ?? "", /OPENROUTER_API_KEY/);
+  assert.equal(payload.deterministic_forecast.rows[0].deterministic_forecast_value, originalDeterministicValue);
+  assert.equal(hashPetyrForecastIntelligencePayload(payload).length, 64);
+  assert.equal(cache.writes[0].status, "failed");
+});
+
+
+test("prompt uses v4 compact intelligence contract and does not expose raw title fixtures", () => {
+  const payload = createPayload();
+  const prompt = buildPetyrForecastIntelligencePrompt(payload);
+  const promptText = prompt.messages.map((message) => message.content).join("\n");
+
+  assert.equal(payload.schema_version, "petyr_forecast_intelligence_payload_v2");
+  assert.match(promptText, /stakeholder_notes, risks, watchouts and opportunities/i);
+  assert.match(promptText, /numeric_evidence/i);
+  assert.doesNotMatch(promptText, /recommended_actions/);
+  assert.doesNotMatch(promptText, /Secret Agreement Title|Secret Campaign Title/);
+});
+
+test("rejects legacy and v3 output fields", () => {
+  const payload = createPayload();
+  const legacyOutput = JSON.stringify({
+    ...baseOutput,
+    executive_summary: "Payload supports interpretation only.",
+    confidence: "medium",
+    key_insights: [],
+    drivers: [],
+    forecast_cues: [],
+    forecast_adjustment_candidates: []
+  });
+
+  const result = validatePetyrForecastIntelligenceOutput(legacyOutput, payload);
+
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.path === "executive_summary"));
+  assert.ok(result.errors.some((error) => error.path === "forecast_adjustment_candidates"));
+});
+
+test("rejects invented numeric claims not present in payload", () => {
+  const payload = createPayload();
+  const inventedNumberOutput = JSON.stringify({
+    ...baseOutput,
+    stakeholder_notes: [
+      {
+        title: "Invented number",
+        note: "Local deterministic forecast mentions invented value 999.",
+        numeric_evidence: "Invented value is 999 EUR."
+      }
+    ]
+  });
+
+  const result = validatePetyrForecastIntelligenceOutput(inventedNumberOutput, payload);
+
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.message.includes("999")));
+});
+
+test("rejects intelligence items without numeric evidence", () => {
+  const payload = createPayload();
+  const noNumericEvidenceOutput = JSON.stringify({
+    ...baseOutput,
+    opportunities: [
+      {
+        title: "No numeric evidence",
+        severity: "medium",
+        evidence: "The opportunity has business context.",
+        numeric_evidence: "Payload shows planned value above forecast."
+      }
+    ]
+  });
+
+  const result = validatePetyrForecastIntelligenceOutput(noNumericEvidenceOutput, payload);
+
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => /Numeric evidence/i.test(error.message)));
+});
+
+test("rejects visible rounding scenario references", () => {
+  const payload = createPayload();
+  const roundingScenarioOutput = JSON.stringify({
+    ...baseOutput,
+    watchouts: [
+      {
+        title: "Rounding scenario leak",
+        severity: "medium",
+        evidence: "The nearest_100 rounding scenario appears in the text.",
+        numeric_evidence: "Scenario value is 100 EUR."
+      }
+    ]
+  });
+
+  const result = validatePetyrForecastIntelligenceOutput(roundingScenarioOutput, payload);
+
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => /rounding scenarios/i.test(error.message)));
+});
+
+test("rejects prescriptive operational language", () => {
+  const payload = createPayload();
+  const prescriptiveOutput = JSON.stringify({
+    ...baseOutput,
+    opportunities: [
+      {
+        title: "Prescriptive language",
+        severity: "medium",
+        evidence: "You should contact the owner about this account.",
+        numeric_evidence: "Planned campaign value is 120 EUR."
+      }
+    ]
+  });
+
+  const result = validatePetyrForecastIntelligenceOutput(prescriptiveOutput, payload);
+
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => /without prescribing corrective actions/i.test(error.message)));
+});
+
+test("nightly deterministic worker filters only explicitly inactive companies", () => {
+  const companies = normalizePetyrNightlyForecastCompanies([
+    { companyName: "Active Co", csmName: "CSM A", isForecastActive: true, priorityScore: 10 },
+    { companyName: "Missing Status Co", csmName: "CSM B", isForecastActive: null, priorityScore: 9 },
+    { companyName: "Inactive Co", csmName: "CSM C", isForecastActive: false, priorityScore: 8 }
+  ] as never);
+
+  assert.deepEqual(companies.map((company) => company.companyName), ["Active Co", "Missing Status Co"]);
+});
+
+test("nightly deterministic worker resolves current year and daily model version in Europe/Rome", () => {
+  const date = new Date("2026-12-31T23:30:00.000Z");
+
+  assert.equal(getPetyrCurrentYearInTimezone(date, "Europe/Rome"), 2027);
+  assert.equal(
+    getPetyrDeterministicPreviewDailyModelVersion(date, "Europe/Rome"),
+    "petyr_deterministic_preview_v1@2027-01-01"
+  );
+});
+
+test("nightly deterministic worker parses delay configuration with 3000ms default", () => {
+  assert.equal(parsePetyrAiForecastDelayMs(undefined), 3000);
+  assert.equal(parsePetyrAiForecastDelayMs("3000"), 3000);
+  assert.equal(parsePetyrAiForecastDelayMs("-10"), 0);
+  assert.equal(parsePetyrAiForecastDelayMs("120000"), 60000);
+});
+
+test("deterministic AI Forecast cache key detects duplicate daily rows", () => {
+  const existing = {
+    companyName: "Company A",
+    businessUnit: "QA",
+    year: 2026,
+    month: 7,
+    modelVersion: "petyr_deterministic_preview_v1@2026-06-20"
+  };
+  const existingKeys = new Set([getPetyrNightlyForecastCacheKey(existing)]);
+
+  assert.equal(isPetyrNightlyForecastCacheDuplicate({ forecast: { ...existing }, existingKeys }), true);
+  assert.equal(
+    isPetyrNightlyForecastCacheDuplicate({
+      forecast: { ...existing, modelVersion: "petyr_deterministic_preview_v1@2026-06-21" },
+      existingKeys
+    }),
+    false
+  );
+});
+
+test("nightly deterministic run continues after one company fails", async () => {
+  const originalDelay = process.env.PETYR_AI_FORECAST_DELAY_MS;
+  const originalTimezone = process.env.PETYR_TIMEZONE;
+  process.env.PETYR_AI_FORECAST_DELAY_MS = "3000";
+  process.env.PETYR_TIMEZONE = "Europe/Rome";
+  const sleepCalls: number[] = [];
+  const savedCompanies: string[] = [];
+
+  try {
+    const result = await runPetyrNightlyDeterministicAiForecastCore({
+      now: new Date("2026-06-20T00:30:00.000Z"),
+      timezone: "Europe/Rome",
+      delayMs: 3000,
+      sleep: async (ms) => {
+        sleepCalls.push(ms);
+      },
+      runWithLock: async (operation) => operation(),
+      listCompanies: async () => ({
+        data: [
+          { companyName: "First Co", csmName: "CSM A", isForecastActive: true, priorityScore: 3 },
+          { companyName: "Fail Co", csmName: "CSM B", isForecastActive: true, priorityScore: 2 },
+          { companyName: "Inactive Co", csmName: "CSM C", isForecastActive: false, priorityScore: 1 }
+        ] as never,
+        diagnostics: ["company-list-diagnostic"]
+      }),
+      saveCompany: async (input) => {
+        savedCompanies.push(input.companyName);
+        if (input.companyName === "Fail Co") throw new Error("boom");
+
+        return {
+          ok: true,
+          companyName: input.companyName,
+          year: input.year,
+          deterministicCandidatesCount: 1,
+          report: {
+            savedRows: 1,
+            skippedRows: 0
+          },
+          diagnostics: ["save-diagnostic"]
+        };
+      }
+    });
+
+    assert.equal(result.skippedByLock, false);
+    assert.equal(result.selectedCompanies, 2);
+    assert.equal(result.processedCompanies, 1);
+    assert.equal(result.failedCompanies, 1);
+    assert.equal(result.savedRows, 1);
+    assert.deepEqual(savedCompanies, ["First Co", "Fail Co"]);
+    assert.deepEqual(sleepCalls, [3000]);
+    assert.ok(result.diagnostics.includes("company-list-diagnostic"));
+    assert.ok(result.diagnostics.includes("save-diagnostic"));
+  } finally {
+    if (originalDelay === undefined) {
+      delete process.env.PETYR_AI_FORECAST_DELAY_MS;
+    } else {
+      process.env.PETYR_AI_FORECAST_DELAY_MS = originalDelay;
+    }
+
+    if (originalTimezone === undefined) {
+      delete process.env.PETYR_TIMEZONE;
+    } else {
+      process.env.PETYR_TIMEZONE = originalTimezone;
+    }
+  }
+});
