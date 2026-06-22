@@ -19,6 +19,16 @@ Each entry must include:
 ---
 
 ## 2026-06-22
+
+- **Area:** Platform / Coolify deployment / Petyr routing
+- **Change:** Prepared the root Compose and env handoff for Coolify deployment on `https://petyr.draftapps.it` with Access Layer at `https://access-layer.draftapps.it`. Compose now reads explicit environment variables instead of requiring `env_file: .env`, removes hardcoded application `DATABASE_URL` values, requires coherent PostgreSQL variables, removes direct published ports for PostgreSQL, Petyr and Redash Ingestor, and keeps only the gateway published. Added a sanitized root `.env.example`, sanitized the old duplicate env example, updated Access Layer callback defaults/descriptors/docs, and allowed `petyr.draftapps.it` for Next.js Server Actions.
+- **Reason:** The upcoming Coolify deployment should avoid the same class of drift seen on Access Layer, where Compose env, app `DATABASE_URL`, generated Coolify variables and persistent PostgreSQL volume state disagreed.
+- **Impact:** Production operators must provide `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and a matching URL-encoded `DATABASE_URL` in Coolify. If a PostgreSQL volume was already initialized with different credentials, it must be recreated after backup or accessed with the original credentials. Petyr, Redash Ingestor and PostgreSQL are no longer directly published by root Compose; traffic should enter through `platform-home:8080`.
+- **Files/documents involved:** `docker-compose.yml`, `.env.example`, `.env - Copia.example`, `.env`, `.dockerignore`, `apps/forecasting-app/next.config.ts`, `apps/forecasting-app/.env.example`, `apps/redash-ingestor/.env.example`, `apps/forecasting-app/README.md`, `apps/redash-ingestor/README.md`, `petyr/access-layer-tools/*`, `README.md`, `README_INSTALL_DOCKER.md`, `docs/01_architecture.md`, `docs/08_operational_commands.md`, `DEPLOY.md`, `BACKLOG.md`, `DECISIONS.md`, `DEVLOG.md`.
+- **Validation:** Passed `docker compose config --services`, `docker compose config --quiet`, and `docker compose --env-file .env.example config --quiet`. Verified `docker-compose.yml` no longer contains `env_file`, `container_name`, `5432:5432`, `3000:3000` or `3001:3000`. Full `docker.exe compose build forecasting-app redash-ingestor` was attempted but interrupted after the Docker build stayed silent for several minutes in the npm dependency install layer; no application error was emitted before interruption. Local npm tests/builds could not run because `node_modules` are not present in the app checkouts.
+- **Follow-up:** Configure Coolify variables and Access Layer tool registrations with the documented `draftapps.it` URLs before first production login test.
+
+## 2026-06-22
 - **Area:** Petyr / Admin / PostgreSQL backup and restore
 - **Change:** Added a `/petyr-admin` Database backup section plus protected export/import endpoints. Export streams a native PostgreSQL SQL dump from `DATABASE_URL`; import accepts a confirmed `.sql` dump and restores it with PostgreSQL stop-on-error behavior. Both endpoints require Petyr `petyr:admin` and `APP_INTERNAL_SECRET`. The Forecasting app runtime image now installs PostgreSQL client tools for `pg_dump` and `psql`.
 - **Reason:** Product requested an admin way to export the database and reimport it on a new server to preserve platform data.

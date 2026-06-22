@@ -13,6 +13,17 @@ Each decision should include:
 
 ---
 
+## 2026-06-22 - Deploy Petyr on draftapps.it through Coolify
+
+- **Status:** Accepted.
+- **Context:** Petyr is moving to Coolify under `https://petyr.draftapps.it` and must use the external Access Layer at `https://access-layer.draftapps.it`. A prior Access Layer deployment showed that PostgreSQL credentials can drift between Compose variables, application `DATABASE_URL`, Coolify-generated values and already-initialized persistent volumes.
+- **Decision:** Production Petyr must use `https://petyr.draftapps.it` as the public host, with Petyr callback `https://petyr.draftapps.it/auth/callback` and Redash Ingestor callback `https://petyr.draftapps.it/redash-ingestor/auth/callback`. Access Layer base URLs must use `https://access-layer.draftapps.it`. Root Compose no longer injects a required `.env` file into containers, no longer hardcodes app `DATABASE_URL`, and publishes only the gateway service by default. `DATABASE_URL` must be provided explicitly and must match the PostgreSQL credentials used to initialize the volume.
+- **Alternatives discarded:** Keeping the previous `unguess-internal.net` production defaults; relying on `env_file: .env` in Coolify; publishing direct app/PostgreSQL ports from the root production Compose; allowing app containers to silently fall back to hardcoded database credentials.
+- **Reason:** Coolify should receive explicit environment variables and route only the gateway, while PostgreSQL authentication should either match the initialized volume or fail during configuration instead of producing a backend restart loop.
+- **Consequences:** Existing Access Layer tool registrations must be updated to the new callback URLs. If an existing Coolify PostgreSQL volume was initialized with old credentials, operators must preserve those credentials or recreate the resource/volume after backup. Direct local debug ports require an explicit local override or app-level dev server.
+- **Supersedes:** The production host portions of `2026-06-21 - Host Access Layer on access-layer.unguess-internal.net`, `2026-06-21 - Host Petyr on petyr.unguess-internal.net in production`, and `2026-06-22 - Route Redash Ingestor through the Petyr production host`.
+- **Related docs:** `DEPLOY.md`, `docker-compose.yml`, `.env.example`, `apps/forecasting-app/next.config.ts`, `apps/forecasting-app/.env.example`, `apps/redash-ingestor/.env.example`, `petyr/access-layer-tools/*`, `README.md`, `README_INSTALL_DOCKER.md`, `DEVLOG.md`.
+
 ## 2026-06-22 - Use PostgreSQL-native dumps for Petyr Admin database migration
 
 - **Status:** Accepted.

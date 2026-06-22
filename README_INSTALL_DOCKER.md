@@ -56,11 +56,17 @@ Su Windows PowerShell:
 Copy-Item .env.example .env
 ```
 
-Poi modifica `.env` inserendo almeno:
+Poi modifica `.env` inserendo almeno `REDASH_API_KEY`, `APP_INTERNAL_SECRET` e credenziali PostgreSQL coerenti tra `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` e `DATABASE_URL`.
+
+Per sviluppo locale senza Access Layer, imposta anche:
 
 ```env
-REDASH_API_KEY=la_tua_api_key_redash
+NODE_ENV=development
+PETYR_AUTH_MODE=disabled
+REDASH_INGESTOR_AUTH_MODE=disabled
 ```
+
+In Coolify/produzione questi valori devono restare `NODE_ENV=production`, `PETYR_AUTH_MODE=access-layer` e `REDASH_INGESTOR_AUTH_MODE=access-layer`.
 
 `APP_INTERNAL_SECRET` e' opzionale per l'ingestor: non serve per il sync manuale Redash.
 Impostalo solo se vuoi permettere al worker di chiamare i batch AI interni di Petyr dopo un sync completo.
@@ -74,7 +80,7 @@ SYNC_LOCK_TTL_SECONDS=3600
 REDASH_INGESTOR_BASE_PATH=/redash-ingestor
 ```
 
-Non cambiare `DATABASE_URL` se usi Docker dalla root: il servizio DB dentro Compose si chiama `postgres`.
+`DATABASE_URL` deve usare il servizio interno `postgres` come host e deve combaciare con `POSTGRES_DB`, `POSTGRES_USER` e `POSTGRES_PASSWORD`. Se cambi password dopo che il volume PostgreSQL e gia stato inizializzato, ricrea la risorsa/volume oppure mantieni le vecchie credenziali reali del volume.
 
 ---
 
@@ -100,7 +106,7 @@ http://localhost:8080/petyr-admin       -> Petyr Admin
 http://localhost:8080/redash-ingestor   -> Redash Ingestor dashboard tecnico
 ```
 
-La root `http://localhost:8080` reindirizza a `/forecasting`. Le porte dirette `3000` e `3001` possono restare utili per debug locale, ma il percorso utente e operativo deve passare dal gateway. Quando il Redash Ingestor e costruito da Compose, anche la porta diretta `3000` usa il prefisso `/redash-ingestor`; in sviluppo app diretto, lascia `NEXT_PUBLIC_REDASH_INGESTOR_BASE_PATH` vuoto per usare le route non prefissate.
+La root `http://localhost:8080` reindirizza a `/forecasting`. Il Compose root pubblica solo il gateway. Il percorso utente e operativo deve passare dal gateway; per debug diretto delle app usa sviluppo app diretto o un override locale esplicito. Quando il Redash Ingestor e costruito da Compose, anche la porta diretta `3000` usa il prefisso `/redash-ingestor`; in sviluppo app diretto, lascia `NEXT_PUBLIC_REDASH_INGESTOR_BASE_PATH` vuoto per usare le route non prefissate.
 
 ---
 
@@ -108,11 +114,11 @@ La root `http://localhost:8080` reindirizza a `/forecasting`. Le porte dirette `
 
 | Servizio | Container | Porta locale | Scopo |
 |---|---|---:|---|
-| `postgres` | `unguess-postgres` | `5432` | Database condiviso |
-| `redash-ingestor` | `unguess-redash-ingestor` | `3000` debug, gateway `/redash-ingestor` | UI/API tecnica |
-| `redash-worker` | `unguess-redash-worker` | nessuna | Sync giornaliero Redash |
-| `forecasting-app` | `unguess-forecasting-app` | `3001` debug, gateway `/forecasting` e `/petyr-admin` | Workspace Petyr Forecasting |
-| `platform-home` | `unguess-platform-home` | `8080` | Gateway/reverse proxy locale |
+| `postgres` | Compose-managed | non pubblicata | Database condiviso |
+| `redash-ingestor` | Compose-managed | gateway `/redash-ingestor` | UI/API tecnica |
+| `redash-worker` | Compose-managed | nessuna | Sync giornaliero Redash |
+| `forecasting-app` | Compose-managed | gateway `/forecasting` e `/petyr-admin` | Workspace Petyr Forecasting |
+| `platform-home` | Compose-managed | `8080` | Gateway/reverse proxy locale |
 
 ---
 

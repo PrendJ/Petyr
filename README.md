@@ -19,7 +19,7 @@ Implementato:
 
 ```bash
 cp .env.example .env
-# compila REDASH_API_KEY; APP_INTERNAL_SECRET protegge endpoint interni controllati
+# compila REDASH_API_KEY, APP_INTERNAL_SECRET e le credenziali PostgreSQL coerenti
 docker compose up --build
 ```
 
@@ -31,7 +31,7 @@ http://localhost:8080/petyr-admin       -> Petyr Admin
 http://localhost:8080/redash-ingestor   -> Redash Ingestor dashboard tecnico
 ```
 
-La root `http://localhost:8080` reindirizza a `/forecasting`. Le porte dirette `3000` e `3001` restano disponibili solo come comodita di debug locale, non come modello user-facing.
+La root `http://localhost:8080` reindirizza a `/forecasting`. Il Compose root non pubblica le porte dirette di `forecasting-app`, `redash-ingestor` o PostgreSQL: il percorso utente e operativo passa dal gateway.
 
 ## Nota sul database condiviso
 

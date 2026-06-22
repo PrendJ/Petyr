@@ -16,7 +16,7 @@ http://localhost:8080/petyr-admin       -> Petyr Admin
 http://localhost:8080/redash-ingestor   -> Redash Ingestor dashboard
 ```
 
-`http://localhost:8080` redirects to `/forecasting`. Direct `3000` and `3001` ports are local/debug conveniences only.
+`http://localhost:8080` redirects to `/forecasting`. The root Compose publishes only the gateway; use explicit local overrides or app-level dev servers for direct app debugging.
 
 Stop all services:
 

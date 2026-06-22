@@ -63,22 +63,22 @@ Petyr is prepared to integrate with an external Access Layer service using the t
 Confirmed target URLs:
 
 ```txt
-Access Layer: https://access-layer.unguess-internal.net
-Petyr:        https://petyr.unguess-internal.net
-Callback:     https://petyr.unguess-internal.net/auth/callback
+Access Layer: https://access-layer.draftapps.it
+Petyr:        https://petyr.draftapps.it
+Callback:     https://petyr.draftapps.it/auth/callback
 Redash Ingestor operator path:
-              https://petyr.unguess-internal.net/redash-ingestor
+              https://petyr.draftapps.it/redash-ingestor
 Redash Ingestor callback:
-              https://petyr.unguess-internal.net/redash-ingestor/auth/callback
+              https://petyr.draftapps.it/redash-ingestor/auth/callback
 ```
 
 For local development, Petyr authentication defaults to disabled when `NODE_ENV=development`. Production must set:
 
 ```env
 PETYR_AUTH_MODE=access-layer
-PETYR_ACCESS_LAYER_PUBLIC_BASE_URL=https://access-layer.unguess-internal.net
-PETYR_ACCESS_LAYER_INTERNAL_BASE_URL=https://access-layer.unguess-internal.net
-PETYR_ACCESS_LAYER_CALLBACK_URL=https://petyr.unguess-internal.net/auth/callback
+PETYR_ACCESS_LAYER_PUBLIC_BASE_URL=https://access-layer.draftapps.it
+PETYR_ACCESS_LAYER_INTERNAL_BASE_URL=https://access-layer.draftapps.it
+PETYR_ACCESS_LAYER_CALLBACK_URL=https://petyr.draftapps.it/auth/callback
 PETYR_ACCESS_LAYER_TOOL_SLUG=petyr
 PETYR_ACCESS_LAYER_CLIENT_ID=replace_with_petyr_tool_client_id
 PETYR_ACCESS_LAYER_CLIENT_SECRET=replace_with_petyr_tool_client_secret
@@ -103,9 +103,9 @@ Production Redash Ingestor Access Layer values:
 
 ```env
 REDASH_INGESTOR_AUTH_MODE=access-layer
-REDASH_INGESTOR_ACCESS_LAYER_PUBLIC_BASE_URL=https://access-layer.unguess-internal.net
-REDASH_INGESTOR_ACCESS_LAYER_INTERNAL_BASE_URL=https://access-layer.unguess-internal.net
-REDASH_INGESTOR_ACCESS_LAYER_CALLBACK_URL=https://petyr.unguess-internal.net/redash-ingestor/auth/callback
+REDASH_INGESTOR_ACCESS_LAYER_PUBLIC_BASE_URL=https://access-layer.draftapps.it
+REDASH_INGESTOR_ACCESS_LAYER_INTERNAL_BASE_URL=https://access-layer.draftapps.it
+REDASH_INGESTOR_ACCESS_LAYER_CALLBACK_URL=https://petyr.draftapps.it/redash-ingestor/auth/callback
 REDASH_INGESTOR_ACCESS_LAYER_TOOL_SLUG=redash-ingestor
 REDASH_INGESTOR_ACCESS_LAYER_CLIENT_ID=replace_with_redash_ingestor_tool_client_id
 REDASH_INGESTOR_ACCESS_LAYER_CLIENT_SECRET=replace_with_redash_ingestor_tool_client_secret
@@ -124,6 +124,36 @@ redash-ingestor:admin
 ```
 
 Non-secret onboarding descriptors for both tools live in `petyr/access-layer-tools/`.
+
+## Coolify deployment guardrails
+
+For the Coolify deployment at `https://petyr.draftapps.it`, route the public domain to the `platform-home` service on internal port `8080`. Do not publish `postgres`, `forecasting-app` or `redash-ingestor` directly.
+
+Set the PostgreSQL variables and connection URL as one coherent set:
+
+```env
+POSTGRES_DB=unguess_redash
+POSTGRES_USER=unguess
+POSTGRES_PASSWORD=replace_with_real_password
+DATABASE_URL=postgresql://unguess:replace_with_url_encoded_real_password@postgres:5432/unguess_redash?schema=public
+```
+
+If Coolify already initialized the PostgreSQL volume with different credentials, changing `.env` or Coolify variables is not enough. Either keep the real credentials that initialized the volume, or delete/recreate the Coolify resource/volume after exporting any data that must be preserved.
+
+Production auth variables must point to:
+
+```env
+PETYR_AUTH_MODE=access-layer
+PETYR_ACCESS_LAYER_PUBLIC_BASE_URL=https://access-layer.draftapps.it
+PETYR_ACCESS_LAYER_INTERNAL_BASE_URL=https://access-layer.draftapps.it
+PETYR_ACCESS_LAYER_CALLBACK_URL=https://petyr.draftapps.it/auth/callback
+REDASH_INGESTOR_AUTH_MODE=access-layer
+REDASH_INGESTOR_ACCESS_LAYER_PUBLIC_BASE_URL=https://access-layer.draftapps.it
+REDASH_INGESTOR_ACCESS_LAYER_INTERNAL_BASE_URL=https://access-layer.draftapps.it
+REDASH_INGESTOR_ACCESS_LAYER_CALLBACK_URL=https://petyr.draftapps.it/redash-ingestor/auth/callback
+```
+
+Keep all generated client secrets, session secrets, Redash API keys, OpenRouter keys and database passwords in Coolify environment variables only.
 
 ## Deployment rule
 

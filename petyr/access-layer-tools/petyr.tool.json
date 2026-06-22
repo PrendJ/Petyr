@@ -2,9 +2,9 @@
   "tool_slug": "petyr",
   "display_name": "Petyr Forecasting",
   "description": "Product-facing UNGUESS forecasting workspace. Petyr reads PostgreSQL-backed Redash-derived data and owns forecasting workflows.",
-  "production_url": "https://petyr.unguess-internal.net",
+  "production_url": "https://petyr.draftapps.it",
   "allowed_return_urls": [
-    "https://petyr.unguess-internal.net/auth/callback"
+    "https://petyr.draftapps.it/auth/callback"
   ],
   "permission_keys": [
     "petyr:read",
@@ -14,9 +14,9 @@
   ],
   "recommended_environment": {
     "PETYR_AUTH_MODE": "access-layer",
-    "ACCESS_LAYER_PUBLIC_BASE_URL": "https://access-layer.unguess-internal.net",
-    "ACCESS_LAYER_INTERNAL_BASE_URL": "https://access-layer.unguess-internal.net",
-    "ACCESS_LAYER_CALLBACK_URL": "https://petyr.unguess-internal.net/auth/callback",
+    "ACCESS_LAYER_PUBLIC_BASE_URL": "https://access-layer.draftapps.it",
+    "ACCESS_LAYER_INTERNAL_BASE_URL": "https://access-layer.draftapps.it",
+    "ACCESS_LAYER_CALLBACK_URL": "https://petyr.draftapps.it/auth/callback",
     "ACCESS_LAYER_TOOL_SLUG": "petyr",
     "ACCESS_LAYER_CLIENT_ID": "set_in_coolify",
     "ACCESS_LAYER_CLIENT_SECRET": "set_in_coolify",
