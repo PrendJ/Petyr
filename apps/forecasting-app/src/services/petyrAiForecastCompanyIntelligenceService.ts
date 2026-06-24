@@ -331,7 +331,7 @@ function includedSignal(input: {
     role: input.role,
     value: input.value === null ? null : roundMoney(input.value),
     numericWeight: null,
-    weightReason: "No calibrated numeric weights exist in code; positive historical/seasonality/run-rate signals are averaged and planned future acts as a floor.",
+    weightReason: "When configured, Management/Finance weights apply to positive historical/seasonality/run-rate signals and are renormalized across available signals; otherwise the compatible positive-signal average is used. Planned future remains a floor.",
     reason: input.reason
   };
 }
@@ -377,7 +377,7 @@ function buildExplainability(candidate: PetyrAiForecastCandidate): PetyrAiForeca
     calibratedWeights: null,
     calibratedWeightsAvailability: {
       availability: "notAvailable",
-      reason: "The current deterministic algorithm does not define calibrated Management/Finance-approved numeric weights."
+      reason: "The deterministic algorithm can use Petyr Admin Management/Finance weights when configured; otherwise it uses the compatible positive-signal average fallback."
     },
     plannedFutureRole: "floor",
     residualPressureRole: "historical_guided_allocation_cap",
@@ -459,7 +459,7 @@ function algorithmSummary(): PetyrAiForecastAlgorithmSummary {
     validationAuthorityExplanation:
       "Petyr server code owns eligible months, official Business Units, numeric validation, input hashing, cache persistence and deterministic forecast values.",
     currentLimitations: [
-      "Management/Finance calibrated weights are not defined; no fake weights are exposed.",
+      "Management/Finance weights are configurable in Petyr Admin; until saved, Petyr uses the compatible positive-signal average fallback.",
       "Agreement residual allocation is historical-guided and may still be low-confidence when no sanitized BU title token or linked campaign history is available.",
       "CSM-entered monthly and annual forecast values stay available for UI comparison, but they are intentionally excluded from the OpenRouter payload.",
       "OpenRouter output is saved as structured Forecast Intelligence JSON and cannot change deterministic numbers."

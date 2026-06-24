@@ -51,13 +51,28 @@ The first MVP started as manual and company-by-company:
 Accepted deterministic automation:
 
 - Petyr runs a dedicated nightly deterministic-only worker for active companies;
-- schedule defaults to `01:00` in `Europe/Rome`;
+- schedule defaults to `02:00` in `Europe/Rome`;
 - the worker waits `3000ms` between companies by default;
 - the worker targets the current Rome year;
 - the worker saves local deterministic preview rows to `ai_forecast_cache`;
 - the worker uses daily append-only model versions such as
   `petyr_deterministic_preview_v1@YYYY-MM-DD`;
 - the worker does not call OpenRouter or Forecast Intelligence.
+
+Accepted manual recovery:
+
+- Petyr Admin can run the deterministic Daily AI Forecast immediately for all active companies;
+- the admin run uses the same service as the worker and requires `petyr:admin` plus `APP_INTERNAL_SECRET`;
+- duplicate rows for the same daily model version are skipped rather than overwritten;
+- final deterministic AI Forecast values are rounded to the nearest 100 EUR.
+
+Accepted calibration control:
+
+- Petyr Admin stores one global Management/Finance baseline weight set;
+- weights apply only to historical weighted baseline, monthly seasonality and run-rate;
+- planned campaigns remain a target-month floor;
+- agreement residual remains allocation/cap pressure;
+- if no weights are configured, Petyr uses the compatible positive-signal average fallback.
 
 AI Forecasting must be hybrid:
 

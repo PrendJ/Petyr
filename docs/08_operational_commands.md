@@ -128,7 +128,7 @@ cache persistence.
 
 Nightly deterministic AI Forecast automation is handled by the dedicated
 `petyr-ai-forecast-worker` service. It starts at
-`PETYR_AI_FORECAST_DAILY_TIME=01:00` in `Europe/Rome`, waits
+`PETYR_AI_FORECAST_DAILY_TIME=02:00` in `Europe/Rome`, waits
 `PETYR_AI_FORECAST_DELAY_MS=3000` between active companies, targets the current
 Rome year and saves local deterministic preview rows to `ai_forecast_cache` with
 daily append-only model versions. It does not call OpenRouter or Forecast

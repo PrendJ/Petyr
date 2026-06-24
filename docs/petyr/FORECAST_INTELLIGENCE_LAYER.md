@@ -51,12 +51,16 @@ Forecast Intelligence output; failed intelligence saves a failure state and does
 not alter deterministic forecast values.
 
 Nightly deterministic automation is separate from this Forecast Intelligence
-flow. The `petyr-ai-forecast-worker` service runs at 01:00 in `Europe/Rome`,
+flow. The `petyr-ai-forecast-worker` service runs at 02:00 in `Europe/Rome`,
 computes local deterministic preview rows for active companies and saves those
 numeric rows to `ai_forecast_cache` with daily model versions such as
 `petyr_deterministic_preview_v1@YYYY-MM-DD`. That worker must not call
 OpenRouter, must not create or require Forecast Intelligence sentinel rows and
 must not modify CSM-owned forecast data.
+
+Petyr Admin may trigger the same deterministic all-active-company run manually for controlled recovery. The manual run is protected by `petyr:admin` and `APP_INTERNAL_SECRET`, writes missing daily cache rows and reports saved/skipped rows per company. Deterministic final AI Forecast values are rounded to the nearest 100 EUR.
+
+Management/Finance baseline weights are globally configurable in Petyr Admin for historical weighted baseline, monthly seasonality and run-rate. Planned future remains a floor and residual remains allocation/cap pressure. If no weights are configured, Petyr uses the compatible positive-signal average fallback.
 
 ## Input Payload Contract
 

@@ -19,13 +19,20 @@ import {
 } from "../src/services/petyrForecastIntelligenceService";
 import {
   getPetyrCurrentYearInTimezone,
+  getNextPetyrAiForecastDailyRunAt,
   getPetyrDeterministicPreviewDailyModelVersion,
   getPetyrNightlyForecastCacheKey,
   isPetyrNightlyForecastCacheDuplicate,
   normalizePetyrNightlyForecastCompanies,
+  parsePetyrAiForecastDailyTime,
   parsePetyrAiForecastDelayMs,
   runPetyrNightlyDeterministicAiForecastCore
 } from "../src/lib/petyr/nightlyDeterministicAiForecastCore";
+import { buildDeterministicForecastCandidates, weightedSignalBaseline } from "../src/services/petyrAiForecastStrategyService";
+import {
+  getDefaultPetyrAiForecastBaselineWeights,
+  resolvePetyrAiForecastBaselineWeightsRead
+} from "../src/services/petyrAiForecastWeightsService";
 
 const baseOutput: PetyrForecastIntelligenceOutput = {
   stakeholder_notes: [
@@ -598,4 +605,100 @@ test("nightly deterministic run continues after one company fails", async () => 
       process.env.PETYR_TIMEZONE = originalTimezone;
     }
   }
+});
+
+test("nightly deterministic worker defaults to 02:00 Europe/Rome schedule", () => {
+  assert.equal(parsePetyrAiForecastDailyTime(undefined), "02:00");
+  assert.equal(parsePetyrAiForecastDailyTime("not-a-time"), "02:00");
+
+  const beforeRun = new Date(2026, 5, 20, 1, 30, 0, 0);
+  const afterRun = new Date(2026, 5, 20, 2, 30, 0, 0);
+  const sameDayRun = getNextPetyrAiForecastDailyRunAt(beforeRun, "02:00");
+  const nextDayRun = getNextPetyrAiForecastDailyRunAt(afterRun, "02:00");
+
+  assert.equal(sameDayRun.getFullYear(), 2026);
+  assert.equal(sameDayRun.getMonth(), 5);
+  assert.equal(sameDayRun.getDate(), 20);
+  assert.equal(sameDayRun.getHours(), 2);
+  assert.equal(sameDayRun.getMinutes(), 0);
+  assert.equal(nextDayRun.getFullYear(), 2026);
+  assert.equal(nextDayRun.getMonth(), 5);
+  assert.equal(nextDayRun.getDate(), 21);
+  assert.equal(nextDayRun.getHours(), 2);
+  assert.equal(nextDayRun.getMinutes(), 0);
+});
+
+test("AI Forecast baseline weights keep compatible fallback until configured", () => {
+  const defaultWeights = getDefaultPetyrAiForecastBaselineWeights();
+
+  assert.equal(defaultWeights.enabled, false);
+  assert.equal(
+    weightedSignalBaseline({
+      historicalWeightedBaseline: 100,
+      monthlySeasonality: 200,
+      runRate: 300,
+      baselineWeights: defaultWeights
+    }),
+    200
+  );
+});
+
+test("AI Forecast baseline weights apply and renormalize configured positive signals", () => {
+  const configured = resolvePetyrAiForecastBaselineWeightsRead({
+    settingValue: JSON.stringify({
+      schemaVersion: "petyr_ai_forecast_baseline_weights_v1",
+      enabled: true,
+      historicalWeightedBaseline: 50,
+      monthlySeasonality: 30,
+      runRate: 20,
+      updatedBy: "test"
+    }),
+    updatedAt: new Date("2026-06-24T00:00:00.000Z")
+  }).weights;
+
+  assert.equal(configured.enabled, true);
+  assert.equal(
+    weightedSignalBaseline({
+      historicalWeightedBaseline: 100,
+      monthlySeasonality: 0,
+      runRate: 300,
+      baselineWeights: configured
+    }),
+    150
+  );
+});
+
+test("AI Forecast baseline weights fall back when stored payload is invalid", () => {
+  const result = resolvePetyrAiForecastBaselineWeightsRead({
+    settingValue: JSON.stringify({
+      enabled: true,
+      historicalWeightedBaseline: 50,
+      monthlySeasonality: 50,
+      runRate: 50
+    }),
+    updatedAt: new Date("2026-06-24T00:00:00.000Z")
+  });
+
+  assert.equal(result.weights.enabled, false);
+  assert.equal(result.diagnostics.length, 1);
+});
+
+test("deterministic AI Forecast final value rounds to nearest 100 EUR", () => {
+  const candidates = buildDeterministicForecastCandidates({
+    companyName: "Round Co",
+    year: 2026,
+    currentDate: new Date("2026-06-24T00:00:00.000Z"),
+    eligibleMonths: [7],
+    historicalPoints: [
+      { businessUnit: "QA", year: 2026, month: 5, closedRevenue: 1234, agreementName: "", campaignName: "" }
+    ],
+    plannedCampaigns: [],
+    campaigns: [],
+    agreements: [],
+    baselineWeights: getDefaultPetyrAiForecastBaselineWeights()
+  });
+  const qa = candidates.find((candidate) => candidate.businessUnit === "QA");
+
+  assert.equal(qa?.baselineForecast, 1234);
+  assert.equal(qa?.roundedForecastValue, 1200);
 });

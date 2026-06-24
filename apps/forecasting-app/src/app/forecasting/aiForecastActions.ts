@@ -59,7 +59,7 @@ function defaultAlgorithmSummary(): PetyrAiForecastAlgorithmSummary {
     validationAuthorityExplanation:
       "Petyr server code owns eligible months, official Business Units, numeric validation, privacy checks and ai_forecast_cache-only persistence.",
     currentLimitations: [
-      "Calibrated Management/Finance weights are not defined.",
+      "Management/Finance weights are configurable in Petyr Admin; until saved, Petyr uses the compatible positive-signal average fallback.",
       "Agreement residual allocation is historical-guided and may be low-confidence when no sanitized BU title token or linked campaign history is available.",
       "Rich explainability is current-run output and is not persisted as structured cache columns."
     ]

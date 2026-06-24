@@ -120,7 +120,7 @@ Same codebase/image as `forecasting-app`, different command.
 
 Responsible for:
 - nightly deterministic AI Forecast generation for active Petyr companies;
-- default schedule `01:00` in `Europe/Rome`;
+- default schedule `02:00` in `Europe/Rome`;
 - default inter-company delay of `3000ms`;
 - saving local deterministic preview rows only to `ai_forecast_cache`;
 - keeping OpenRouter and Forecast Intelligence out of the nightly numeric job.

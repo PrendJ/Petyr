@@ -629,7 +629,7 @@ Petyr AI Forecasting has two accepted execution modes:
 - nightly deterministic-only automation for active companies through the
   `petyr-ai-forecast-worker` service.
 
-The nightly worker runs at `PETYR_AI_FORECAST_DAILY_TIME=01:00` in
+The nightly worker runs at `PETYR_AI_FORECAST_DAILY_TIME=02:00` in
 `Europe/Rome`, targets the current Rome year, excludes only companies explicitly
 marked inactive, waits `PETYR_AI_FORECAST_DELAY_MS=3000` between companies and
 saves local deterministic preview rows to `ai_forecast_cache` with daily

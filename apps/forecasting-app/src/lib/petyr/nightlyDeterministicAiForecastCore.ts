@@ -1,6 +1,6 @@
 export const PETYR_DETERMINISTIC_PREVIEW_MODEL_VERSION_PREFIX = "petyr_deterministic_preview_v1";
 
-const DEFAULT_DAILY_TIME = "01:00";
+const DEFAULT_DAILY_TIME = "02:00";
 const DEFAULT_DELAY_MS = 3000;
 const MAX_DELAY_MS = 60_000;
 

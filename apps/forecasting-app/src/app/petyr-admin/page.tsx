@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import PetyrDailyAiForecastRunControl from "@/components/petyr/PetyrDailyAiForecastRunControl";
+import PetyrAiForecastWeightsForm from "@/components/petyr/PetyrAiForecastWeightsForm";
 import PetyrAiPreviewBacktestControl from "@/components/petyr/PetyrAiPreviewBacktestControl";
 import PetyrAiModelSettingsForm from "@/components/petyr/PetyrAiModelSettingsForm";
 import PetyrClosedRevenueOngoingBackfillControl from "@/components/petyr/PetyrClosedRevenueOngoingBackfillControl";
@@ -17,6 +19,11 @@ import {
   getPetyrAiModelSetting,
   type PetyrAiModelSetting
 } from "@/services/petyrAiModelSettingsService";
+import {
+  getDefaultPetyrAiForecastBaselineWeights,
+  getPetyrAiForecastBaselineWeights,
+  type PetyrAiForecastBaselineWeights
+} from "@/services/petyrAiForecastWeightsService";
 import {
   getPetyrDataHealth,
   type PetyrDataHealthIssue,
@@ -37,6 +44,11 @@ type LoadState<T> = {
 
 type AiSettingState = {
   setting: PetyrAiModelSetting;
+  error: string | null;
+};
+
+type AiForecastWeightsState = {
+  setting: PetyrAiForecastBaselineWeights;
   error: string | null;
 };
 
@@ -151,6 +163,20 @@ async function loadAiSetting(): Promise<AiSettingState> {
   } catch (error) {
     return {
       setting: getDefaultPetyrAiModelSetting(),
+      error: formatSettingsError(error)
+    };
+  }
+}
+
+async function loadAiForecastWeights(): Promise<AiForecastWeightsState> {
+  try {
+    return {
+      setting: await getPetyrAiForecastBaselineWeights(),
+      error: null
+    };
+  } catch (error) {
+    return {
+      setting: getDefaultPetyrAiForecastBaselineWeights(),
       error: formatSettingsError(error)
     };
   }
@@ -610,10 +636,11 @@ function DataHealthSection({ state }: { state: LoadState<PetyrDataHealthResult> 
 
 export default async function PetyrAdminPage() {
   const identity = await requirePetyrPagePermission(PETYR_PERMISSIONS.admin);
-  const [dataHealth, performanceResults, aiSetting, csmFilterCandidates] = await Promise.all([
+  const [dataHealth, performanceResults, aiSetting, aiForecastWeights, csmFilterCandidates] = await Promise.all([
     loadDataHealth(),
     loadPerformanceResults(),
     loadAiSetting(),
+    loadAiForecastWeights(),
     loadCsmFilterCandidates()
   ]);
   const preferredCsmName = resolvePreferredCsmName(identity.user.displayName, csmFilterCandidates);
@@ -673,10 +700,27 @@ export default async function PetyrAdminPage() {
         </SectionCard>
 
         <SectionCard
+          description="Run the deterministic Daily AI Forecast worker now for all active companies."
+          title="Daily AI Forecast"
+        >
+          <PetyrDailyAiForecastRunControl />
+        </SectionCard>
+
+        <SectionCard
           description="Run the read-only top-10 deterministic preview backtest for May and June 2026."
           title="AI preview backtest"
         >
           <PetyrAiPreviewBacktestControl />
+        </SectionCard>
+
+        <SectionCard
+          description="Configure the global Management/Finance weights used by the deterministic AI Forecast baseline."
+          title="AI Forecast baseline weights"
+        >
+          {aiForecastWeights.error ? (
+            <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{aiForecastWeights.error}</div>
+          ) : null}
+          <PetyrAiForecastWeightsForm initialSetting={aiForecastWeights.setting} />
         </SectionCard>
 
         <SectionCard

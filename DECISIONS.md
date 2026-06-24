@@ -119,8 +119,8 @@ Each decision should include:
 ## 2026-06-20 - Run deterministic Petyr AI Forecast nightly for active companies
 
 - **Status:** Accepted.
-- **Context:** Product wants deterministic preview generated every night for all active Petyr Forecasting companies, starting at 01:00 in `Europe/Rome`, with about 3 seconds between companies, and saved as AI Forecast.
-- **Decision:** Add a dedicated Petyr time-based worker, separate from Redash sync, that runs nightly at `PETYR_AI_FORECAST_DAILY_TIME=01:00`, targets the current `Europe/Rome` year, filters out only explicitly inactive companies, computes local deterministic preview rows and saves them to `ai_forecast_cache` with daily append-only model versions like `petyr_deterministic_preview_v1@YYYY-MM-DD`. The worker does not call OpenRouter or Forecast Intelligence and does not write CSM forecasts, annual forecasts, objectives, Initial Forecast, closed revenue or Redash materialized data.
+- **Context:** Product wants deterministic preview generated every night for all active Petyr Forecasting companies, starting at 02:00 in `Europe/Rome`, with about 3 seconds between companies, and saved as AI Forecast.
+- **Decision:** Add a dedicated Petyr time-based worker, separate from Redash sync, that runs nightly at `PETYR_AI_FORECAST_DAILY_TIME=02:00`, targets the current `Europe/Rome` year, filters out only explicitly inactive companies, computes local deterministic preview rows and saves them to `ai_forecast_cache` with daily append-only model versions like `petyr_deterministic_preview_v1@YYYY-MM-DD`. The worker does not call OpenRouter or Forecast Intelligence and does not write CSM forecasts, annual forecasts, objectives, Initial Forecast, closed revenue or Redash materialized data.
 - **Alternatives discarded:** Re-enabling the legacy global AI batch endpoint; triggering AI Forecast after Redash sync; calling OpenRouter for every company overnight; overwriting prior AI Forecast cache rows.
 - **Reason:** Deterministic local forecast values are auditable, cost-free and already the numeric source of truth. A separate worker gives operations predictable scheduling without coupling Petyr forecast generation to Redash ingestion.
 - **Consequences:** Nightly deterministic AI Forecast automation is allowed for active companies. Broader LLM/OpenRouter batch automation remains deferred until privacy, cost, rate-limit and quality policies are explicitly accepted.
@@ -508,3 +508,13 @@ Each decision should include:
 - **Alternatives discarded:** Email allowlists inside frontend code; hardcoded user checks inside each app.
 - **Reason:** Prevent drift and inconsistent access rules across tools.
 - **Consequences:** `packages/auth-client` should expose reusable helpers such as `requirePermission()` and `auditEvent()`.
+
+## 2026-06-24 - Move Petyr Daily AI Forecast to 02:00 and expose protected manual run
+
+- **Status:** Accepted.
+- **Context:** The deterministic Daily AI Forecast worker could miss the intended overnight run if a container started after the scheduled time. Product also requested a protected Petyr Admin recovery control, forecast values rounded to the nearest 100 EUR and configurable Management/Finance baseline weights.
+- **Decision:** The Daily AI Forecast default schedule is `02:00` in `Europe/Rome`. Petyr Admin exposes a protected all-active-companies manual run that reuses the same deterministic worker service and writes only missing `ai_forecast_cache` rows for the daily model version. Deterministic AI Forecast final values round to the nearest 100 EUR. Baseline weights are a global Petyr Admin setting over historical weighted baseline, monthly seasonality and run-rate only; planned campaigns remain a floor and residual remains allocation/cap pressure. Until weights are saved, Petyr keeps the compatible positive-signal average fallback.
+- **Alternatives discarded:** Running the manual control for one company only; changing planned campaign status eligibility; weighting planned or residual as uplift signals; blocking Daily AI Forecast until weights are configured.
+- **Reason:** The 02:00 schedule gives more room after data operations, the manual run provides operator recovery, nearest-100 rounding matches product expectation and configurable weights allow Management/Finance calibration without hiding the existing fallback.
+- **Consequences:** Operators can run Daily AI Forecast from `/petyr-admin` with `APP_INTERNAL_SECRET`. Re-running on the same day skips duplicate rows by `company + BU + year + month + model_version`. Actual approved Management/Finance values still need to be saved in Admin after review.
+- **Related docs:** `apps/forecasting-app/README.md`, `docs/05_forecasting_product_spec.md`, `docs/petyr/AI_FORECASTING_DESIGN.md`, `docs/petyr/FORECAST_INTELLIGENCE_LAYER.md`, `docs/08_operational_commands.md`, `DEVLOG.md`.

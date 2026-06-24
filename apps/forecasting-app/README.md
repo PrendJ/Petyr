@@ -137,7 +137,7 @@ npm run worker:ai-forecast:loop
 ```
 
 The Docker Compose service `petyr-ai-forecast-worker` runs the loop every night
-at `PETYR_AI_FORECAST_DAILY_TIME=01:00` in `Europe/Rome`, with
+at `PETYR_AI_FORECAST_DAILY_TIME=02:00` in `Europe/Rome`, with
 `PETYR_AI_FORECAST_DELAY_MS=3000` between active companies. It targets the
 current Rome year, excludes only companies explicitly marked inactive, computes
 the same local deterministic preview rows used by Forecast Entry, and saves them

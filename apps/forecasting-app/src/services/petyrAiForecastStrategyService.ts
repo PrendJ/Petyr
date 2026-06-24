@@ -6,6 +6,10 @@ import {
   type PetyrCampaignDetail,
   type PetyrMonthlyRevenueTrend
 } from "@/services/petyrDataService";
+import {
+  getPetyrAiForecastBaselineWeightsWithDiagnostics,
+  type PetyrAiForecastBaselineWeights
+} from "@/services/petyrAiForecastWeightsService";
 
 const DEFAULT_HISTORY_YEARS = 3;
 const MIN_STRONG_HISTORY_MONTHS = 6;
@@ -250,6 +254,7 @@ type BuildCandidateInput = {
   plannedCampaigns: PetyrAiForecastPlannedCampaign[];
   campaigns: PetyrCampaignDetail[];
   agreements: PetyrAgreementDetail[];
+  baselineWeights: PetyrAiForecastBaselineWeights;
 };
 
 function normalizeKey(value: string) {
@@ -267,6 +272,10 @@ function roundCommercial(value: number, direction: "floor" | "nearest" | "ceil")
   if (direction === "floor") return Math.floor(normalized / COMMERCIAL_ROUNDING_GRANULARITY) * COMMERCIAL_ROUNDING_GRANULARITY;
   if (direction === "ceil") return Math.ceil(normalized / COMMERCIAL_ROUNDING_GRANULARITY) * COMMERCIAL_ROUNDING_GRANULARITY;
   return Math.round(normalized / COMMERCIAL_ROUNDING_GRANULARITY) * COMMERCIAL_ROUNDING_GRANULARITY;
+}
+
+function roundForecastValue(value: number) {
+  return roundCommercial(value, "nearest");
 }
 
 function monthIndex(year: number, month: number) {
@@ -820,11 +829,30 @@ function plannedCampaignValue(input: {
   );
 }
 
-function weightedSignalBaseline(signals: number[]) {
-  const availableSignals = signals.filter((value) => value > 0);
+export function weightedSignalBaseline(input: {
+  historicalWeightedBaseline: number;
+  monthlySeasonality: number;
+  runRate: number;
+  baselineWeights: PetyrAiForecastBaselineWeights;
+}) {
+  const signals = [
+    { value: input.historicalWeightedBaseline, weight: input.baselineWeights.historicalWeightedBaseline },
+    { value: input.monthlySeasonality, weight: input.baselineWeights.monthlySeasonality },
+    { value: input.runRate, weight: input.baselineWeights.runRate }
+  ];
+  const availableSignals = signals.filter((signal) => signal.value > 0);
   if (availableSignals.length === 0) return 0;
 
-  return roundMoney(average(availableSignals));
+  if (input.baselineWeights.enabled) {
+    const totalWeight = availableSignals.reduce((sum, signal) => sum + signal.weight, 0);
+    if (totalWeight > 0) {
+      return roundMoney(
+        availableSignals.reduce((sum, signal) => sum + signal.value * (signal.weight / totalWeight), 0)
+      );
+    }
+  }
+
+  return roundMoney(average(availableSignals.map((signal) => signal.value)));
 }
 
 function isActiveFutureResidualAgreement(agreement: PetyrAgreementDetail, currentDate: Date) {
@@ -1105,11 +1133,12 @@ export function buildDeterministicForecastCandidates(input: BuildCandidateInput)
         year: input.year,
         month
       });
-      const signalBaseline = weightedSignalBaseline([
-        historicalWeighted.value,
-        seasonality.value,
-        runRate.value
-      ]);
+      const signalBaseline = weightedSignalBaseline({
+        historicalWeightedBaseline: historicalWeighted.value,
+        monthlySeasonality: seasonality.value,
+        runRate: runRate.value,
+        baselineWeights: input.baselineWeights
+      });
       const baselineForecast = roundMoney(Math.max(signalBaseline, plannedCampaignsValue));
       const dataQualityFlags = [
         ...historicalWeighted.flags,
@@ -1174,11 +1203,12 @@ export function buildDeterministicForecastCandidates(input: BuildCandidateInput)
     const agreementResidualAllocation = residualBundle.allocation;
     const businessUnitAttribution = residualBundle.attribution;
     const uncappedBaseline = candidate.baselineForecast;
-    const signalBaseline = weightedSignalBaseline([
-      candidate.historicalWeightedBaseline,
-      candidate.seasonalitySignal,
-      candidate.runRateSignal
-    ]);
+    const signalBaseline = weightedSignalBaseline({
+      historicalWeightedBaseline: candidate.historicalWeightedBaseline,
+      monthlySeasonality: candidate.seasonalitySignal,
+      runRate: candidate.runRateSignal,
+      baselineWeights: input.baselineWeights
+    });
     const baselineForecast = applyResidualAllocationCap({
       signalBaseline,
       plannedCampaignsValue: candidate.plannedCampaignsValue,
@@ -1218,7 +1248,7 @@ export function buildDeterministicForecastCandidates(input: BuildCandidateInput)
       residualPressureLevel: agreementResidualSignal.residualPressureLevel,
       adviceCandidate: agreementResidualSignal.adviceCandidate,
       agreementResidualSignal,
-      roundedForecastValue: roundMoney(baselineForecast),
+      roundedForecastValue: roundForecastValue(baselineForecast),
       roundingGranularity: COMMERCIAL_ROUNDING_GRANULARITY,
       businessUnitAttribution,
       agreementResidualAllocation,
@@ -1266,6 +1296,7 @@ export async function buildCompanyBuForecastSignals(
     { length: historyYears + 1 },
     (_, index) => year - index
   );
+  const weightsResolution = await getPetyrAiForecastBaselineWeightsWithDiagnostics();
   const detailsByYear = await Promise.all(
     yearsToRead.map(async (detailYear) => ({
       year: detailYear,
@@ -1291,7 +1322,8 @@ export async function buildCompanyBuForecastSignals(
   const targetYearDetail = detailsByYear.find((item) => item.year === year)?.detail;
 
   diagnostics.push(
-    ...detailsByYear.flatMap((item) => item.detail.diagnostics)
+    ...detailsByYear.flatMap((item) => item.detail.diagnostics),
+    ...weightsResolution.diagnostics
   );
 
   const candidates = buildDeterministicForecastCandidates({
@@ -1302,7 +1334,8 @@ export async function buildCompanyBuForecastSignals(
     historicalPoints,
     plannedCampaigns,
     campaigns: detailsByYear.flatMap((item) => item.detail.data.campaigns),
-    agreements: targetYearDetail?.data.agreements ?? []
+    agreements: targetYearDetail?.data.agreements ?? [],
+    baselineWeights: weightsResolution.weights
   });
 
   const selectedYearContext = targetYearDetail
