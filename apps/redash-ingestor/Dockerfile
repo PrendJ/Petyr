@@ -8,9 +8,9 @@ RUN npm config set fetch-retries 5 \
   && npm config set fetch-timeout 600000 \
   && for attempt in 1 2 3; do \
     if [ -f package-lock.json ]; then \
-      npm ci --no-audit --no-fund; \
+      npm ci --include=dev --no-audit --no-fund; \
     else \
-      npm install --no-audit --no-fund; \
+      npm install --include=dev --no-audit --no-fund; \
     fi && break; \
     if [ "$attempt" = "3" ]; then exit 1; fi; \
     echo "npm install failed, retrying in 10s (attempt $attempt/3)"; \

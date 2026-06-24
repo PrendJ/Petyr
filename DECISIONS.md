@@ -13,6 +13,16 @@ Each decision should include:
 
 ---
 
+## 2026-06-23 - Make Petyr Coolify compose bootstrap and gateway-safe
+
+- **Status:** Accepted.
+- **Context:** Coolify deployment under `https://petyr.draftapps.it` exposed two production issues: auth redirects could derive `0.0.0.0:3000` from container request URLs, and publishing `platform-home` on host port `8080` can conflict with other Coolify/Access Layer services. Fresh PostgreSQL volumes also needed manual schema bootstrap and seed commands before Petyr was usable.
+- **Decision:** Auth completion redirects derive the public origin from the configured Access Layer callback URL. Root production Compose exposes `platform-home` on container port `8080` without a host port bind, and adds one-shot `redash-bootstrap`, `forecasting-db-sync` and optional `redash-initial-sync` services. The first Redash sync is opt-in through `REDASH_INITIAL_SYNC_ON_BOOTSTRAP=true`. Forecasting keeps `next start` by removing Next standalone output, while app Dockerfiles always install build-time dev dependencies with `--include=dev`.
+- **Alternatives discarded:** Using `request.url` for final browser redirects behind Coolify; binding `8080:8080` in production compose; running Prisma schema changes inside every long-running app startup; making Redash API availability mandatory for every deploy.
+- **Reason:** Coolify should route the public domain to one gateway container without leaking internal container hosts or host ports, while schema preparation remains explicit, idempotent and separate from app startup.
+- **Consequences:** Coolify must target service `platform-home` on container port `8080`. Local localhost access needs `docker-compose.local.yml` or another override. On fresh volumes, bootstrap services run before apps/workers start; if `REDASH_INITIAL_SYNC_ON_BOOTSTRAP=true`, Redash sync failure blocks startup by design.
+- **Related docs:** `DEPLOY.md`, `README.md`, `README_INSTALL_DOCKER.md`, `docs/01_architecture.md`, `docker-compose.yml`, `.env.example`, `apps/forecasting-app/Dockerfile`, `apps/redash-ingestor/Dockerfile`, `DEVLOG.md`.
+
 ## 2026-06-22 - Deploy Petyr on draftapps.it through Coolify
 
 - **Status:** Accepted.

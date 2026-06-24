@@ -167,6 +167,14 @@ export function joinAccessLayerUrl(baseUrl: string, path: string) {
   return `${base}${suffix}`;
 }
 
+export function getRedashIngestorPublicRedirectUrl(
+  path: string,
+  requestUrl: string,
+  config: Pick<RedashIngestorAuthConfig, "callbackUrl">
+) {
+  return new URL(path, config.callbackUrl ?? requestUrl);
+}
+
 export function signRedashIngestorSession(identity: RedashIngestorAuthIdentity, secret: string) {
   const payload = Buffer.from(JSON.stringify(identity), "utf8").toString("base64url");
   const signature = createHmac("sha256", secret).update(payload).digest("base64url");

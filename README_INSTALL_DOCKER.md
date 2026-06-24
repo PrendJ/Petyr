@@ -74,6 +74,7 @@ Impostalo solo se vuoi permettere al worker di chiamare i batch AI interni di Pe
 Lo scheduler del worker usa questi default:
 
 ```env
+REDASH_INITIAL_SYNC_ON_BOOTSTRAP=false
 TZ=Europe/Rome
 SYNC_DAILY_TIME=01:30
 SYNC_LOCK_TTL_SECONDS=3600
@@ -89,7 +90,7 @@ REDASH_INGESTOR_BASE_PATH=/redash-ingestor
 Dalla root:
 
 ```bash
-docker compose up --build
+docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
 ```
 
 Apri:
@@ -106,7 +107,7 @@ http://localhost:8080/petyr-admin       -> Petyr Admin
 http://localhost:8080/redash-ingestor   -> Redash Ingestor dashboard tecnico
 ```
 
-La root `http://localhost:8080` reindirizza a `/forecasting`. Il Compose root pubblica solo il gateway. Il percorso utente e operativo deve passare dal gateway; per debug diretto delle app usa sviluppo app diretto o un override locale esplicito. Quando il Redash Ingestor e costruito da Compose, anche la porta diretta `3000` usa il prefisso `/redash-ingestor`; in sviluppo app diretto, lascia `NEXT_PUBLIC_REDASH_INGESTOR_BASE_PATH` vuoto per usare le route non prefissate.
+La root `http://localhost:8080` reindirizza a `/forecasting` quando includi `docker-compose.local.yml`. Il compose root di produzione non binda porte host: espone `platform-home:8080` alla rete Docker per Coolify. Il percorso utente e operativo deve passare dal gateway; per debug diretto delle app usa sviluppo app diretto o un override locale esplicito. Quando il Redash Ingestor e costruito da Compose, anche la porta diretta `3000` usa il prefisso `/redash-ingestor`; in sviluppo app diretto, lascia `NEXT_PUBLIC_REDASH_INGESTOR_BASE_PATH` vuoto per usare le route non prefissate.
 
 ---
 
@@ -118,7 +119,7 @@ La root `http://localhost:8080` reindirizza a `/forecasting`. Il Compose root pu
 | `redash-ingestor` | Compose-managed | gateway `/redash-ingestor` | UI/API tecnica |
 | `redash-worker` | Compose-managed | nessuna | Sync giornaliero Redash |
 | `forecasting-app` | Compose-managed | gateway `/forecasting` e `/petyr-admin` | Workspace Petyr Forecasting |
-| `platform-home` | Compose-managed | `8080` | Gateway/reverse proxy locale |
+| `platform-home` | Compose-managed | `8080` con `docker-compose.local.yml`; container port `8080` su Coolify | Gateway/reverse proxy locale/produzione |
 
 ---
 

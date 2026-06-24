@@ -5,6 +5,7 @@ import {
   createAuthState,
   joinAccessLayerUrl,
   readRedashIngestorAuthConfig,
+  getRedashIngestorPublicRedirectUrl,
   REDASH_INGESTOR_AUTH_STATE_COOKIE
 } from "@/lib/authCore";
 
@@ -12,7 +13,7 @@ export async function GET(request: Request) {
   const config = readRedashIngestorAuthConfig();
 
   if (config.mode === "disabled") {
-    return NextResponse.redirect(new URL(withRedashIngestorBasePath("/"), request.url));
+    return NextResponse.redirect(getRedashIngestorPublicRedirectUrl(withRedashIngestorBasePath("/"), request.url, config));
   }
 
   const state = createAuthState();

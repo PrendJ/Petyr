@@ -1,12 +1,18 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { createAuthState, joinAccessLayerUrl, PETYR_AUTH_STATE_COOKIE, readPetyrAuthConfig } from "@/lib/petyr/authCore";
+import {
+  createAuthState,
+  getPetyrPublicRedirectUrl,
+  joinAccessLayerUrl,
+  PETYR_AUTH_STATE_COOKIE,
+  readPetyrAuthConfig
+} from "@/lib/petyr/authCore";
 
 export async function GET(request: Request) {
   const config = readPetyrAuthConfig();
 
   if (config.mode === "disabled") {
-    return NextResponse.redirect(new URL("/forecasting", request.url));
+    return NextResponse.redirect(getPetyrPublicRedirectUrl("/forecasting", request.url, config));
   }
 
   const state = createAuthState();

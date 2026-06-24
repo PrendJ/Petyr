@@ -8,7 +8,6 @@ const allowedOrigins = [
 ];
 
 const nextConfig: NextConfig = {
-  output: "standalone",
   experimental: {
     serverActions: {
       allowedOrigins

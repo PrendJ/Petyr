@@ -50,6 +50,22 @@ Questo tool è riservato agli account Google aziendali UNGUESS.
 Accedi con il tuo account aziendale.
 ```
 
+## Petyr pending grant
+
+Title:
+
+```txt
+Accesso in preparazione
+```
+
+Body:
+
+```txt
+Il tuo account aziendale è valido, ma il grant per Petyr non è ancora attivo.
+L’amministratore è stato notificato. Per sapere quando gli accessi saranno disponibili, fai riferimento a Lorenzo Brandi.
+Abbiamo pulito la sessione di accesso locale: quando il grant sarà rilasciato, torna alla pagina di login e accedi di nuovo con una sessione pulita.
+```
+
 ## Auth service unavailable
 
 Title:

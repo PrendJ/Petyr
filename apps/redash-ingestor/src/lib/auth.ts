@@ -49,7 +49,7 @@ export async function requireRedashIngestorPagePermission(permission: RedashInge
 
   if (!result.ok) {
     if (result.status === 401) {
-      redirect(withRedashIngestorBasePath("/auth/login"));
+      redirect("/auth/login");
     }
     throw new Error(result.error);
   }

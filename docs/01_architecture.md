@@ -132,17 +132,16 @@ annual forecasts, objectives, Initial Forecast, closed revenue or Redash data.
 
 ### platform-home
 
-Local Nginx gateway/reverse proxy exposed by Docker Compose.
+Nginx gateway/reverse proxy used by Docker Compose and Coolify.
 
 Responsible for:
-- exposing the unified local host on port `8080`;
+- exposing the unified local host on port `8080` when a local port override is used;
+- exposing container port `8080` to Coolify without a host port bind in production;
 - routing `/forecasting`, `/petyr-admin` and `/api/petyr/*` to `forecasting-app`;
 - routing `/redash-ingestor` and `/redash-ingestor/api/*` to `redash-ingestor`;
 - keeping the app containers separate while providing one user-facing origin.
 
-`platform-home` is the local gateway implementation. A later production deploy
-may replace it with the selected server reverse proxy/OAuth2 Proxy stack, but
-Redash Ingestor must still remain separate from Petyr.
+`platform-home` is the gateway implementation for the current Coolify deploy. Root production compose exposes only its container port `8080`; local development can add a host bind through `docker-compose.local.yml` or another override. Redash Ingestor must still remain separate from Petyr.
 
 ## Unified access routing
 

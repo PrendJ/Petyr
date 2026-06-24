@@ -61,6 +61,13 @@ users with `petyr:admin`.
 
 The Petyr workspace shell must be shared across Management View, CSM Overview, Company Detail and Forecast Entry: one descriptive header card, one section navigator and route-aware links. The header card title and supporting copy must describe what the active view offers, so users can understand the page immediately. The top-level workspace switches Management/CSM through `?view=management|csm`; Company Detail and Forecast Entry use dedicated routes with query parameters when context is available.
 
+Petyr must provide branded fallback pages for browser-visible errors. Unknown
+routes must render a structured Petyr 404 page, browser bad-request flows must
+render a structured 400 page, and runtime application failures must render a
+structured 500 page. These pages must use the Petyr/UNGUESS visual language and
+offer a clear action back to `/forecasting`. API endpoints keep their JSON error
+contracts.
+
 The top-level `/forecasting` menu must send users directly to the complete
 operational routes for Forecast Entry and Company Detail. It must not render
 partial preview tabs that look like the complete editing/detail workspaces.

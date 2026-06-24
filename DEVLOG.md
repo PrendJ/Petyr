@@ -18,6 +18,36 @@ Each entry must include:
 
 ---
 
+## 2026-06-24
+
+- **Area:** Petyr / Forecasting App / Error pages
+- **Change:** Added branded Petyr fallback pages for 404, browser-facing 400 and 500 errors. Unknown routes now use a structured Petyr 404 page, runtime App Router errors use Petyr-styled 500 fallbacks with retry and Forecasting navigation, and invalid browser auth callback state redirects to `/forecasting/error?code=400` instead of returning raw JSON.
+- **Reason:** Product requested non-blank, structured error pages that keep the UNGUESS Petyr visual style and let users return to the Forecasting home page.
+- **Impact:** Browser error flows now keep users inside a recognizable Petyr surface with a clear path back to `/forecasting`. API endpoints keep their JSON error responses. No Redash data flow, Prisma schema, permissions, forecast calculation, OpenRouter behavior or environment variable changed.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/PetyrErrorPage.tsx`, `apps/forecasting-app/src/app/not-found.tsx`, `apps/forecasting-app/src/app/error.tsx`, `apps/forecasting-app/src/app/global-error.tsx`, `apps/forecasting-app/src/app/forecasting/error/page.tsx`, `apps/forecasting-app/src/app/auth/callback/route.ts`, `docs/05_forecasting_product_spec.md`, `DEVLOG.md`.
+- **Validation:** `npm run build` could not start because `npm` is not available in this shell and local `node_modules` are absent. Docker fallback `docker compose build forecasting-app` could not run because the Docker daemon socket `/var/run/docker.sock` is unavailable. A focused source scan found no `next/document` or `<Html>` imports in Forecasting app source/pages.
+- **Follow-up:** None expected unless product wants custom copy for additional HTTP statuses.
+
+## 2026-06-24
+
+- **Area:** Petyr / Access Control / Authentication UX
+- **Change:** Added a pending-grant fallback for company-domain users who complete Access Layer authentication but do not yet receive the Petyr `petyr:read` grant. Petyr now clears local auth state and session cookies for invalid callback state and pending-grant callback completion, then renders an Italian fallback page explaining that the administrator has been notified and that Lorenzo Brandi is the access-timing reference.
+- **Reason:** Users with a valid company account but no Petyr grant should get a clear, non-technical explanation and should not keep a dirty Petyr session that could interfere after access is granted.
+- **Impact:** No granted-user login behavior, permission key, database schema, Redash flow or Access Layer endpoint changed. Pending-grant users are not issued a Petyr session cookie and can return through `/auth/login` after the grant is released to start from a clean session.
+- **Files/documents involved:** `apps/forecasting-app/src/lib/petyr/authCore.ts`, `apps/forecasting-app/src/app/auth/callback/route.ts`, `apps/forecasting-app/tests/petyrAuth.test.ts`, `apps/forecasting-app/README.md`, `docs/access-control/COPY_UX.md`, `DEVLOG.md`.
+- **Validation:** Could not run in this shell: sandboxed commands fail before startup because of a local bubblewrap digest mismatch, `npm`/`node`/`git` are not on PATH, and Docker Desktop reports that WSL integration is not enabled for this distro.
+- **Follow-up:** Confirm the external Access Layer notification/audit path for no-grant login attempts remains enabled in production, since Petyr only renders the user-facing fallback after the exchange response.
+
+## 2026-06-23
+
+- **Area:** Platform / Coolify deployment / Bootstrap and routing
+- **Change:** Added public-origin auth redirect helpers for Petyr and Redash Ingestor so post-auth redirects use the configured Access Layer callback URL instead of internal request hosts such as `0.0.0.0:3000`. Made root Compose Coolify-safe by exposing `platform-home:8080` without a host bind, added one-shot `redash-bootstrap`, `forecasting-db-sync` and optional `redash-initial-sync` services, and documented `REDASH_INITIAL_SYNC_ON_BOOTSTRAP=false` as the default. Dockerfiles now install dev dependencies even when build-time `NODE_ENV=production`, and Forecasting no longer advertises Next standalone output while using `next start`.
+- **Reason:** Production deploy on Coolify must keep one public origin at `https://petyr.draftapps.it`, avoid host port conflicts with Access Layer, build reliably when Coolify injects production env, and initialize fresh PostgreSQL volumes without manual container exec steps.
+- **Impact:** After Access Layer login, Petyr redirects to `https://petyr.draftapps.it/forecasting` instead of an internal container URL. Coolify should route the public domain to `platform-home` container port `8080`; local localhost access now requires `docker-compose.local.yml` or another port-binding override. Fresh deploys run schema/seed bootstrap before long-running apps start; optional initial Redash materialization can be enabled by env.
+- **Files/documents involved:** `docker-compose.yml`, `.env.example`, `apps/forecasting-app/Dockerfile`, `apps/redash-ingestor/Dockerfile`, `apps/forecasting-app/next.config.ts`, `apps/forecasting-app/src/lib/petyr/authCore.ts`, `apps/forecasting-app/src/app/auth/*`, `apps/forecasting-app/tests/petyrAuth.test.ts`, `apps/redash-ingestor/src/lib/authCore.ts`, `apps/redash-ingestor/src/app/auth/*`, `apps/redash-ingestor/tests/redashIngestorAuth.test.ts`, `DEPLOY.md`, `README.md`, `README_INSTALL_DOCKER.md`, `docs/01_architecture.md`, `DECISIONS.md`, `DEVLOG.md`.
+- **Validation:** Passed `docker compose --env-file .env.example config --quiet` and `docker compose --env-file .env.example config --services`; rendered config includes the bootstrap services and `platform-home` uses `expose: ["8080"]` without host `ports`. Targeted npm auth tests and app builds could not run in this shell because npm/local `node_modules` are unavailable; Docker image builds could not run because the Docker daemon socket `/var/run/docker.sock` is unavailable.
+- **Follow-up:** In Coolify, confirm Compose supports `depends_on.condition: service_completed_successfully`; if not, run the same bootstrap commands as explicit pre-start jobs or documented manual deploy steps.
+
 ## 2026-06-22
 
 - **Area:** Platform / Coolify deployment / Petyr routing

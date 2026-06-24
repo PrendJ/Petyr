@@ -4,7 +4,8 @@ import {
   PETYR_AUTH_SESSION_COOKIE,
   readPetyrAuthConfig,
   verifyPetyrSession,
-  joinAccessLayerUrl
+  joinAccessLayerUrl,
+  getPetyrPublicRedirectUrl
 } from "@/lib/petyr/authCore";
 
 async function logout(request: Request) {
@@ -34,7 +35,7 @@ async function logout(request: Request) {
     }
   }
 
-  return NextResponse.redirect(new URL("/forecasting", config.callbackUrl ?? request.url));
+  return NextResponse.redirect(getPetyrPublicRedirectUrl("/forecasting", request.url, config));
 }
 
 export async function GET(request: Request) {

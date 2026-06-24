@@ -4,6 +4,7 @@ import { withRedashIngestorBasePath } from "@/lib/basePath";
 import {
   joinAccessLayerUrl,
   readRedashIngestorAuthConfig,
+  getRedashIngestorPublicRedirectUrl,
   REDASH_INGESTOR_AUTH_SESSION_COOKIE,
   verifyRedashIngestorSession
 } from "@/lib/authCore";
@@ -35,7 +36,7 @@ async function logout(request: Request) {
     }
   }
 
-  return NextResponse.redirect(new URL(withRedashIngestorBasePath("/"), request.url));
+  return NextResponse.redirect(getRedashIngestorPublicRedirectUrl(withRedashIngestorBasePath("/"), request.url, config));
 }
 
 export async function GET(request: Request) {

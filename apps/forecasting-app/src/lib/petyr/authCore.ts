@@ -139,6 +139,10 @@ export function hasPetyrPermission(identity: PetyrAuthIdentity, permission: Pety
   return identity.permissions.includes(permission);
 }
 
+export function hasUsablePetyrGrant(identity: PetyrAuthIdentity) {
+  return hasPetyrPermission(identity, PETYR_PERMISSIONS.read);
+}
+
 export function requirePetyrPermissionValue(identity: PetyrAuthIdentity, permission: PetyrPermission) {
   if (!hasPetyrPermission(identity, permission)) {
     throw new Error(`Petyr permission denied: ${permission}.`);
@@ -172,6 +176,14 @@ export function joinAccessLayerUrl(baseUrl: string, path: string) {
   const base = baseUrl.replace(/\/+$/, "");
   const suffix = path.startsWith("/") ? path : `/${path}`;
   return `${base}${suffix}`;
+}
+
+export function getPetyrPublicRedirectUrl(
+  path: string,
+  requestUrl: string,
+  config: Pick<PetyrAuthConfig, "callbackUrl">
+) {
+  return new URL(path, config.callbackUrl ?? requestUrl);
 }
 
 export function signPetyrSession(identity: PetyrAuthIdentity, secret: string) {

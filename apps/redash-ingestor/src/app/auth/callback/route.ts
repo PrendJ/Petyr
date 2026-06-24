@@ -6,6 +6,7 @@ import {
   isValidAuthCallbackState,
   joinAccessLayerUrl,
   readRedashIngestorAuthConfig,
+  getRedashIngestorPublicRedirectUrl,
   REDASH_INGESTOR_AUTH_SESSION_COOKIE,
   REDASH_INGESTOR_AUTH_STATE_COOKIE,
   toAccessLayerIdentity,
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
   const config = readRedashIngestorAuthConfig();
 
   if (config.mode === "disabled") {
-    return NextResponse.redirect(new URL(withRedashIngestorBasePath("/"), request.url));
+    return NextResponse.redirect(getRedashIngestorPublicRedirectUrl(withRedashIngestorBasePath("/"), request.url, config));
   }
 
   const url = new URL(request.url);
@@ -63,5 +64,5 @@ export async function GET(request: Request) {
     }
   );
 
-  return NextResponse.redirect(new URL(withRedashIngestorBasePath("/"), request.url));
+  return NextResponse.redirect(getRedashIngestorPublicRedirectUrl(withRedashIngestorBasePath("/"), request.url, config));
 }

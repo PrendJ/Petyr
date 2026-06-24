@@ -6,6 +6,7 @@ import {
   REDASH_INGESTOR_PERMISSIONS,
   createAuthState,
   getLocalDevelopmentIdentity,
+  getRedashIngestorPublicRedirectUrl,
   hasRedashIngestorPermission,
   isValidAuthCallbackState,
   readRedashIngestorAuthConfig,
@@ -52,6 +53,28 @@ test("access-layer mode reads required Redash Ingestor tool settings", () => {
   assert.equal(config.mode, "access-layer");
     assert.equal(config.callbackUrl, "https://petyr.draftapps.it/redash-ingestor/auth/callback");
   assert.equal(config.toolSlug, "redash-ingestor");
+});
+
+test("public Redash Ingestor redirects use callback origin and preserve one base path", () => {
+  const config = readRedashIngestorAuthConfig({
+    NODE_ENV: "production",
+    REDASH_INGESTOR_AUTH_MODE: "access-layer",
+    ACCESS_LAYER_PUBLIC_BASE_URL: "https://access-layer.draftapps.it",
+    ACCESS_LAYER_INTERNAL_BASE_URL: "https://access-layer.draftapps.it",
+    ACCESS_LAYER_CALLBACK_URL: "https://petyr.draftapps.it/redash-ingestor/auth/callback",
+    ACCESS_LAYER_TOOL_SLUG: "redash-ingestor",
+    ACCESS_LAYER_CLIENT_ID: "tlc_redash_ingestor",
+    ACCESS_LAYER_CLIENT_SECRET: "tls_redash_ingestor",
+    REDASH_INGESTOR_SESSION_SECRET: "local-test-secret"
+  });
+
+  const redirectUrl = getRedashIngestorPublicRedirectUrl(
+    "/redash-ingestor/",
+    "http://0.0.0.0:3000/redash-ingestor/auth/callback?code=abc",
+    config
+  );
+
+  assert.equal(redirectUrl.toString(), "https://petyr.draftapps.it/redash-ingestor/");
 });
 
 test("callback state validation rejects missing or mismatched values", () => {

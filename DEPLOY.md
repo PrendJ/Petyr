@@ -44,13 +44,19 @@ do not make plain `npm run build` mutate the database implicitly.
 ## Unified Petyr access
 
 
-Local Docker exposes one user-facing host through the `platform-home` Nginx gateway:
+Local Docker can expose one user-facing host through the `platform-home` Nginx gateway when the local compose file is included:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
+```
 
 ```txt
 http://localhost:8080/forecasting       -> forecasting-app
 http://localhost:8080/petyr-admin       -> forecasting-app
 http://localhost:8080/redash-ingestor   -> redash-ingestor
 ```
+
+The root production compose file is Coolify-oriented and uses `expose: ["8080"]` for `platform-home` instead of binding a host port. Use `docker-compose.local.yml` or an explicit local override when a localhost port is needed.
 
 On a server, publish the chosen Petyr host/domain to the same paths through the selected reverse proxy. Keep `forecasting-app`, `redash-ingestor` and `redash-worker` as separate services behind the proxy. Do not make Forecasting call Redash directly; Forecasting continues to read PostgreSQL-backed data or future stable internal data APIs.
 
@@ -127,7 +133,17 @@ Non-secret onboarding descriptors for both tools live in `petyr/access-layer-too
 
 ## Coolify deployment guardrails
 
-For the Coolify deployment at `https://petyr.draftapps.it`, route the public domain to the `platform-home` service on internal port `8080`. Do not publish `postgres`, `forecasting-app` or `redash-ingestor` directly.
+For the Coolify deployment at `https://petyr.draftapps.it`, route the public domain to the `platform-home` service on internal/container port `8080`. Do not publish `postgres`, `forecasting-app`, `redash-ingestor`, workers or one-shot bootstrap services directly. The public URL must remain `https://petyr.draftapps.it`, without `:8080`.
+
+Coolify should target:
+
+```txt
+Service: platform-home
+Container port: 8080
+Public domain: https://petyr.draftapps.it
+```
+
+Root `docker-compose.yml` intentionally exposes `platform-home:8080` only to the Docker network. Host binding such as `8080:8080` belongs in local overrides, not in Coolify production compose.
 
 Set the PostgreSQL variables and connection URL as one coherent set:
 
@@ -154,6 +170,53 @@ REDASH_INGESTOR_ACCESS_LAYER_CALLBACK_URL=https://petyr.draftapps.it/redash-inge
 ```
 
 Keep all generated client secrets, session secrets, Redash API keys, OpenRouter keys and database passwords in Coolify environment variables only.
+
+### Build-time `NODE_ENV`
+
+Coolify may expose `NODE_ENV=production` while building images. The app Dockerfiles install with `--include=dev` so build tools such as TypeScript, Prisma, Tailwind/PostCSS and `tsx` are available during `npm run build`. Do not remove `tsx` or `prisma` from the production image unless the runtime commands are changed first; worker and bootstrap commands still use them.
+
+### Bootstrap services
+
+Root compose runs schema preparation as one-shot services before long-running app containers start:
+
+```txt
+redash-bootstrap      -> npm run docker:bootstrap
+forecasting-db-sync   -> npm run db:sync
+redash-initial-sync   -> optional npm run worker:sync
+```
+
+`redash-bootstrap` applies the Redash Ingestor schema and seeds the required sources. `forecasting-db-sync` applies the Petyr superset schema with the safe DB push wrapper. Long-running app and worker containers depend on these one-shot services completing successfully.
+
+The first Redash data sync is opt-in:
+
+```env
+REDASH_INITIAL_SYNC_ON_BOOTSTRAP=false
+```
+
+Leave it `false` unless Redash credentials and network connectivity should be required for deploy success. Set it to `true` when a fresh Coolify deploy should immediately materialize `company_ownership`, `master_agreements` and `master_campaigns` before the web/workers start.
+
+### Redash Ingestor base path
+
+Production uses Strategy A: Next.js owns `basePath=/redash-ingestor`, and `platform-home` forwards the original prefixed path without stripping it. Keep:
+
+```env
+REDASH_INGESTOR_BASE_PATH=/redash-ingestor
+REDASH_INGESTOR_ACCESS_LAYER_CALLBACK_URL=https://petyr.draftapps.it/redash-ingestor/auth/callback
+```
+
+Do not configure Nginx/Coolify to rewrite `/redash-ingestor/...` to `/...`, or links and callbacks can become `/redash-ingestor/redash-ingestor/...`.
+
+### Smoke checklist
+
+After deploy, verify:
+
+```txt
+https://petyr.draftapps.it                  -> redirects to /forecasting
+https://petyr.draftapps.it/forecasting      -> redirects anonymous users to /auth/login
+https://petyr.draftapps.it/auth/login       -> starts Access Layer login, not 404
+https://petyr.draftapps.it/auth/callback    -> finishes with /forecasting, not 0.0.0.0:3000
+https://petyr.draftapps.it/redash-ingestor  -> reaches Redash Ingestor login/dashboard
+```
 
 ## Deployment rule
 

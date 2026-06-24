@@ -20,7 +20,7 @@ Implementato:
 ```bash
 cp .env.example .env
 # compila REDASH_API_KEY, APP_INTERNAL_SECRET e le credenziali PostgreSQL coerenti
-docker compose up --build
+docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
 ```
 
 Apri l'accesso unificato locale:
@@ -31,7 +31,7 @@ http://localhost:8080/petyr-admin       -> Petyr Admin
 http://localhost:8080/redash-ingestor   -> Redash Ingestor dashboard tecnico
 ```
 
-La root `http://localhost:8080` reindirizza a `/forecasting`. Il Compose root non pubblica le porte dirette di `forecasting-app`, `redash-ingestor` o PostgreSQL: il percorso utente e operativo passa dal gateway.
+La root `http://localhost:8080` reindirizza a `/forecasting` quando usi il compose locale. Il compose root e orientato a Coolify: espone `platform-home:8080` alla rete Docker senza bindare una porta host. Per sviluppo locale usa `docker-compose.local.yml` o un override esplicito; in produzione Coolify deve puntare il dominio al servizio `platform-home` sulla porta container `8080`.
 
 ## Nota sul database condiviso
 
@@ -41,9 +41,10 @@ automaticamente `prisma db push`, `docker:bootstrap` o script come `safeDbPush`
 a ogni startup: uno schema Prisma parziale puo' interpretare le tabelle di un
 altro servizio come estranee e tentare di eliminarle.
 
-La preparazione dello schema deve essere gestita da uno step controllato di
-migrazione/bootstrap, eseguito esplicitamente e verificato prima di avviare i
-servizi.
+La preparazione dello schema e gestita da step controllati di bootstrap: in root
+compose `redash-bootstrap` e `forecasting-db-sync` sono servizi one-shot e
+idempotenti che devono completare prima dei container applicativi. La prima sync
+Redash resta opzionale con `REDASH_INITIAL_SYNC_ON_BOOTSTRAP=true`.
 
 Guida completa:
 

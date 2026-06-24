@@ -6,7 +6,9 @@ import {
   PETYR_PERMISSIONS,
   createAuthState,
   getLocalDevelopmentIdentity,
+  getPetyrPublicRedirectUrl,
   hasPetyrPermission,
+  hasUsablePetyrGrant,
   isValidAuthCallbackState,
   readPetyrAuthConfig,
   signPetyrSession,
@@ -55,6 +57,28 @@ test("access-layer mode reads required URLs and tool credentials", () => {
   assert.equal(config.internalBaseUrl, "https://access-layer.draftapps.it");
   assert.equal(config.callbackUrl, "https://petyr.draftapps.it/auth/callback");
   assert.equal(config.toolSlug, "petyr");
+});
+
+test("public Petyr redirects use callback origin instead of internal request origin", () => {
+  const config = readPetyrAuthConfig({
+    NODE_ENV: "production",
+    PETYR_AUTH_MODE: "access-layer",
+    ACCESS_LAYER_PUBLIC_BASE_URL: "https://access-layer.draftapps.it",
+    ACCESS_LAYER_INTERNAL_BASE_URL: "https://access-layer.draftapps.it",
+    ACCESS_LAYER_CALLBACK_URL: "https://petyr.draftapps.it/auth/callback",
+    ACCESS_LAYER_TOOL_SLUG: "petyr",
+    ACCESS_LAYER_CLIENT_ID: "tlc_petyr",
+    ACCESS_LAYER_CLIENT_SECRET: "tls_petyr",
+    PETYR_SESSION_SECRET: "local-test-secret"
+  });
+
+  const redirectUrl = getPetyrPublicRedirectUrl(
+    "/forecasting",
+    "http://0.0.0.0:3000/auth/callback?code=abc",
+    config
+  );
+
+  assert.equal(redirectUrl.toString(), "https://petyr.draftapps.it/forecasting");
 });
 
 test("callback state is random enough for local validation", () => {
@@ -107,6 +131,28 @@ test("Access Layer exchange payload maps to Petyr identity and permissions", () 
   assert.equal(identity.correlationId, "corr_123");
   assert.equal(hasPetyrPermission(identity, PETYR_PERMISSIONS.read), true);
   assert.equal(hasPetyrPermission(identity, PETYR_PERMISSIONS.admin), false);
+  assert.equal(hasUsablePetyrGrant(identity), true);
+});
+
+test("Access Layer exchange payload without Petyr read permission is not a usable grant", () => {
+  const identity = toAccessLayerIdentity({
+    access_token: "redacted",
+    session: {
+      id: "ses_pending"
+    },
+    user: {
+      google_sub: "google-sub-pending",
+      email: "pending.user@unguess.io",
+      display_name: "Pending User"
+    },
+    grant: {
+      role: "pending",
+      permissions: []
+    },
+    correlation_id: "corr_pending"
+  });
+
+  assert.equal(hasUsablePetyrGrant(identity), false);
 });
 
 test("CSM identity matching resolves exact names case-insensitively", () => {

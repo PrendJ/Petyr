@@ -261,4 +261,4 @@ ACCESS_LAYER_CLIENT_SECRET=replace_with_petyr_tool_client_secret
 PETYR_SESSION_SECRET=replace_with_long_random_session_secret
 ```
 
-Petyr implements only the tool-side flow: `/auth/login`, `/auth/callback` and `/auth/logout`. The Access Layer service remains external and must register the `petyr` tool with the callback URL above.
+Petyr implements only the tool-side flow: `/auth/login`, `/auth/callback` and `/auth/logout`. The Access Layer service remains external and must register the `petyr` tool with the callback URL above. If a company-domain user completes Access Layer authentication but the returned grant does not include `petyr:read`, Petyr clears the local auth state and session cookies, then shows an Italian pending-access fallback telling the user that the administrator has been notified and to refer to Lorenzo Brandi for access timing. After the grant is released, the user should return through `/auth/login` and receive a fresh clean session.
