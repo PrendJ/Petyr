@@ -3,7 +3,6 @@ import {
   buildPetyrForecastIntelligenceOpenRouterResponseFormat,
   buildPetyrForecastIntelligencePrompt,
   validatePetyrForecastIntelligenceOutput,
-  type PetyrForecastIntelligenceOutput,
   type PetyrForecastIntelligencePayload
 } from "@/services/petyrForecastIntelligenceService";
 
@@ -114,6 +113,40 @@ function smokePayload(): PetyrForecastIntelligencePayload {
       { name: "history_signals_only", value: 93, description: "Local history signal total." }
     ],
     local_risk_signals: [],
+    deterministic_evidence_registry: [
+      {
+        id: "bu.qa.month.7.forecast",
+        label: "QA month 7 deterministic forecast",
+        display_value: "QA month 7 deterministic forecast: 100 EUR",
+        kind: "forecast_total",
+        business_unit: "QA",
+        month: 7
+      },
+      {
+        id: "bu.qa.month.7.planned",
+        label: "QA month 7 planned campaigns",
+        display_value: "QA month 7 planned campaigns: 120 EUR",
+        kind: "planned_value",
+        business_unit: "QA",
+        month: 7
+      },
+      {
+        id: "bu.qa.month.7.remaining_months",
+        label: "QA month 7 remaining agreement months",
+        display_value: "QA month 7 remaining agreement months: 3",
+        kind: "remaining_months",
+        business_unit: "QA",
+        month: 7
+      },
+      {
+        id: "bu.qa.closed_campaigns",
+        label: "QA closed campaign count",
+        display_value: "QA closed campaign count: 2",
+        kind: "campaign_count",
+        business_unit: "QA"
+      }
+    ],
+    csm_change_notes: [],
     data_quality: { diagnostics: [], flags: [] },
     llm_constraints: {
       interpretation_only: true,
@@ -126,12 +159,12 @@ function smokePayload(): PetyrForecastIntelligencePayload {
   };
 }
 
-function smokeOutput(): PetyrForecastIntelligenceOutput {
+function smokeOutput() {
   return {
-    stakeholder_notes: [{ title: "Residual timing", note: "Residual pressure is concentrated in the same delivery window.", numeric_evidence: "Residual value is 300 EUR across 3 remaining months." }],
-    risks: [{ type: "timing_risk", severity: "medium", description: "Residual timing should be watched against the local monthly allowance.", numeric_evidence: "Monthly residual cap is 100 EUR and planned value is 120 EUR." }],
-    opportunities: [{ title: "Planned work is above forecast", severity: "medium", evidence: "The planned campaign value is above the deterministic forecast.", numeric_evidence: "Planned campaign value is 120 EUR versus deterministic forecast value 100 EUR." }],
-    watchouts: [{ title: "Sparse context", severity: "medium", evidence: "The payload has limited historical context.", numeric_evidence: "Historical closed revenue has 2 points: 80 EUR and 90 EUR." }]
+    stakeholder_notes: [{ title: "Residual timing", note: "Residual pressure is concentrated in the same delivery window.", evidence_refs: ["bu.qa.month.7.remaining_months"] }],
+    risks: [{ type: "timing_risk", severity: "medium", description: "Residual timing is visible against the local monthly allowance.", evidence_refs: ["bu.qa.month.7.planned"] }],
+    opportunities: [{ title: "Planned work is above forecast", severity: "medium", evidence: "The planned campaign value is above the deterministic forecast.", evidence_refs: ["bu.qa.month.7.planned", "bu.qa.month.7.forecast"] }],
+    watchouts: [{ title: "Sparse context", severity: "medium", evidence: "The payload has limited historical context.", evidence_refs: ["bu.qa.closed_campaigns"] }]
   };
 }
 
@@ -148,7 +181,7 @@ export function runPetyrAiForecastLlmContractSmoke(): PetyrAiForecastLlmContract
     promptIncludesEligibleFutureMonthRule: promptText.includes("eligible_months"),
     promptIncludesHistoricalClosedRevenueEvidence: promptText.includes("historical_closed_revenue"),
     promptExcludesCsmForecastInfluenceData: !/csmAnnualForecast|forecast_monthly|forecast_annual/i.test(promptText),
-    structuredResponseSchemaRequiresExactFields: responseFormat.includes("stakeholder_notes") && responseFormat.includes("opportunities") && responseFormat.includes("numeric_evidence"),
+    structuredResponseSchemaRequiresExactFields: responseFormat.includes("stakeholder_notes") && responseFormat.includes("opportunities") && responseFormat.includes("evidence_refs"),
     validResponseAccepted: validatePetyrForecastIntelligenceOutput(validResponse, payload).ok,
     currentMonthRejected: true,
     unknownBusinessUnitRejected: true,

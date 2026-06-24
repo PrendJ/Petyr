@@ -266,6 +266,16 @@ This preserves the Petyr rule that multiple Business Unit edits made in one acti
 grouped in a single save session. The save session also snapshots the company active
 status at save time.
 
+The normal current-month Forecast Entry batch workflow reuses these existing
+tables and does not introduce a batch-specific Prisma schema change. Batch save
+creates one `forecast_save_session` per company with effective changes and one
+`forecast_change_log` row per changed Business Unit value. Company note-only
+updates and unchanged Business Unit values must not create sessions or synthetic
+change logs. AI forecast suggestions remain read-only placeholders until a CSM
+explicitly accepts or edits the active value; the accepted CSM value is stored in
+`forecast_monthly`, while `ai_forecast_value_at_save` snapshots the AI reference
+value for audit comparison.
+
 ### company_forecast_status
 
 Purpose:

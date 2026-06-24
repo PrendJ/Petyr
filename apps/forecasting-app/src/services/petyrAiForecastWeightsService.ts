@@ -1,5 +1,3 @@
-import { prisma } from "@/lib/db";
-
 export const PETYR_AI_FORECAST_BASELINE_WEIGHTS_SETTING_KEY = "petyr_ai_forecast_baseline_weights_v1";
 export const PETYR_AI_FORECAST_BASELINE_WEIGHTS_SCHEMA_VERSION = "petyr_ai_forecast_baseline_weights_v1";
 
@@ -117,6 +115,7 @@ export function resolvePetyrAiForecastBaselineWeightsRead(
 
 export async function getPetyrAiForecastBaselineWeightsWithDiagnostics(): Promise<PetyrAiForecastBaselineWeightsResolution> {
   try {
+    const { prisma } = await import("../lib/db");
     const setting = await prisma.appSetting.findUnique({
       where: { settingKey: PETYR_AI_FORECAST_BASELINE_WEIGHTS_SETTING_KEY }
     });
@@ -146,6 +145,7 @@ export async function updatePetyrAiForecastBaselineWeights(input: {
     runRate: input.runRate,
     updatedBy: typeof input.updatedBy === "string" && input.updatedBy.trim() ? input.updatedBy.trim() : "petyr-admin"
   }, null);
+  const { prisma } = await import("../lib/db");
   const setting = await prisma.appSetting.upsert({
     where: { settingKey: PETYR_AI_FORECAST_BASELINE_WEIGHTS_SETTING_KEY },
     create: {

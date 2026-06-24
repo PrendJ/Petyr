@@ -13,6 +13,26 @@ Each decision should include:
 
 ---
 
+## 2026-06-24 - Preserve old Forecast Entry as admin-only legacy and make normal Entry CSM batch
+
+- **Status:** Accepted.
+- **Context:** The existing Forecast Entry combined single-company monthly editor, Annual Forecast, Forecast Intelligence, company selector, active/inactive controls, AI/admin tools and change history in one operational page. Product now wants normal `/forecasting/entry` to become a current-month CSM batch-entry surface while preserving the old full experience for admin-only access.
+- **Decision:** Preserve the old full Forecast Entry experience at `/forecasting/entry/old` behind `petyr:admin`. Normal `/forecasting/entry` becomes a current server-month CSM batch-entry workspace requiring `petyr:forecast:write`, using batch read/save endpoints and exposing only the CSM filter, official Petyr Business Units, current-month editable forecast cells, read-only Closed Revenue and per-company notes.
+- **Alternatives discarded:** Removing Annual Forecast and Forecast Intelligence code; keeping the full single-company editor visible to CSM users; exposing AI/admin tools to users with only `petyr:read` plus `petyr:forecast:write`; changing Prisma schema for batch-specific metadata in this step.
+- **Reason:** The CSM workflow needs faster monthly portfolio entry without admin-only tools, while the complete historical editor remains useful for admin inspection and controlled legacy operations.
+- **Consequences:** Batch saves reuse existing `forecast_monthly`, `forecast_save_session` and `forecast_change_log` tables. One save creates one session per company with effective changes. AI suggestions remain placeholders until accepted or edited by the CSM. Future performance optimization may be needed if the v1 batch read path is too broad on production-size datasets.
+- **Related docs:** `apps/forecasting-app/src/app/forecasting/entry/page.tsx`, `apps/forecasting-app/src/app/forecasting/entry/old/page.tsx`, `apps/forecasting-app/src/services/forecastEntryBatchService.ts`, `docs/05_forecasting_product_spec.md`, `DEVLOG.md`, `BACKLOG.md`.
+
+## 2026-06-24 - Petyr owns Forecast Intelligence numeric evidence display
+
+- **Status:** Accepted.
+- **Context:** Forecast Intelligence generation was failing because validation checked every number in narrative text against a payload-number whitelist, while the model also generated `numeric_evidence` directly. Product wants useful CSM insight text without letting OpenRouter own forecast values or visible numeric evidence.
+- **Decision:** LLM owns insight text and evidence refs; Petyr owns forecast values and numeric evidence display. Forecast Intelligence payloads use `petyr_forecast_intelligence_payload_v3`, prompt `petyr_forecast_intelligence_prompt_v5` and raw LLM output schema `petyr_forecast_intelligence_llm_output_v5`. The payload includes a deterministic evidence registry of citeable server-owned values and sanitized CSM change notes for qualitative context. OpenRouter returns only `evidence_refs`; Petyr validates those refs and enriches the UI-compatible output with server-generated `numeric_evidence`.
+- **Alternatives discarded:** Continuing to let the LLM write `numeric_evidence`; validating every number in all narrative text; removing numbers from all insight text; exposing rounding/adjustment scenarios as citeable evidence.
+- **Reason:** CSMs need narrative pattern, risk, opportunity and watchout analysis, but official forecast numbers and visible numeric evidence must remain deterministic, auditable and server-owned.
+- **Consequences:** Old Forecast Intelligence cache entries are bypassed by the new prompt/payload/schema versions. Free numbers in narrative text no longer fail validation by themselves, but unknown evidence refs, raw model-provided `numeric_evidence`, markdown, prompt leaks, rounding scenario references and prescriptive language still fail validation. Signed deltas such as negative deterministic-minus-planned values remain available when server-derived and present in the evidence registry.
+- **Related docs:** `docs/petyr/FORECAST_INTELLIGENCE_LAYER.md`, `docs/05_forecasting_product_spec.md`, `apps/forecasting-app/src/services/petyrForecastIntelligenceService.ts`, `apps/forecasting-app/src/services/petyrAiForecastCompanyIntelligenceService.ts`, `DEVLOG.md`.
+
 ## 2026-06-24 - Persist sanitized Petyr performance measurements in PostgreSQL
 
 - **Status:** Accepted.

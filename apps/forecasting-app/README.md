@@ -156,6 +156,20 @@ POST /api/petyr/management-objectives
 They require `petyr:management:write` and persist in `management_objective` and
 `management_objective_change_log`.
 
+Normal Forecast Entry monthly batch workflow uses:
+
+```txt
+GET /api/petyr/forecast-entry/batch?csmName=...
+POST /api/petyr/forecast-entry/batch/save
+```
+
+The read endpoint requires `petyr:read`; the save endpoint and normal
+`/forecasting/entry` page require `petyr:forecast:write`. The normal page works
+only on the current server month/year, exposes only a CSM filter, official Petyr
+Business Units, current-month active forecast cells, read-only Closed Revenue
+and one note per company. The old full single-company Forecast Entry workspace
+is preserved at `/forecasting/entry/old` and requires `petyr:admin`.
+
 Petyr Admin monthly forecast Excel workflow uses:
 
 ```txt

@@ -9,7 +9,10 @@ import {
   PETYR_FORECAST_INTELLIGENCE_OUTPUT_SCHEMA_VERSION,
   PETYR_FORECAST_INTELLIGENCE_PAYLOAD_VERSION,
   PETYR_FORECAST_INTELLIGENCE_PROMPT_VERSION,
+  buildPetyrForecastIntelligenceCsmChangeNotes,
   generatePetyrForecastIntelligence,
+  type PetyrForecastIntelligenceCsmChangeNote,
+  type PetyrForecastIntelligenceEvidenceRegistryEntry,
   type PetyrForecastIntelligenceOutput,
   type PetyrForecastIntelligencePayload,
   type PetyrForecastIntelligenceRunResult
@@ -210,9 +213,18 @@ function rejectBatchPayload(input: RawCompanyPreviewPayload) {
   }
 }
 
-function roundMoney(value: number) {
+function roundNonNegativeMoney(value: number) {
   if (!Number.isFinite(value)) return 0;
   return Math.round(Math.max(0, value));
+}
+
+function roundSignedMoney(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round(value);
+}
+
+function roundMoney(value: number) {
+  return roundNonNegativeMoney(value);
 }
 
 function metricAvailable(value: number, reason: string | null = null): PetyrAiForecastNumericMetric {
@@ -559,10 +571,202 @@ function buildSelectedYearAggregates(input: {
   };
 }
 
+function evidenceId(...parts: Array<string | number>) {
+  return parts
+    .join(".")
+    .replace(/[^a-zA-Z0-9_.-]+/g, "_")
+    .replace(/_+/g, "_")
+    .toLowerCase();
+}
+
+function formatEur(value: number) {
+  const rounded = roundSignedMoney(value);
+  return `${rounded} EUR`;
+}
+
+function registryEntry(input: {
+  id: string;
+  label: string;
+  displayValue: string;
+  kind: PetyrForecastIntelligenceEvidenceRegistryEntry["kind"];
+  businessUnit?: PetyrBusinessUnit;
+  month?: number;
+  path?: string;
+  metadata?: Record<string, string | number | boolean | null>;
+}): PetyrForecastIntelligenceEvidenceRegistryEntry {
+  return {
+    id: input.id,
+    label: input.label,
+    display_value: `${input.label}: ${input.displayValue}`,
+    kind: input.kind,
+    ...(input.businessUnit ? { business_unit: input.businessUnit } : {}),
+    ...(input.month ? { month: input.month } : {}),
+    ...(input.path ? { path: input.path } : {}),
+    ...(input.metadata ? { metadata: input.metadata } : {})
+  };
+}
+
+function buildDeterministicEvidenceRegistry(input: {
+  forecasts: CurrentRunForecastRow[];
+  selectedYearRealSignals: Awaited<ReturnType<typeof buildCompanyBuForecastSignals>>["selectedYearRealSignals"];
+  localDeltas: PetyrForecastIntelligencePayload["local_deltas"];
+  totals: PetyrForecastIntelligencePayload["deterministic_forecast"]["totals"];
+}): PetyrForecastIntelligenceEvidenceRegistryEntry[] {
+  const entries: PetyrForecastIntelligenceEvidenceRegistryEntry[] = [
+    registryEntry({
+      id: "total.deterministic_forecast_value",
+      label: "Total deterministic forecast",
+      displayValue: formatEur(input.totals.deterministic_forecast_value),
+      kind: "forecast_total",
+      path: "deterministic_forecast.totals.deterministic_forecast_value"
+    }),
+    registryEntry({
+      id: "total.planned_campaigns_value",
+      label: "Total planned campaigns",
+      displayValue: formatEur(input.totals.planned_campaigns_value),
+      kind: "planned_value",
+      path: "deterministic_forecast.totals.planned_campaigns_value"
+    }),
+    registryEntry({
+      id: "total.residual_coverage_gap",
+      label: "Total residual coverage gap",
+      displayValue: formatEur(input.totals.residual_coverage_gap),
+      kind: "residual_gap",
+      path: "deterministic_forecast.totals.residual_coverage_gap"
+    })
+  ];
+
+  for (const row of input.forecasts) {
+    entries.push(
+      registryEntry({
+        id: evidenceId("bu", row.businessUnit, "month", row.month, "forecast"),
+        label: `${row.businessUnit} month ${row.month} deterministic forecast`,
+        displayValue: formatEur(row.aiForecastValue),
+        kind: "forecast_total",
+        businessUnit: row.businessUnit,
+        month: row.month,
+        path: "deterministic_forecast.rows[].deterministic_forecast_value"
+      }),
+      registryEntry({
+        id: evidenceId("bu", row.businessUnit, "month", row.month, "planned"),
+        label: `${row.businessUnit} month ${row.month} planned campaigns`,
+        displayValue: formatEur(row.plannedCampaignsValue),
+        kind: "planned_value",
+        businessUnit: row.businessUnit,
+        month: row.month,
+        path: "deterministic_forecast.rows[].planned_campaigns_value"
+      }),
+      registryEntry({
+        id: evidenceId("bu", row.businessUnit, "month", row.month, "residual_gap"),
+        label: `${row.businessUnit} month ${row.month} residual gap`,
+        displayValue: formatEur(row.agreementResidualSignal.coverageGap),
+        kind: "residual_gap",
+        businessUnit: row.businessUnit,
+        month: row.month,
+        path: "deterministic_forecast.rows[].residual_coverage_gap"
+      }),
+      registryEntry({
+        id: evidenceId("bu", row.businessUnit, "month", row.month, "active_agreement_count"),
+        label: `${row.businessUnit} month ${row.month} active residual agreements`,
+        displayValue: String(row.agreementResidualSignal.activeAgreementCount),
+        kind: "campaign_count",
+        businessUnit: row.businessUnit,
+        month: row.month,
+        path: "deterministic_forecast.rows[].agreement_residual_allocation.active_agreement_count"
+      })
+    );
+
+    if (row.agreementResidualAllocation.remainingMonths !== null) {
+      entries.push(registryEntry({
+        id: evidenceId("bu", row.businessUnit, "month", row.month, "remaining_months"),
+        label: `${row.businessUnit} month ${row.month} remaining agreement months`,
+        displayValue: String(row.agreementResidualAllocation.remainingMonths),
+        kind: "remaining_months",
+        businessUnit: row.businessUnit,
+        month: row.month,
+        path: "deterministic_forecast.rows[].agreement_residual_allocation.remaining_months"
+      }));
+    }
+
+    if (row.agreementResidualAllocation.monthsToExpiry !== null) {
+      entries.push(registryEntry({
+        id: evidenceId("bu", row.businessUnit, "month", row.month, "months_to_expiry"),
+        label: `${row.businessUnit} month ${row.month} months to expiry`,
+        displayValue: String(row.agreementResidualAllocation.monthsToExpiry),
+        kind: "months_to_expiry",
+        businessUnit: row.businessUnit,
+        month: row.month,
+        path: "deterministic_forecast.rows[].agreement_residual_allocation.months_to_expiry"
+      }));
+    }
+  }
+
+  for (const signal of input.selectedYearRealSignals) {
+    entries.push(
+      registryEntry({
+        id: evidenceId("bu", signal.businessUnit, "closed_ytd"),
+        label: `${signal.businessUnit} closed revenue YTD`,
+        displayValue: formatEur(signal.closedRevenueYtd),
+        kind: "closed_revenue",
+        businessUnit: signal.businessUnit,
+        path: "selected_year_real_signals[].closed_revenue_ytd"
+      }),
+      registryEntry({
+        id: evidenceId("bu", signal.businessUnit, "planned_future"),
+        label: `${signal.businessUnit} selected-year planned future`,
+        displayValue: formatEur(signal.plannedFutureValue),
+        kind: "planned_value",
+        businessUnit: signal.businessUnit,
+        path: "selected_year_real_signals[].planned_future_value"
+      }),
+      registryEntry({
+        id: evidenceId("bu", signal.businessUnit, "closed_campaigns"),
+        label: `${signal.businessUnit} closed campaign count`,
+        displayValue: String(signal.closedRevenueCampaignsCount),
+        kind: "campaign_count",
+        businessUnit: signal.businessUnit,
+        path: "selected_year_real_signals[].closed_revenue_campaigns_count"
+      }),
+      registryEntry({
+        id: evidenceId("bu", signal.businessUnit, "planned_campaigns"),
+        label: `${signal.businessUnit} planned campaign count`,
+        displayValue: String(signal.plannedFutureCampaignsCount),
+        kind: "campaign_count",
+        businessUnit: signal.businessUnit,
+        path: "selected_year_real_signals[].planned_future_campaigns_count"
+      })
+    );
+  }
+
+  for (const delta of input.localDeltas) {
+    entries.push(
+      registryEntry({
+        id: evidenceId("bu", delta.business_unit, "delta", "deterministic_minus_planned"),
+        label: `${delta.business_unit} deterministic minus planned`,
+        displayValue: formatEur(delta.deterministic_minus_planned),
+        kind: "signed_delta",
+        businessUnit: delta.business_unit,
+        path: "local_deltas[].deterministic_minus_planned"
+      }),
+      registryEntry({
+        id: evidenceId("bu", delta.business_unit, "delta", "deterministic_minus_closed_ytd"),
+        label: `${delta.business_unit} deterministic minus closed YTD`,
+        displayValue: formatEur(delta.deterministic_minus_closed_ytd),
+        kind: "signed_delta",
+        businessUnit: delta.business_unit,
+        path: "local_deltas[].deterministic_minus_closed_ytd"
+      })
+    );
+  }
+
+  return entries.filter((entry, index, all) => all.findIndex((candidate) => candidate.id === entry.id) === index);
+}
+
 function buildIntelligencePayload(input: {
   signals: Awaited<ReturnType<typeof buildCompanyBuForecastSignals>>;
   forecasts: CurrentRunForecastRow[];
   diagnostics: string[];
+  csmChangeNotes: PetyrForecastIntelligenceCsmChangeNote[];
 }): PetyrForecastIntelligencePayload {
   const forecastRowsByBusinessUnit = new Map<string, CurrentRunForecastRow[]>();
   for (const row of input.forecasts) {
@@ -640,6 +844,32 @@ function buildIntelligencePayload(input: {
     });
   }
 
+  const localDeltas: PetyrForecastIntelligencePayload["local_deltas"] = PETYR_BUSINESS_UNITS.map((businessUnit) => {
+    const rows = forecastRowsByBusinessUnit.get(businessUnit) ?? [];
+    const selectedSignal = selectedSignalsByBusinessUnit.get(businessUnit);
+    const deterministic = sumRows(rows, (row) => row.aiForecastValue);
+    const planned = selectedSignal?.plannedFutureValue ?? 0;
+    const closed = selectedSignal?.closedRevenueYtd ?? 0;
+
+    return {
+      business_unit: businessUnit,
+      deterministic_minus_planned: roundSignedMoney(deterministic - planned),
+      deterministic_minus_closed_ytd: roundSignedMoney(deterministic - closed)
+    };
+  });
+  const totals = {
+    deterministic_forecast_value: totalDeterministic,
+    baseline_forecast: totalBaseline,
+    planned_campaigns_value: totalPlanned,
+    residual_coverage_gap: totalResidualGap
+  };
+  const evidenceRegistry = buildDeterministicEvidenceRegistry({
+    forecasts: input.forecasts,
+    selectedYearRealSignals: input.signals.selectedYearRealSignals,
+    localDeltas,
+    totals
+  });
+
   return {
     schema_version: PETYR_FORECAST_INTELLIGENCE_PAYLOAD_VERSION,
     task: "forecast_intelligence_company_analysis",
@@ -706,12 +936,7 @@ function buildIntelligencePayload(input: {
         drivers: driversFromCandidate(candidate),
         data_quality_flags: candidate.dataQualityFlags
       })),
-      totals: {
-        deterministic_forecast_value: totalDeterministic,
-        baseline_forecast: totalBaseline,
-        planned_campaigns_value: totalPlanned,
-        residual_coverage_gap: totalResidualGap
-      }
+      totals
     },
     historical_closed_revenue: input.signals.historicalClosedRevenue.map((row) => ({
       business_unit: row.businessUnit,
@@ -728,19 +953,7 @@ function buildIntelligencePayload(input: {
       planned_future_campaigns_count: row.plannedFutureCampaignsCount,
       normalized_to_other_count: row.normalizedToOtherCount
     })),
-    local_deltas: PETYR_BUSINESS_UNITS.map((businessUnit) => {
-      const rows = forecastRowsByBusinessUnit.get(businessUnit) ?? [];
-      const selectedSignal = selectedSignalsByBusinessUnit.get(businessUnit);
-      const deterministic = sumRows(rows, (row) => row.aiForecastValue);
-      const planned = selectedSignal?.plannedFutureValue ?? 0;
-      const closed = selectedSignal?.closedRevenueYtd ?? 0;
-
-      return {
-        business_unit: businessUnit,
-        deterministic_minus_planned: roundMoney(deterministic - planned),
-        deterministic_minus_closed_ytd: roundMoney(deterministic - closed)
-      };
-    }),
+    local_deltas: localDeltas,
     local_scenarios: [
       {
         name: "deterministic",
@@ -759,6 +972,8 @@ function buildIntelligencePayload(input: {
       }
     ],
     local_risk_signals: riskSignals,
+    deterministic_evidence_registry: evidenceRegistry,
+    csm_change_notes: input.csmChangeNotes,
     data_quality: {
       diagnostics: input.diagnostics,
       flags: dataQualityFlags
@@ -868,6 +1083,41 @@ function buildOpenRouterDebug(input: {
     validationErrors,
     providerError: providerError ? sanitizeDebugText(providerError) : null
   };
+}
+
+async function readCsmChangeNotes(input: {
+  companyName: string;
+  year: number;
+  diagnostics: string[];
+}) {
+  try {
+    const sessions = await prisma.forecastSaveSession.findMany({
+      where: {
+        companyName: input.companyName,
+        year: input.year,
+        note: { not: null }
+      },
+      select: {
+        year: true,
+        month: true,
+        forecastType: true,
+        source: true,
+        note: true,
+        createdAt: true,
+        changeLogs: {
+          select: { businessUnit: true }
+        }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 24
+    });
+
+    return buildPetyrForecastIntelligenceCsmChangeNotes({ year: input.year, sessions });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    input.diagnostics.push(`Unable to read CSM change notes for Forecast Intelligence: ${message}`);
+    return [];
+  }
 }
 
 function emptySaveReport(modelVersion: string): AiForecastCacheSaveReport {
@@ -1163,7 +1413,12 @@ async function buildBaseRun(input: {
     generatedAt: generatedAtIso
   });
   const diagnostics = uniqueDiagnostics(signals.diagnostics);
-  const intelligencePayload = buildIntelligencePayload({ signals, forecasts, diagnostics });
+  const csmChangeNotes = await readCsmChangeNotes({
+    companyName: signals.companyName,
+    year: input.year,
+    diagnostics
+  });
+  const intelligencePayload = buildIntelligencePayload({ signals, forecasts, diagnostics, csmChangeNotes });
 
   return {
     signals,

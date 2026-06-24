@@ -64,7 +64,7 @@ Management/Finance baseline weights are globally configurable in Petyr Admin for
 
 ## Input Payload Contract
 
-Payload version: `petyr_forecast_intelligence_payload_v2`.
+Payload version: `petyr_forecast_intelligence_payload_v3`.
 
 The payload is normalized and company-minimized. It uses `company_001` rather
 than real company names in the prompt payload. It includes:
@@ -80,6 +80,11 @@ than real company names in the prompt payload. It includes:
 - local scenarios, including deterministic, planned-floor-only and
   history-signals-only totals;
 - local risk signals;
+- `deterministic_evidence_registry`, containing only server-owned evidence ids
+  that the LLM may cite, with `id`, `label`, `display_value`, `kind`, optional
+  Business Unit/month and debug path/metadata;
+- recent sanitized CSM change notes for the selected company/year, including
+  month, forecast type, source, created time and changed-BU count;
 - local trend signals, including recent growth, over-consumption and summer slowdown flags;
 - agreement residual allocation with remaining months, monthly cap, historical capacity, linked planned campaign cap and planned-over-residual watchout flag;
 - Business Unit attribution from sanitized title tokens, linked-agreement history or company+BU history;
@@ -87,14 +92,27 @@ than real company names in the prompt payload. It includes:
 - data-quality diagnostics and flags;
 - explicit LLM constraints stating consultative-only, numbers are local source of truth, no recalculation, no invented numbers, no prescriptive operational instructions and JSON-only response.
 
-The payload must not include CSM-entered monthly or annual forecasts as prompt inputs. Those values remain UI comparison data only. Agreement, campaign and deal titles must not be sent as raw text; only sanitized BU attribution signals such as matched Business Unit, matched tokens and confidence may be sent.
+The evidence registry includes only useful citeable evidence such as forecast
+totals, planned values, closed revenue, residual gaps, campaign counts,
+remaining months/months to expiry, signed deltas and server-calculated
+percentages. It must not include technical diagnostics, rounding or adjustment
+scenarios, provider metadata or internal implementation details.
+
+The payload must not include CSM-entered monthly or annual forecasts as numeric
+forecast inputs. Those values remain UI comparison data only. CSM change notes
+are qualitative context for the selected year, not authoritative numeric
+evidence. Before they are sent to OpenRouter, Petyr strips URLs, email addresses,
+token-like strings and excessive whitespace, limits the number of sessions and
+caps total note text. Agreement, campaign and deal titles must not be sent as raw
+text; only sanitized BU attribution signals such as matched Business Unit,
+matched tokens and confidence may be sent.
 
 ## Output JSON Schema
 
-Output schema version: `petyr_forecast_intelligence_output_v4`.
+Raw LLM output schema version: `petyr_forecast_intelligence_llm_output_v5`.
 
 OpenRouter must return one JSON object only, with no markdown, code fences or
-surrounding prose:
+surrounding prose. The raw LLM output uses evidence refs, not numeric evidence:
 
 ```json
 {
@@ -102,7 +120,7 @@ surrounding prose:
     {
       "title": "string",
       "note": "string",
-      "numeric_evidence": "string"
+      "evidence_refs": ["registry_entry_id"]
     }
   ],
   "risks": [
@@ -110,7 +128,7 @@ surrounding prose:
       "type": "under_consumption|over_consumption|margin_risk|timing_risk|data_quality|other",
       "severity": "low|medium|high",
       "description": "string",
-      "numeric_evidence": "string"
+      "evidence_refs": ["registry_entry_id"]
     }
   ],
   "opportunities": [
@@ -118,7 +136,7 @@ surrounding prose:
       "title": "string",
       "severity": "low|medium|high",
       "evidence": "string",
-      "numeric_evidence": "string"
+      "evidence_refs": ["registry_entry_id"]
     }
   ],
   "watchouts": [
@@ -126,21 +144,34 @@ surrounding prose:
       "title": "string",
       "severity": "low|medium|high",
       "evidence": "string",
-      "numeric_evidence": "string"
+      "evidence_refs": ["registry_entry_id"]
     }
   ]
 }
 ```
 
-Validation rejects missing required fields, unexpected fields, markdown in text fields, prompt/internal implementation disclosures, numeric claims that are not present in the deterministic payload, missing numeric evidence, visible rounding-scenario references such as `floor_100`, `nearest_100`, `ceil_100`, and prescriptive operational instructions such as telling the CSM what to do.
+After validation, Petyr enriches the UI-facing output by converting
+`evidence_refs` into the existing `numeric_evidence` strings from registry
+`display_value` fields. The UI-facing validated output may keep the current
+shape with `numeric_evidence`, but those strings are server-generated.
+
+Validation rejects missing required fields, unexpected fields, unknown or empty
+`evidence_refs`, raw model-generated `numeric_evidence`, markdown in text
+fields, prompt/internal implementation disclosures, visible rounding-scenario
+references such as `floor_100`, `nearest_100`, `ceil_100`, and prescriptive
+operational instructions such as telling the CSM what to do. Narrative fields
+may contain free natural-language numbers, but official numeric evidence shown
+in the UI must come from valid registry refs.
 
 ## Prompt And Hashing
 
-Prompt version: `petyr_forecast_intelligence_prompt_v4`.
+Prompt version: `petyr_forecast_intelligence_prompt_v5`.
 
 The system prompt must explicitly state that all forecast numbers and metrics
 come from Petyr local calculations and must not be recalculated, adjusted,
-rounded, overridden or invented by the model.
+rounded, overridden or invented by the model. It must also state that the LLM
+owns insight text and `evidence_refs`, while Petyr owns forecast values and
+numeric evidence display.
 
 The backend computes a stable SHA-256 input hash from the normalized payload.
 Cached output may be reused only when provider, model, prompt version and input
@@ -196,6 +227,14 @@ and prompt/debug JSON. Company Detail remains read-only for forecast data and
 must not generate or apply numeric AI Forecast rows.
 
 The UI must render deterministic numeric rows separately from Forecast
-Intelligence analysis. Forecast Intelligence sections must show only stakeholder notes, risks, watchouts and opportunities from validated JSON. Each item must carry compact numeric evidence explaining amounts, timing, residual pressure, planned value, closed revenue, deltas, campaign counts or remaining months. Status, confidence, as-of date, eligible-month/provider diagnostics, executive summaries, key insights, drivers, forecast cues, chart-comparison candidates, rounding scenarios, data-quality notes and CSM questions are intentionally not part of the user-facing output.
+Intelligence analysis. Forecast Intelligence sections must show only stakeholder
+notes, risks, watchouts and opportunities from validated JSON. Each item must
+carry compact numeric evidence generated by Petyr from the deterministic
+evidence registry, explaining amounts, timing, residual pressure, planned value,
+closed revenue, signed deltas, campaign counts or remaining months. Status,
+confidence, as-of date, eligible-month/provider diagnostics, executive
+summaries, key insights, drivers, forecast cues, chart-comparison candidates,
+rounding scenarios, data-quality notes and CSM questions are intentionally not
+part of the user-facing output.
 
 The UI must show a graceful error when AI fails and must not imply OpenRouter changed forecast values. Numeric forecast rows remain deterministic even when Forecast Intelligence is cached, retried or failed.

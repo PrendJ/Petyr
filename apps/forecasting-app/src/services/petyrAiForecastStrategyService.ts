@@ -1,15 +1,14 @@
-import { PETYR_BUSINESS_UNITS, type PetyrBusinessUnit } from "@/lib/petyr/constants";
-import {
-  getCompanyDetail,
-  type PetyrAgreementDetail,
-  type PetyrBusinessUnitSummary,
-  type PetyrCampaignDetail,
-  type PetyrMonthlyRevenueTrend
-} from "@/services/petyrDataService";
+import { PETYR_BUSINESS_UNITS, type PetyrBusinessUnit } from "../lib/petyr/constants";
+import type {
+  PetyrAgreementDetail,
+  PetyrBusinessUnitSummary,
+  PetyrCampaignDetail,
+  PetyrMonthlyRevenueTrend
+} from "./petyrDataService";
 import {
   getPetyrAiForecastBaselineWeightsWithDiagnostics,
   type PetyrAiForecastBaselineWeights
-} from "@/services/petyrAiForecastWeightsService";
+} from "./petyrAiForecastWeightsService";
 
 const DEFAULT_HISTORY_YEARS = 3;
 const MIN_STRONG_HISTORY_MONTHS = 6;
@@ -1297,6 +1296,7 @@ export async function buildCompanyBuForecastSignals(
     (_, index) => year - index
   );
   const weightsResolution = await getPetyrAiForecastBaselineWeightsWithDiagnostics();
+  const { getCompanyDetail } = await import("./petyrDataService");
   const detailsByYear = await Promise.all(
     yearsToRead.map(async (detailYear) => ({
       year: detailYear,

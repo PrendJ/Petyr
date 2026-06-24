@@ -8,10 +8,12 @@ import {
 
 import {
   PETYR_FORECAST_INTELLIGENCE_PAYLOAD_VERSION,
+  buildPetyrForecastIntelligenceCsmChangeNotes,
   buildPetyrForecastIntelligencePrompt,
   generatePetyrForecastIntelligence,
   validatePetyrForecastIntelligenceOutput,
   hashPetyrForecastIntelligencePayload,
+  sanitizePetyrForecastIntelligenceCsmNote,
   type PetyrForecastIntelligenceCacheAdapter,
   type PetyrForecastIntelligenceCacheWrite,
   type PetyrForecastIntelligenceOutput,
@@ -34,12 +36,12 @@ import {
   resolvePetyrAiForecastBaselineWeightsRead
 } from "../src/services/petyrAiForecastWeightsService";
 
-const baseOutput: PetyrForecastIntelligenceOutput = {
+const baseRawOutput = {
   stakeholder_notes: [
     {
       title: "Residual timing is the main stakeholder point",
       note: "The same delivery window has residual pressure and planned value in the payload.",
-      numeric_evidence: "Residual value is 300 EUR, monthly residual cap is 100 EUR and remaining months are 3."
+      evidence_refs: ["bu.qa.month.7.remaining_months", "bu.qa.month.7.planned"]
     }
   ],
   risks: [
@@ -47,7 +49,7 @@ const baseOutput: PetyrForecastIntelligenceOutput = {
       type: "timing_risk",
       severity: "medium",
       description: "The current delivery timing can compress residual consumption into fewer remaining months.",
-      numeric_evidence: "Residual value is 300 EUR over 3 remaining months with a 100 EUR monthly cap."
+      evidence_refs: ["bu.qa.month.7.remaining_months", "bu.qa.month.7.residual_gap"]
     }
   ],
   opportunities: [
@@ -55,7 +57,7 @@ const baseOutput: PetyrForecastIntelligenceOutput = {
       title: "Planned work is above baseline",
       severity: "medium",
       evidence: "Planned value is above the local deterministic forecast for the month.",
-      numeric_evidence: "Planned campaign value is 120 EUR versus deterministic forecast value 100 EUR."
+      evidence_refs: ["bu.qa.month.7.planned", "bu.qa.month.7.forecast"]
     }
   ],
   watchouts: [
@@ -63,7 +65,41 @@ const baseOutput: PetyrForecastIntelligenceOutput = {
       title: "Sparse historical context",
       severity: "medium",
       evidence: "The payload includes sparse_history.",
-      numeric_evidence: "Historical closed revenue has 2 points: 80 EUR and 90 EUR."
+      evidence_refs: ["bu.qa.closed_campaigns", "bu.qa.delta.deterministic_minus_planned"]
+    }
+  ]
+};
+
+const baseOutput: PetyrForecastIntelligenceOutput = {
+  stakeholder_notes: [
+    {
+      title: "Residual timing is the main stakeholder point",
+      note: "The same delivery window has residual pressure and planned value in the payload.",
+      numeric_evidence: "QA month 7 remaining agreement months: 3; QA month 7 planned campaigns: 120 EUR"
+    }
+  ],
+  risks: [
+    {
+      type: "timing_risk",
+      severity: "medium",
+      description: "The current delivery timing can compress residual consumption into fewer remaining months.",
+      numeric_evidence: "QA month 7 remaining agreement months: 3; QA month 7 residual gap: 0 EUR"
+    }
+  ],
+  opportunities: [
+    {
+      title: "Planned work is above baseline",
+      severity: "medium",
+      evidence: "Planned value is above the local deterministic forecast for the month.",
+      numeric_evidence: "QA month 7 planned campaigns: 120 EUR; QA month 7 deterministic forecast: 100 EUR"
+    }
+  ],
+  watchouts: [
+    {
+      title: "Sparse historical context",
+      severity: "medium",
+      evidence: "The payload includes sparse_history.",
+      numeric_evidence: "QA closed campaign count: 2; QA deterministic minus planned: -20 EUR"
     }
   ]
 };
@@ -201,6 +237,77 @@ function createPayload(): PetyrForecastIntelligencePayload {
         evidence: "Sparse history flag is present."
       }
     ],
+    deterministic_evidence_registry: [
+      {
+        id: "total.deterministic_forecast_value",
+        label: "Total deterministic forecast",
+        display_value: "Total deterministic forecast: 100 EUR",
+        kind: "forecast_total",
+        path: "deterministic_forecast.totals.deterministic_forecast_value"
+      },
+      {
+        id: "bu.qa.month.7.forecast",
+        label: "QA month 7 deterministic forecast",
+        display_value: "QA month 7 deterministic forecast: 100 EUR",
+        kind: "forecast_total",
+        business_unit: "QA",
+        month: 7,
+        path: "deterministic_forecast.rows[].deterministic_forecast_value"
+      },
+      {
+        id: "bu.qa.month.7.planned",
+        label: "QA month 7 planned campaigns",
+        display_value: "QA month 7 planned campaigns: 120 EUR",
+        kind: "planned_value",
+        business_unit: "QA",
+        month: 7,
+        path: "deterministic_forecast.rows[].planned_campaigns_value"
+      },
+      {
+        id: "bu.qa.month.7.residual_gap",
+        label: "QA month 7 residual gap",
+        display_value: "QA month 7 residual gap: 0 EUR",
+        kind: "residual_gap",
+        business_unit: "QA",
+        month: 7,
+        path: "deterministic_forecast.rows[].residual_coverage_gap"
+      },
+      {
+        id: "bu.qa.month.7.remaining_months",
+        label: "QA month 7 remaining agreement months",
+        display_value: "QA month 7 remaining agreement months: 3",
+        kind: "remaining_months",
+        business_unit: "QA",
+        month: 7,
+        path: "deterministic_forecast.rows[].agreement_residual_allocation.remaining_months"
+      },
+      {
+        id: "bu.qa.closed_campaigns",
+        label: "QA closed campaign count",
+        display_value: "QA closed campaign count: 2",
+        kind: "campaign_count",
+        business_unit: "QA",
+        path: "selected_year_real_signals[].closed_revenue_campaigns_count"
+      },
+      {
+        id: "bu.qa.delta.deterministic_minus_planned",
+        label: "QA deterministic minus planned",
+        display_value: "QA deterministic minus planned: -20 EUR",
+        kind: "signed_delta",
+        business_unit: "QA",
+        path: "local_deltas[].deterministic_minus_planned"
+      }
+    ],
+    csm_change_notes: [
+      {
+        month: 7,
+        forecast_type: "ongoing",
+        source: "Forecast Entry",
+        created_at: "2026-06-10T09:00:00.000Z",
+        changed_bu_count: 1,
+        note: "Customer expects a tighter July delivery window."
+      }
+    ],
     data_quality: {
       diagnostics: ["Sparse history for QA."],
       flags: ["sparse_history"]
@@ -251,7 +358,7 @@ test("accepts a valid strict JSON response and saves validated output", async ()
     client: async (request) => {
       calls += 1;
       assert.equal(request.messages[0].role, "system");
-      return JSON.stringify(baseOutput);
+      return JSON.stringify(baseRawOutput);
     }
   });
 
@@ -278,7 +385,7 @@ test("repairs one invalid JSON response with a single retry", async () => {
     cache: cache.adapter,
     client: async () => {
       calls += 1;
-      return calls === 1 ? "not json" : JSON.stringify(baseOutput);
+      return calls === 1 ? "not json" : JSON.stringify(baseRawOutput);
     }
   });
 
@@ -383,22 +490,88 @@ test("deterministic payload remains available when AI is not configured", async 
 });
 
 
-test("prompt uses v4 compact intelligence contract and does not expose raw title fixtures", () => {
+test("prompt uses v5 evidence-ref intelligence contract and does not expose raw title fixtures", () => {
   const payload = createPayload();
   const prompt = buildPetyrForecastIntelligencePrompt(payload);
   const promptText = prompt.messages.map((message) => message.content).join("\n");
 
-  assert.equal(payload.schema_version, "petyr_forecast_intelligence_payload_v2");
+  assert.equal(payload.schema_version, "petyr_forecast_intelligence_payload_v3");
   assert.match(promptText, /stakeholder_notes, risks, watchouts and opportunities/i);
-  assert.match(promptText, /numeric_evidence/i);
+  assert.match(promptText, /evidence_refs/i);
+  assert.match(promptText, /deterministic_evidence_registry/i);
+  assert.match(promptText, /CSM change notes are qualitative context only/i);
   assert.doesNotMatch(promptText, /recommended_actions/);
   assert.doesNotMatch(promptText, /Secret Agreement Title|Secret Campaign Title/);
+});
+
+test("CSM change notes for the requested year are included in payload shape", () => {
+  const notes = buildPetyrForecastIntelligenceCsmChangeNotes({
+    year: 2026,
+    sessions: [
+      {
+        year: 2026,
+        month: 7,
+        forecastType: "ongoing",
+        source: "Forecast Entry",
+        note: "July delivery timing is tight.",
+        createdAt: "2026-06-12T10:00:00.000Z",
+        changeLogs: [{ businessUnit: "QA" }, { businessUnit: "QA" }, { businessUnit: "AI" }]
+      }
+    ]
+  });
+
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0].month, 7);
+  assert.equal(notes[0].changed_bu_count, 2);
+  assert.equal(notes[0].note, "July delivery timing is tight.");
+});
+
+test("CSM change notes from other years are excluded", () => {
+  const notes = buildPetyrForecastIntelligenceCsmChangeNotes({
+    year: 2026,
+    sessions: [
+      {
+        year: 2025,
+        month: 12,
+        forecastType: "previous_month",
+        source: "Forecast Entry",
+        note: "Prior-year note should not travel.",
+        createdAt: "2025-12-20T10:00:00.000Z",
+        changeLogs: [{ businessUnit: "QA" }]
+      },
+      {
+        year: 2026,
+        month: 7,
+        forecastType: "ongoing",
+        source: "Forecast Entry",
+        note: "Selected-year note should travel.",
+        createdAt: "2026-06-12T10:00:00.000Z",
+        changeLogs: [{ businessUnit: "QA" }]
+      }
+    ]
+  });
+
+  assert.deepEqual(notes.map((note) => note.note), ["Selected-year note should travel."]);
+});
+
+test("CSM change note sanitization removes URLs emails token-like strings and excess whitespace", () => {
+  const sanitized = sanitizePetyrForecastIntelligenceCsmNote(
+    "Check https://example.test/deal and owner@example.com with token sk_live_abcdefghijklmnopqrstuvwxyz123456   now"
+  );
+
+  assert.doesNotMatch(sanitized, /https:\/\/example/);
+  assert.doesNotMatch(sanitized, /owner@example/);
+  assert.doesNotMatch(sanitized, /sk_live_abcdefghijklmnopqrstuvwxyz123456/);
+  assert.match(sanitized, /\[redacted_url\]/);
+  assert.match(sanitized, /\[redacted_email\]/);
+  assert.match(sanitized, /\[redacted_token\]/);
+  assert.doesNotMatch(sanitized, /\s{2,}/);
 });
 
 test("rejects legacy and v3 output fields", () => {
   const payload = createPayload();
   const legacyOutput = JSON.stringify({
-    ...baseOutput,
+    ...baseRawOutput,
     executive_summary: "Payload supports interpretation only.",
     confidence: "medium",
     key_insights: [],
@@ -414,55 +587,143 @@ test("rejects legacy and v3 output fields", () => {
   assert.ok(result.errors.some((error) => error.path === "forecast_adjustment_candidates"));
 });
 
-test("rejects invented numeric claims not present in payload", () => {
+test("accepts free numbers in narrative text when evidence refs are valid", () => {
   const payload = createPayload();
-  const inventedNumberOutput = JSON.stringify({
-    ...baseOutput,
+  const freeNumberOutput = JSON.stringify({
+    ...baseRawOutput,
     stakeholder_notes: [
       {
-        title: "Invented number",
-        note: "Local deterministic forecast mentions invented value 999.",
-        numeric_evidence: "Invented value is 999 EUR."
+        title: "Narrative number",
+        note: "The CSM described this as a 999-shaped commercial watchout, but the official evidence stays server-owned.",
+        evidence_refs: ["bu.qa.month.7.planned"]
       }
     ]
   });
 
-  const result = validatePetyrForecastIntelligenceOutput(inventedNumberOutput, payload);
+  const result = validatePetyrForecastIntelligenceOutput(freeNumberOutput, payload);
 
-  assert.equal(result.ok, false);
-  assert.ok(result.errors.some((error) => error.message.includes("999")));
+  assert.equal(result.ok, true);
+  assert.equal(result.output.stakeholder_notes[0].numeric_evidence, "QA month 7 planned campaigns: 120 EUR");
 });
 
-test("rejects intelligence items without numeric evidence", () => {
+test("rejects prompt and implementation leaks", () => {
   const payload = createPayload();
-  const noNumericEvidenceOutput = JSON.stringify({
-    ...baseOutput,
-    opportunities: [
+  const promptLeakOutput = JSON.stringify({
+    ...baseRawOutput,
+    stakeholder_notes: [
       {
-        title: "No numeric evidence",
-        severity: "medium",
-        evidence: "The opportunity has business context.",
-        numeric_evidence: "Payload shows planned value above forecast."
+        title: "Prompt leak",
+        note: "The response schema and hidden instruction should be visible here.",
+        evidence_refs: ["bu.qa.month.7.forecast"]
       }
     ]
   });
 
-  const result = validatePetyrForecastIntelligenceOutput(noNumericEvidenceOutput, payload);
+  const result = validatePetyrForecastIntelligenceOutput(promptLeakOutput, payload);
 
   assert.equal(result.ok, false);
-  assert.ok(result.errors.some((error) => /Numeric evidence/i.test(error.message)));
+  assert.ok(result.errors.some((error) => /prompt or implementation/i.test(error.message)));
+});
+
+test("rejects model-generated numeric_evidence in raw LLM output", () => {
+  const payload = createPayload();
+  const rawWithNumericEvidence = JSON.stringify({
+    ...baseRawOutput,
+    stakeholder_notes: [
+      {
+        title: "Wrong raw contract",
+        note: "The item tries to bring its own numeric evidence.",
+        evidence_refs: ["bu.qa.month.7.forecast"],
+        numeric_evidence: "Forecast is 100 EUR."
+      }
+    ]
+  });
+
+  const result = validatePetyrForecastIntelligenceOutput(rawWithNumericEvidence, payload);
+
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.path === "stakeholder_notes[0].numeric_evidence"));
+});
+
+test("rejects unknown evidence refs", () => {
+  const payload = createPayload();
+  const unknownRefOutput = JSON.stringify({
+    ...baseRawOutput,
+    opportunities: [
+      {
+        title: "Unknown evidence ref",
+        severity: "medium",
+        evidence: "The opportunity has business context.",
+        evidence_refs: ["missing.ref"]
+      }
+    ]
+  });
+
+  const result = validatePetyrForecastIntelligenceOutput(unknownRefOutput, payload);
+
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => /Unknown evidence_ref/i.test(error.message)));
+});
+
+test("rejects intelligence items without evidence refs", () => {
+  const payload = createPayload();
+  const noEvidenceRefsOutput = JSON.stringify({
+    ...baseRawOutput,
+    opportunities: [
+      {
+        title: "No evidence refs",
+        severity: "medium",
+        evidence: "The opportunity has business context.",
+        evidence_refs: []
+      }
+    ]
+  });
+
+  const result = validatePetyrForecastIntelligenceOutput(noEvidenceRefsOutput, payload);
+
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => /At least one valid evidence_ref/i.test(error.message)));
+});
+
+test("enriches raw LLM evidence refs into server-generated numeric evidence", () => {
+  const payload = createPayload();
+  const result = validatePetyrForecastIntelligenceOutput(JSON.stringify(baseRawOutput), payload);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.output.opportunities[0].numeric_evidence, "QA month 7 planned campaigns: 120 EUR; QA month 7 deterministic forecast: 100 EUR");
+  assert.equal(Object.hasOwn(baseRawOutput.opportunities[0], "numeric_evidence"), false);
+});
+
+test("accepts server-derived negative delta evidence from the registry", () => {
+  const payload = createPayload();
+  const negativeDeltaOutput = JSON.stringify({
+    ...baseRawOutput,
+    watchouts: [
+      {
+        title: "Negative delta remains visible",
+        severity: "medium",
+        evidence: "The deterministic forecast sits below planned future for this Business Unit.",
+        evidence_refs: ["bu.qa.delta.deterministic_minus_planned"]
+      }
+    ]
+  });
+
+  const result = validatePetyrForecastIntelligenceOutput(negativeDeltaOutput, payload);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.output.watchouts[0].numeric_evidence, "QA deterministic minus planned: -20 EUR");
 });
 
 test("rejects visible rounding scenario references", () => {
   const payload = createPayload();
   const roundingScenarioOutput = JSON.stringify({
-    ...baseOutput,
+    ...baseRawOutput,
     watchouts: [
       {
         title: "Rounding scenario leak",
         severity: "medium",
         evidence: "The nearest_100 rounding scenario appears in the text.",
-        numeric_evidence: "Scenario value is 100 EUR."
+        evidence_refs: ["bu.qa.month.7.forecast"]
       }
     ]
   });
@@ -476,13 +737,13 @@ test("rejects visible rounding scenario references", () => {
 test("rejects prescriptive operational language", () => {
   const payload = createPayload();
   const prescriptiveOutput = JSON.stringify({
-    ...baseOutput,
+    ...baseRawOutput,
     opportunities: [
       {
         title: "Prescriptive language",
         severity: "medium",
         evidence: "You should contact the owner about this account.",
-        numeric_evidence: "Planned campaign value is 120 EUR."
+        evidence_refs: ["bu.qa.month.7.planned"]
       }
     ]
   });
@@ -664,7 +925,7 @@ test("AI Forecast baseline weights apply and renormalize configured positive sig
       runRate: 300,
       baselineWeights: configured
     }),
-    150
+    157
   );
 });
 

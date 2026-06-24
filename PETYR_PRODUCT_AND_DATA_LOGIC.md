@@ -1465,6 +1465,9 @@ Performance results rules:
 - table: `petyr_performance_measurement`;
 - visible values: service, operation, status, duration, row count, measured time
   and scalar metadata;
+- high-level admin statistics: measured coverage, sample count, success/failure
+  samples, overall average duration and per-operation average, median and p95
+  duration from recent persisted samples;
 - allowed writers: Forecasting app and Redash Ingestor instrumentation helpers;
 - forbidden values: raw Redash payloads, uploaded workbook contents, customer
   rows, API keys, secrets and browser DevTools timing values.

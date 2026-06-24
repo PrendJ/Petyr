@@ -4,6 +4,27 @@ Data: 2026-06-05
 
 Questo documento fotografa lo stato corrente dopo l allineamento della navigazione Petyr tra Management View, CSM Overview, Company Detail e Forecast Entry.
 
+## Aggiornamento 2026-06-24 - Forecast Entry batch normale e legacy admin
+
+La normale `/forecasting/entry` non espone piu la vecchia esperienza completa
+single-company. Ora e una Monthly Forecast batch-entry per il mese/anno corrente
+server, filtrata solo per CSM, con tabella company x Business Unit ufficiali
+Petyr e save batch. Annual Forecast, Forecast Intelligence, selezione company,
+toggle active/inactive, deterministic preview, apply AI forecast, change history
+e tool admin restano preservati nella legacy admin-only:
+
+```txt
+/forecasting/entry/old
+```
+
+La route legacy richiede `petyr:admin`. La route normale richiede
+`petyr:forecast:write` e usa:
+
+```txt
+GET /api/petyr/forecast-entry/batch
+POST /api/petyr/forecast-entry/batch/save
+```
+
 ## Sintesi
 
 Company Detail e Forecast Entry usano ora una soluzione visuale continuativa:

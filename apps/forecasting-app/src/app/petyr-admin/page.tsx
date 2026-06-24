@@ -104,6 +104,16 @@ function formatMetadata(metadata: Record<string, string | number | boolean | nul
   return entries.map(([key, value]) => `${key}: ${value === null ? "n/a" : String(value)}`).join(" · ");
 }
 
+function StatTile({ label, value, helper }: { label: string; value: string; helper?: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="mt-1 font-semibold text-slate-900">{value}</div>
+      {helper ? <div className="mt-1 text-xs text-slate-500">{helper}</div> : null}
+    </div>
+  );
+}
+
 function syncStatusBadgeClass(status: string | null | undefined) {
   const normalized = status?.toLowerCase();
 
@@ -287,10 +297,35 @@ function PerformanceTestResultsSection({ state }: { state: LoadState<PetyrPerfor
   }
 
   const measuredCount = data.checks.filter((check) => check.measured).length;
+  const slowestAverage = data.summary.slowestAverageOperation;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatTile
+          helper={`${formatNumber(data.summary.totalSamples)} persisted samples`}
+          label="Average load"
+          value={formatDuration(data.summary.averageDurationMs)}
+        />
+        <StatTile
+          helper="Documented checks with at least one sample"
+          label="Coverage"
+          value={`${formatNumber(measuredCount)} / ${formatNumber(data.checks.length)}`}
+        />
+        <StatTile
+          helper={slowestAverage ? slowestAverage.operation : "No measured operation yet"}
+          label="Slowest average"
+          value={formatDuration(slowestAverage?.averageDurationMs)}
+        />
+        <StatTile
+          helper={`${formatNumber(data.summary.failureSamples)} failed samples`}
+          label="Successful samples"
+          value={`${formatNumber(data.summary.successSamples)} / ${formatNumber(data.summary.totalSamples)}`}
+        />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <StatTile label="Storage" value={data.persistenceEnabled ? "PostgreSQL" : "Table missing"} />
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           <div className="text-xs font-medium uppercase tracking-wide text-slate-500">PETYR_PERF_LOGS</div>
           <div className="mt-1">
@@ -299,36 +334,69 @@ function PerformanceTestResultsSection({ state }: { state: LoadState<PetyrPerfor
             </Badge>
           </div>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Result location</div>
-          <div className="mt-1 font-medium text-slate-900">
-            {data.persistenceEnabled ? "PostgreSQL" : "Table missing"}
-          </div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Measured checks</div>
-          <div className="mt-1 font-semibold text-slate-900">
-            {formatNumber(measuredCount)} / {formatNumber(data.checks.length)}
-          </div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Checked</div>
-          <div className="mt-1 font-medium text-slate-900">{formatDateTime(data.checkedAt)}</div>
-        </div>
+        <StatTile label="Checked" value={formatDateTime(data.checkedAt)} />
       </div>
 
       {data.warnings.length > 0 ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
           {data.warnings.join(" ")}
         </div>
-      ) : (
-        <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
-          The table stores sanitized duration, row-count and status metadata only. Server console logs remain controlled by PETYR_PERF_LOGS.
-        </div>
-      )}
+      ) : null}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200">
-        <table className="w-full min-w-[980px] text-left text-sm">
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-slate-900">Average load times</h3>
+          <Badge variant="outline">Last {formatNumber(data.recentHistory.length)} samples</Badge>
+        </div>
+        <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full min-w-[940px] text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-3 py-2 font-medium">Operation</th>
+                <th className="px-3 py-2 font-medium">Service</th>
+                <th className="px-3 py-2 font-medium">Avg</th>
+                <th className="px-3 py-2 font-medium">Median</th>
+                <th className="px-3 py-2 font-medium">P95</th>
+                <th className="px-3 py-2 font-medium">Latest</th>
+                <th className="px-3 py-2 font-medium">Samples</th>
+                <th className="px-3 py-2 font-medium">Failures</th>
+                <th className="px-3 py-2 font-medium">Last measured</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 bg-white text-slate-700">
+              {data.operationStats.length ? (
+                data.operationStats.map((row) => (
+                  <tr key={`${row.service}-${row.operation}`}>
+                    <td className="px-3 py-2 font-medium text-slate-900">{row.operation}</td>
+                    <td className="px-3 py-2">{row.service}</td>
+                    <td className="px-3 py-2 font-semibold text-slate-900">{formatDuration(row.averageDurationMs)}</td>
+                    <td className="px-3 py-2">{formatDuration(row.medianDurationMs)}</td>
+                    <td className="px-3 py-2">{formatDuration(row.p95DurationMs)}</td>
+                    <td className="px-3 py-2">{formatDuration(row.latestDurationMs)}</td>
+                    <td className="px-3 py-2">{formatNumber(row.sampleCount)}</td>
+                    <td className="px-3 py-2">{formatNumber(row.failureCount)}</td>
+                    <td className="px-3 py-2">{formatDateTime(row.latestMeasuredAt)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="px-3 py-4 text-slate-600" colSpan={9}>
+                    No performance measurements have been collected yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-slate-900">Latest check status</h3>
+          <Badge variant="outline">Sanitized metadata only</Badge>
+        </div>
+        <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full min-w-[980px] text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-3 py-2 font-medium">Check</th>
@@ -358,6 +426,7 @@ function PerformanceTestResultsSection({ state }: { state: LoadState<PetyrPerfor
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
