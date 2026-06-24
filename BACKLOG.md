@@ -23,6 +23,14 @@ Project-specific backlog items should be placed in the most specific backlog ava
 
 ---
 
+## Define browser-side performance measurement capture for Petyr
+
+- **Area:** Petyr / Performance / Admin
+- **Problem/question:** Petyr Admin now shows persisted server-side operation measurements, but browser timings such as DevTools TTFB, DOMContentLoaded, Load, transferred bytes and main-thread work are still manual/external.
+- **Impact:** Operators can see backend durations and row counts, but cannot rely on Petyr Admin alone to diagnose browser rendering, asset weight, cache behavior or client-side responsiveness regressions.
+- **Status:** Open.
+- **Proposal / next action:** Decide whether to add a controlled Playwright/Lighthouse runner, keep browser timing as a manual checklist in `docs/08_operational_commands.md`, or introduce explicit client telemetry with privacy and retention rules.
+
 ## Define production PostgreSQL backup policy beyond Petyr Admin migration dumps
 
 - **Area:** Platform / PostgreSQL / Backup and recovery

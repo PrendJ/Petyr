@@ -10,7 +10,7 @@
     "db:push": "tsx prisma/safeDbPush.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "docker:bootstrap": "npm run db:push && tsx prisma/seed.ts",
+    "docker:bootstrap": "npm run db:seed",
     "test:auth": "tsc -p tsconfig.auth-test.json && node --test .tmp/auth-test/tests/redashIngestorAuth.test.js",
     "worker:sync": "tsx src/worker/syncRedash.ts --once",
     "worker:loop": "tsx src/worker/syncRedash.ts --loop"

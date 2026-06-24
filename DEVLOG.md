@@ -20,6 +20,25 @@ Each entry must include:
 
 ## 2026-06-24
 
+- **Area:** Petyr / Admin / Performance diagnostics
+- **Change:** Added persisted sanitized performance measurements in `petyr_performance_measurement`, mirrored the model in Forecasting and Redash Ingestor Prisma schemas, updated Forecasting and Redash performance helpers to write measurements, instrumented Data Health and monthly Excel export/import, added `GET /api/petyr/admin/performance-results`, and changed `/petyr-admin` Performance test results from static instrumentation coverage to real latest measurements with never-measured states.
+- **Reason:** Product requested the previously prepared performance meters to become active and valued inside Petyr Admin instead of requiring server-log inspection.
+- **Impact:** Petyr Admin now shows backend/server-side operation durations, row counts, status, measured time and safe scalar metadata. `PETYR_PERF_LOGS` still controls console verbosity only. No raw Redash payload, workbook content, customer rows, browser timing, API key or secret is stored.
+- **Files/documents involved:** `apps/forecasting-app/prisma/schema.prisma`, `apps/redash-ingestor/prisma/schema.prisma`, `apps/forecasting-app/src/lib/petyr/performance.ts`, `apps/redash-ingestor/src/lib/performance.ts`, `apps/forecasting-app/src/services/petyrDataHealthService.ts`, `apps/forecasting-app/src/services/petyrMonthlyForecastExcelService.ts`, `apps/forecasting-app/src/services/petyrPerformanceResultsService.ts`, `apps/forecasting-app/src/app/api/petyr/admin/performance-results/route.ts`, `apps/forecasting-app/src/app/petyr-admin/page.tsx`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/04_data_model.md`, `docs/05_forecasting_product_spec.md`, `docs/08_operational_commands.md`, `apps/forecasting-app/README.md`, `DECISIONS.md`, `BACKLOG.md`, `DEVLOG.md`.
+- **Follow-up:** Apply the Petyr superset schema in the target database, then load `/petyr-admin`, run Redash sync and Excel workflows to populate measurements. Browser-side performance capture remains a backlog item.
+
+## 2026-06-24
+
+- **Area:** Platform / Coolify deployment / Database bootstrap
+- **Change:** Reordered root Compose bootstrap so `forecasting-db-sync` runs first with the Petyr Prisma superset schema, changed `redash-bootstrap` to run only `npm run db:seed`, and made the Redash Ingestor `docker:bootstrap` script seed-only. Updated deployment docs to state that partial Redash Ingestor Prisma schema pushes must not run against the shared PostgreSQL schema.
+- **Reason:** Coolify startup failed because `redash-bootstrap` ran `prisma db push` from the Redash Ingestor partial schema and Prisma proposed dropping existing Petyr forecast tables in the shared `public` schema.
+- **Impact:** Deploy bootstrap no longer asks Prisma to drop Petyr tables such as `forecast_monthly`, `forecast_annual`, `ai_forecast_cache`, `forecast_change_log`, `forecast_save_session`, `management_objective` or `management_objective_change_log`. Fresh volumes are still initialized by the Petyr schema sync before the Redash source seed and optional Redash initial sync.
+- **Files/documents involved:** `docker-compose.yml`, `apps/redash-ingestor/package.json`, `README.md`, `README_INSTALL_DOCKER.md`, `DEPLOY.md`, `DECISIONS.md`, `DEVLOG.md`.
+- **Validation:** Passed `docker compose --env-file .env config --quiet` and `docker compose --env-file .env config --services`; Docker emitted the existing non-blocking warning reading `C:\Users\loren\.docker\config.json`. Rendered Compose JSON shows `forecasting-db-sync` depends only on healthy Postgres, `redash-bootstrap` runs `npm run db:seed` after `forecasting-db-sync`, `redash-initial-sync` runs after `redash-bootstrap`, and `platform-home` exposes container port `8080` without host `ports`. Focused source scans found no remaining `npm run docker:bootstrap`, `npm run db:push &&` or `--accept-data-loss` runtime path outside documentation warnings.
+- **Follow-up:** On Coolify, redeploy and verify bootstrap logs plus forecast table counts before considering the incident closed.
+
+## 2026-06-24
+
 - **Area:** Petyr / Forecasting App / Error pages
 - **Change:** Added branded Petyr fallback pages for 404, browser-facing 400 and 500 errors. Unknown routes now use a structured Petyr 404 page, runtime App Router errors use Petyr-styled 500 fallbacks with retry and Forecasting navigation, and invalid browser auth callback state redirects to `/forecasting/error?code=400` instead of returning raw JSON.
 - **Reason:** Product requested non-blank, structured error pages that keep the UNGUESS Petyr visual style and let users return to the Forecasting home page.

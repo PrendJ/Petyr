@@ -21,15 +21,15 @@ services:
       args:
         NEXT_PUBLIC_REDASH_INGESTOR_BASE_PATH: ${REDASH_INGESTOR_BASE_PATH:-/redash-ingestor}
     restart: "no"
-    command: npm run docker:bootstrap
+    command: npm run db:seed
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set and must match POSTGRES_DB, POSTGRES_USER and POSTGRES_PASSWORD}
       SYNC_MAX_AGE_SECONDS: ${SYNC_MAX_AGE_SECONDS:-0}
       NEXT_PUBLIC_REDASH_INGESTOR_BASE_PATH: ${REDASH_INGESTOR_BASE_PATH:-/redash-ingestor}
     depends_on:
-      postgres:
-        condition: service_healthy
+      forecasting-db-sync:
+        condition: service_completed_successfully
 
   forecasting-db-sync:
     build:
@@ -43,8 +43,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redash-bootstrap:
-        condition: service_completed_successfully
 
   redash-initial-sync:
     build:
@@ -78,8 +76,6 @@ services:
       REDASH_INITIAL_SYNC_ON_BOOTSTRAP: ${REDASH_INITIAL_SYNC_ON_BOOTSTRAP:-false}
     depends_on:
       redash-bootstrap:
-        condition: service_completed_successfully
-      forecasting-db-sync:
         condition: service_completed_successfully
 
   redash-ingestor:

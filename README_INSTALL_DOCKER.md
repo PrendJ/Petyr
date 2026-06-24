@@ -81,6 +81,12 @@ SYNC_LOCK_TTL_SECONDS=3600
 REDASH_INGESTOR_BASE_PATH=/redash-ingestor
 ```
 
+All'avvio del compose root, `forecasting-db-sync` prepara per primo lo schema
+PostgreSQL condiviso usando lo schema Prisma superset di Petyr. Solo dopo,
+`redash-bootstrap` esegue il seed idempotente delle sorgenti Redash. Non usare
+`prisma db push --accept-data-loss` e non lanciare lo schema Prisma parziale del
+Redash Ingestor contro il database condiviso.
+
 `DATABASE_URL` deve usare il servizio interno `postgres` come host e deve combaciare con `POSTGRES_DB`, `POSTGRES_USER` e `POSTGRES_PASSWORD`. Se cambi password dopo che il volume PostgreSQL e gia stato inizializzato, ricrea la risorsa/volume oppure mantieni le vecchie credenziali reali del volume.
 
 ---

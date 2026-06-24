@@ -108,10 +108,17 @@ forecast_save_session
 forecast_change_log
 company_forecast_status
 app_setting
+petyr_performance_measurement
 ai_forecast_cache
 management_objective
 management_objective_change_log
 ```
+
+`petyr_performance_measurement` stores sanitized operational measurements used
+by Petyr Admin. Forecasting and Redash Ingestor may write operation name,
+service name, status, duration, row count, timestamp and small scalar metadata.
+It must not store raw Redash payloads, uploaded workbook contents, customer rows,
+API keys, secrets or browser DevTools measurements.
 
 Business Unit is stored as a string for now so the schema can remain compatible with
 future source cleanup. App logic must validate it against the official values:

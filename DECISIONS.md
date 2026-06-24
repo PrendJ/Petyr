@@ -13,6 +13,26 @@ Each decision should include:
 
 ---
 
+## 2026-06-24 - Persist sanitized Petyr performance measurements in PostgreSQL
+
+- **Status:** Accepted.
+- **Context:** Petyr Admin had a Performance test results panel, but the prepared instrumentation only emitted optional server logs through `PETYR_PERF_LOGS`; the admin page could not show active or valued measurements.
+- **Decision:** Store sanitized server-side performance measurements in the shared PostgreSQL table `petyr_performance_measurement`, defined in the Petyr Prisma superset schema and mirrored in Redash Ingestor for writes. Forecasting and Redash Ingestor helpers may write service, operation, status, duration, row count, timestamp and scalar metadata. Petyr Admin exposes the latest values through `GET /api/petyr/admin/performance-results`.
+- **Alternatives discarded:** Continuing with server logs only; parsing container logs from Petyr Admin; storing raw request, workbook or Redash payload data; adding browser timing collection in this server-side task.
+- **Reason:** A small database-backed diagnostic table makes the existing admin panel actionable while preserving the documented PostgreSQL-centered architecture and avoiding customer data or secret exposure.
+- **Consequences:** Operators can see whether each documented server-side check has been measured and when. Browser DevTools metrics remain manual/external until a separate runner or client telemetry decision is made. Deployments must apply the Petyr superset schema before persisted performance results appear.
+- **Related docs:** `apps/forecasting-app/prisma/schema.prisma`, `apps/redash-ingestor/prisma/schema.prisma`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/04_data_model.md`, `docs/05_forecasting_product_spec.md`, `docs/08_operational_commands.md`.
+
+## 2026-06-24 - Run shared DB bootstrap from Petyr superset schema before Redash seed
+
+- **Status:** Accepted.
+- **Context:** Coolify deploy on commit `3d7219291cddd25254357a1c8d24e0b329758ce5` failed during container startup because `redash-bootstrap` ran `prisma db push` from `apps/redash-ingestor`, whose Prisma schema is partial, against the shared PostgreSQL `public` schema that also contains Petyr forecast tables.
+- **Decision:** The root Compose bootstrap order is `forecasting-db-sync` first, then `redash-bootstrap`, then optional `redash-initial-sync`. `forecasting-db-sync` is the only one-shot service that may apply the shared static database schema, using the Petyr Prisma superset schema and safe wrapper. `redash-bootstrap` is seed-only and must not run `prisma db push` against the shared schema.
+- **Alternatives discarded:** Passing `--accept-data-loss`; letting Redash Ingestor's partial schema mutate the shared `public` schema; splitting Redash and Petyr into separate schemas/databases in this hotfix.
+- **Reason:** A partial Prisma schema can interpret valid Petyr tables as unmanaged tables to drop. The Petyr superset schema is already documented as the source for shared static tables and is the least invasive way to keep fresh-volume bootstrap automatic without risking forecast data.
+- **Consequences:** Existing forecast tables such as `forecast_monthly`, `forecast_annual`, `ai_forecast_cache` and `management_objective` are preserved during deploy. Fresh volumes are still initialized automatically before app startup. A future separation into schemas/databases remains possible only after reviewing Petyr read models.
+- **Related docs:** `docker-compose.yml`, `apps/redash-ingestor/package.json`, `README.md`, `README_INSTALL_DOCKER.md`, `DEPLOY.md`, `DEVLOG.md`.
+
 ## 2026-06-23 - Make Petyr Coolify compose bootstrap and gateway-safe
 
 - **Status:** Accepted.

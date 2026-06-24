@@ -11,7 +11,7 @@ import { requirePetyrPagePermission } from "@/lib/petyr/auth";
 import { PETYR_PERMISSIONS } from "@/lib/petyr/authCore";
 import { resolvePreferredCsmName } from "@/lib/petyr/csmIdentity";
 import { formatPetyrInteger } from "@/lib/petyr/formatters";
-import { isPetyrPerfLogsEnabled, PETYR_PERFORMANCE_CHECKS } from "@/lib/petyr/performance";
+import { isPetyrPerfLogsEnabled } from "@/lib/petyr/performance";
 import {
   getDefaultPetyrAiModelSetting,
   getPetyrAiModelSetting,
@@ -23,6 +23,10 @@ import {
   type PetyrDataHealthResult
 } from "@/services/petyrDataHealthService";
 import { getForecastEntryCompanies } from "@/services/petyrDataService";
+import {
+  getPetyrPerformanceResults,
+  type PetyrPerformanceResults
+} from "@/services/petyrPerformanceResultsService";
 
 export const dynamic = "force-dynamic";
 
@@ -66,12 +70,26 @@ function formatNumber(value: number | null | undefined) {
   return formatPetyrInteger(value);
 }
 
+function formatDuration(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "n/a";
+  if (value < 1000) return `${formatPetyrInteger(value)} ms`;
+
+  return `${new Intl.NumberFormat("it-IT", { maximumFractionDigits: 2 }).format(value / 1000)} s`;
+}
+
 function formatBoolean(value: boolean) {
   return value ? "yes" : "no";
 }
 
 function formatList(items: string[]) {
   return items.length > 0 ? items.join(", ") : "None";
+}
+
+function formatMetadata(metadata: Record<string, string | number | boolean | null>) {
+  const entries = Object.entries(metadata);
+  if (!entries.length) return "n/a";
+
+  return entries.map(([key, value]) => `${key}: ${value === null ? "n/a" : String(value)}`).join(" · ");
 }
 
 function syncStatusBadgeClass(status: string | null | undefined) {
@@ -100,6 +118,20 @@ async function loadDataHealth(): Promise<LoadState<PetyrDataHealthResult>> {
   try {
     return {
       data: await getPetyrDataHealth(),
+      error: null
+    };
+  } catch (error) {
+    return {
+      data: null,
+      error: formatError(error)
+    };
+  }
+}
+
+async function loadPerformanceResults(): Promise<LoadState<PetyrPerformanceResults>> {
+  try {
+    return {
+      data: await getPetyrPerformanceResults(),
       error: null
     };
   } catch (error) {
@@ -216,12 +248,23 @@ function RedashIngestorEntryPoint() {
   );
 }
 
-function PerformanceTestResultsSection() {
+function PerformanceTestResultsSection({ state }: { state: LoadState<PetyrPerformanceResults> }) {
   const perfLogsEnabled = isPetyrPerfLogsEnabled();
+  const data = state.data;
+
+  if (!data) {
+    return (
+      <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+        Unable to load performance results: {state.error || "Unknown error"}
+      </div>
+    );
+  }
+
+  const measuredCount = data.checks.filter((check) => check.measured).length;
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           <div className="text-xs font-medium uppercase tracking-wide text-slate-500">PETYR_PERF_LOGS</div>
           <div className="mt-1">
@@ -232,27 +275,59 @@ function PerformanceTestResultsSection() {
         </div>
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
           <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Result location</div>
-          <div className="mt-1 font-medium text-slate-900">Server logs only</div>
+          <div className="mt-1 font-medium text-slate-900">
+            {data.persistenceEnabled ? "PostgreSQL" : "Table missing"}
+          </div>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Measured checks</div>
+          <div className="mt-1 font-semibold text-slate-900">
+            {formatNumber(measuredCount)} / {formatNumber(data.checks.length)}
+          </div>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Checked</div>
+          <div className="mt-1 font-medium text-slate-900">{formatDateTime(data.checkedAt)}</div>
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
-        Detailed duration and row-count test results are emitted only from server-side services when PETYR_PERF_LOGS=true. This admin-only panel reports instrumentation coverage without exposing customer rows, Redash payloads, API keys or secrets.
-      </div>
+      {data.warnings.length > 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          {data.warnings.join(" ")}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+          The table stores sanitized duration, row-count and status metadata only. Server console logs remain controlled by PETYR_PERF_LOGS.
+        </div>
+      )}
 
-      <div className="overflow-hidden rounded-xl border border-slate-200">
-        <table className="w-full text-left text-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <table className="w-full min-w-[980px] text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-3 py-2 font-medium">Check</th>
+              <th className="px-3 py-2 font-medium">Service</th>
               <th className="px-3 py-2 font-medium">Status</th>
+              <th className="px-3 py-2 font-medium">Duration</th>
+              <th className="px-3 py-2 font-medium">Rows</th>
+              <th className="px-3 py-2 font-medium">Measured</th>
+              <th className="px-3 py-2 font-medium">Metadata</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 bg-white text-slate-700">
-            {PETYR_PERFORMANCE_CHECKS.map((check) => (
-              <tr key={check}>
-                <td className="px-3 py-2 font-medium text-slate-900">{check}</td>
-                <td className="px-3 py-2"><Badge variant="outline">instrumented</Badge></td>
+            {data.checks.map((check) => (
+              <tr key={`${check.service}-${check.operation}`}>
+                <td className="px-3 py-2 font-medium text-slate-900">{check.operation}</td>
+                <td className="px-3 py-2">{check.service}</td>
+                <td className="px-3 py-2">
+                  <Badge className={check.measured ? syncStatusBadgeClass(check.status) : "bg-slate-100 text-slate-700"}>
+                    {check.status}
+                  </Badge>
+                </td>
+                <td className="px-3 py-2">{formatDuration(check.durationMs)}</td>
+                <td className="px-3 py-2">{formatNumber(check.rowCount)}</td>
+                <td className="px-3 py-2">{formatDateTime(check.measuredAt)}</td>
+                <td className="max-w-[320px] px-3 py-2 text-xs text-slate-500">{formatMetadata(check.metadata)}</td>
               </tr>
             ))}
           </tbody>
@@ -535,8 +610,9 @@ function DataHealthSection({ state }: { state: LoadState<PetyrDataHealthResult> 
 
 export default async function PetyrAdminPage() {
   const identity = await requirePetyrPagePermission(PETYR_PERMISSIONS.admin);
-  const [dataHealth, aiSetting, csmFilterCandidates] = await Promise.all([
+  const [dataHealth, performanceResults, aiSetting, csmFilterCandidates] = await Promise.all([
     loadDataHealth(),
+    loadPerformanceResults(),
     loadAiSetting(),
     loadCsmFilterCandidates()
   ]);
@@ -579,7 +655,7 @@ export default async function PetyrAdminPage() {
           description="Admin-only instrumentation coverage for Petyr and Redash Ingestor server-side performance checks."
           title="Performance test results"
         >
-          <PerformanceTestResultsSection />
+          <PerformanceTestResultsSection state={performanceResults} />
         </SectionCard>
 
         <SectionCard

@@ -310,6 +310,13 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
+Petyr Admin also reads sanitized persisted server-side measurements from
+`petyr_performance_measurement` through
+`GET /api/petyr/admin/performance-results`. `PETYR_PERF_LOGS=true` controls
+console log verbosity only; persisted measurements store service, operation,
+status, duration, row count, timestamp and scalar metadata, not raw Redash
+payloads, workbook contents, customer rows, secrets or browser DevTools timings.
+
 Open log tails in separate terminals before measuring:
 
 ```bash

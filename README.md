@@ -42,9 +42,11 @@ a ogni startup: uno schema Prisma parziale puo' interpretare le tabelle di un
 altro servizio come estranee e tentare di eliminarle.
 
 La preparazione dello schema e gestita da step controllati di bootstrap: in root
-compose `redash-bootstrap` e `forecasting-db-sync` sono servizi one-shot e
-idempotenti che devono completare prima dei container applicativi. La prima sync
-Redash resta opzionale con `REDASH_INITIAL_SYNC_ON_BOOTSTRAP=true`.
+compose `forecasting-db-sync` applica per primo lo schema Prisma superset di
+Petyr, poi `redash-bootstrap` esegue solo il seed idempotente delle sorgenti
+Redash. Nessun servizio con schema Prisma parziale deve eseguire `db push` sullo
+schema PostgreSQL condiviso. La prima sync Redash resta opzionale con
+`REDASH_INITIAL_SYNC_ON_BOOTSTRAP=true`.
 
 Guida completa:
 

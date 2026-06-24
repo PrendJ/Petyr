@@ -9,6 +9,7 @@ import {
   type PetyrBusinessUnit
 } from "@/lib/petyr/constants";
 import { PETYR_EXCEL_CURRENCY_NUM_FORMAT } from "@/lib/petyr/formatters";
+import { startPetyrPerformanceTimer } from "@/lib/petyr/performance";
 import {
   getCanonicalCompanyOwnershipPairs,
   normalizeCompanyOwnershipKey
@@ -541,22 +542,39 @@ function addValidationRulesSheet(workbook: ExcelJS.Workbook) {
 }
 
 export async function buildMonthlyForecastWorkbookXlsx(input: { year: number; csmName?: string | null }) {
-  const data = await loadExportData(input);
-  const workbook = new ExcelJS.Workbook();
+  const finishPerformance = startPetyrPerformanceTimer("exportMonthlyForecastWorkbookXlsx", {
+    year: input.year,
+    hasCsmName: Boolean(input.csmName?.trim())
+  });
 
-  workbook.creator = "Petyr Admin";
-  workbook.created = new Date();
-  workbook.modified = new Date();
-  workbook.properties.date1904 = false;
+  try {
+    const data = await loadExportData(input);
+    const workbook = new ExcelJS.Workbook();
 
-  addInstructionsSheet(workbook, input.year, data.warnings);
-  addForecastInputSheet(workbook, data.rows);
-  addBusinessUnitsSheet(workbook);
-  addCompaniesSheet(workbook, data.referenceCompanies);
-  addValidationRulesSheet(workbook);
+    workbook.creator = "Petyr Admin";
+    workbook.created = new Date();
+    workbook.modified = new Date();
+    workbook.properties.date1904 = false;
 
-  const buffer = await workbook.xlsx.writeBuffer();
-  return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+    addInstructionsSheet(workbook, input.year, data.warnings);
+    addForecastInputSheet(workbook, data.rows);
+    addBusinessUnitsSheet(workbook);
+    addCompaniesSheet(workbook, data.referenceCompanies);
+    addValidationRulesSheet(workbook);
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    finishPerformance({
+      status: "success",
+      rowCount: data.rows.length,
+      warnings: data.warnings.length,
+      referenceCompanies: data.referenceCompanies.length
+    });
+
+    return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  } catch (error) {
+    finishPerformance({ status: "failed" });
+    throw error;
+  }
 }
 
 function normalizeHeader(value: string) {
@@ -690,8 +708,14 @@ export async function importMonthlyForecastWorkbookXlsx(
   options: { fileName?: string } = {}
 ): Promise<MonthlyForecastImportResult> {
   const startedAt = Date.now();
+  const finishPerformance = startPetyrPerformanceTimer("importMonthlyForecastWorkbookXlsx");
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+  try {
+    await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+  } catch (error) {
+    finishPerformance({ status: "failed" });
+    throw error;
+  }
 
   const sheet = workbook.getWorksheet("Forecast Input");
   const warnings: MonthlyForecastImportWarning[] = [
@@ -702,12 +726,14 @@ export async function importMonthlyForecastWorkbookXlsx(
   ];
 
   if (!sheet) {
-    return buildExcelFailure({
+    const result = buildExcelFailure({
       fileName: options.fileName,
       startedAt,
       errors: [{ row: 1, field: "sheet", message: 'Workbook must include a "Forecast Input" sheet.' }],
       warnings
     });
+    finishPerformance({ status: "failed", rowCount: result.totalRows, errors: result.errors.length });
+    return result;
   }
 
   const headerIndexes = new Map<string, number>();
@@ -753,13 +779,15 @@ export async function importMonthlyForecastWorkbookXlsx(
   }
 
   if (headerErrors.length > 0) {
-    return buildExcelFailure({
+    const result = buildExcelFailure({
       fileName: options.fileName,
       totalRows: Math.max(sheet.actualRowCount - 1, 0),
       startedAt,
       errors: headerErrors,
       warnings
     });
+    finishPerformance({ status: "failed", rowCount: result.totalRows, errors: result.errors.length });
+    return result;
   }
 
   const records: MonthlyForecastImportInputRecord[] = [];
@@ -793,7 +821,7 @@ export async function importMonthlyForecastWorkbookXlsx(
     recordsByRow.set(rowNumber, record);
   }
 
-  return importMonthlyForecastRecords(records, {
+  const result = await importMonthlyForecastRecords(records, {
     fileName: options.fileName,
     source: EXCEL_IMPORT_SOURCE,
     emptyFieldName: "xlsx",
@@ -802,4 +830,16 @@ export async function importMonthlyForecastWorkbookXlsx(
     warnings,
     buildProblemRows: (errors) => buildProblemRows(recordsByRow, errors)
   });
+  finishPerformance({
+    status: result.ok ? "success" : "failed",
+    rowCount: result.totalRows,
+    importableRows: result.importableRows,
+    changedRows: result.changedRows,
+    importedRows: result.importedRows,
+    skippedRows: result.skippedRows,
+    errors: result.errors.length,
+    warnings: result.warnings?.length ?? 0
+  });
+
+  return result;
 }

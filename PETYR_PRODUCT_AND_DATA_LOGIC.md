@@ -1420,6 +1420,7 @@ Rules for this cycle:
 It is used for these visible sections, in display order:
 
 - data health diagnostics;
+- performance test results for sanitized server-side operation measurements;
 - OpenRouter model settings;
 - PostgreSQL database backup export/import for server migration and controlled recovery;
 - Excel monthly forecast import/export as the recommended admin workflow;
@@ -1454,8 +1455,19 @@ Excel admin workflow rules:
 Monthly import behavior must not be changed outside tasks explicitly dedicated
 to monthly import performance/status. New imports for Initial Forecast 2026
 must be separate and must not alter the existing monthly import behavior.
-Excel import performance is outside this cycle; do not create new performance
-tasks in this package unless a later task explicitly selects that scope.
+Monthly Excel performance/status visibility is limited to sanitized server-side
+operation measurements and existing import result counters unless a later task
+explicitly changes import behavior.
+
+Performance results rules:
+
+- endpoint: `GET /api/petyr/admin/performance-results`;
+- table: `petyr_performance_measurement`;
+- visible values: service, operation, status, duration, row count, measured time
+  and scalar metadata;
+- allowed writers: Forecasting app and Redash Ingestor instrumentation helpers;
+- forbidden values: raw Redash payloads, uploaded workbook contents, customer
+  rows, API keys, secrets and browser DevTools timing values.
 
 Initial Forecast baseline workflow:
 

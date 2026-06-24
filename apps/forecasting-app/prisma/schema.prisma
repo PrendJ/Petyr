@@ -277,6 +277,21 @@ model AppSetting {
   @@map("app_setting")
 }
 
+model PetyrPerformanceMeasurement {
+  id         String   @id @default(cuid())
+  service    String
+  operation  String
+  status     String   @default("measured")
+  durationMs Int?     @map("duration_ms")
+  rowCount   Int?     @map("row_count")
+  metadata   Json     @default("{}")
+  measuredAt DateTime @default(now()) @map("measured_at")
+
+  @@index([service, operation, measuredAt], map: "petyr_performance_measurement_service_op_time_idx")
+  @@index([measuredAt], map: "petyr_performance_measurement_measured_at_idx")
+  @@map("petyr_performance_measurement")
+}
+
 model AiForecastCache {
   id                    String   @id @default(cuid())
   companyName           String   @map("company_name")

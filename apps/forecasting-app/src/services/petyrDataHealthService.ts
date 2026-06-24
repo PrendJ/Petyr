@@ -6,6 +6,7 @@ import {
 } from "@/config/redashFieldMapping";
 import { prisma } from "@/lib/db";
 import { PETYR_BUSINESS_UNITS, normalizePetyrBusinessUnit } from "@/lib/petyr/constants";
+import { startPetyrPerformanceTimer } from "@/lib/petyr/performance";
 import { getCanonicalCompanyOwnershipBranches } from "@/services/petyrCompanyOwnershipService";
 import {
   getRedashFieldMappingDiagnostics,
@@ -1219,61 +1220,75 @@ async function safeGetMappingDiagnostics(warnings: PetyrDataHealthIssue[]) {
 }
 
 export async function getPetyrDataHealth(): Promise<PetyrDataHealthResult> {
+  const finishPerformance = startPetyrPerformanceTimer("getPetyrDataHealth");
   const checkedAt = new Date().toISOString();
   const blockingIssues: PetyrDataHealthIssue[] = [];
   const warnings: PetyrDataHealthIssue[] = [];
-  const [sourceResult, inspectedTables] = await Promise.all([
-    getRedashSources(),
-    Promise.all(MATERIALIZED_TABLES.map(inspectMaterializedTable))
-  ]);
-  const materializedTables = buildRecordMap(inspectedTables);
-  const rowCounts = Object.fromEntries(
-    inspectedTables.map((table) => [table.tableName, table.rowCount])
-  );
-  const availableColumns = Object.fromEntries(
-    inspectedTables.map((table) => [table.tableName, table.columns.map((column) => column.name)])
-  );
-  const sources = buildSources(sourceResult.records);
-  const ownership = await buildOwnershipDiagnostics(materializedTables);
-  const mappingDiagnostics = await safeGetMappingDiagnostics(warnings);
-  const managementObjectives = await inspectManagementObjectives(warnings);
 
-  addMissingSourceWarnings({
-    warnings,
-    redashSourceModel: sourceResult.redashSourceModel,
-    sources
-  });
-  addTableInspectionIssues({
-    blockingIssues,
-    warnings,
-    tables: materializedTables
-  });
-  addCoreDataIssues({
-    blockingIssues,
-    warnings,
-    tables: materializedTables,
-    ownership
-  });
-  await addBusinessUnitQualityWarnings({
-    warnings,
-    tables: materializedTables
-  });
-  await addInitialForecastSnapshotDiagnostics(warnings);
+  try {
+    const [sourceResult, inspectedTables] = await Promise.all([
+      getRedashSources(),
+      Promise.all(MATERIALIZED_TABLES.map(inspectMaterializedTable))
+    ]);
+    const materializedTables = buildRecordMap(inspectedTables);
+    const rowCounts = Object.fromEntries(
+      inspectedTables.map((table) => [table.tableName, table.rowCount])
+    );
+    const availableColumns = Object.fromEntries(
+      inspectedTables.map((table) => [table.tableName, table.columns.map((column) => column.name)])
+    );
+    const sources = buildSources(sourceResult.records);
+    const ownership = await buildOwnershipDiagnostics(materializedTables);
+    const mappingDiagnostics = await safeGetMappingDiagnostics(warnings);
+    const managementObjectives = await inspectManagementObjectives(warnings);
 
-  return {
-    ok: blockingIssues.length === 0,
-    sources: {
+    addMissingSourceWarnings({
+      warnings,
       redashSourceModel: sourceResult.redashSourceModel,
-      expected: sources,
+      sources
+    });
+    addTableInspectionIssues({
+      blockingIssues,
+      warnings,
+      tables: materializedTables
+    });
+    addCoreDataIssues({
+      blockingIssues,
+      warnings,
+      tables: materializedTables,
       ownership
-    },
-    managementObjectives,
-    materializedTables,
-    rowCounts,
-    availableColumns,
-    mappingDiagnostics,
-    blockingIssues,
-    warnings,
-    checkedAt
-  };
+    });
+    await addBusinessUnitQualityWarnings({
+      warnings,
+      tables: materializedTables
+    });
+    await addInitialForecastSnapshotDiagnostics(warnings);
+
+    finishPerformance({
+      status: blockingIssues.length === 0 ? "success" : "warning",
+      rowCount: Object.values(rowCounts).reduce<number>((sum, value) => sum + (value ?? 0), 0),
+      blockingIssues: blockingIssues.length,
+      warnings: warnings.length
+    });
+
+    return {
+      ok: blockingIssues.length === 0,
+      sources: {
+        redashSourceModel: sourceResult.redashSourceModel,
+        expected: sources,
+        ownership
+      },
+      managementObjectives,
+      materializedTables,
+      rowCounts,
+      availableColumns,
+      mappingDiagnostics,
+      blockingIssues,
+      warnings,
+      checkedAt
+    };
+  } catch (error) {
+    finishPerformance({ status: "failed" });
+    throw error;
+  }
 }

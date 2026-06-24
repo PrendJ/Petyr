@@ -180,12 +180,12 @@ Coolify may expose `NODE_ENV=production` while building images. The app Dockerfi
 Root compose runs schema preparation as one-shot services before long-running app containers start:
 
 ```txt
-redash-bootstrap      -> npm run docker:bootstrap
 forecasting-db-sync   -> npm run db:sync
+redash-bootstrap      -> npm run db:seed
 redash-initial-sync   -> optional npm run worker:sync
 ```
 
-`redash-bootstrap` applies the Redash Ingestor schema and seeds the required sources. `forecasting-db-sync` applies the Petyr superset schema with the safe DB push wrapper. Long-running app and worker containers depend on these one-shot services completing successfully.
+`forecasting-db-sync` runs first and applies the Petyr Prisma superset schema with the safe DB push wrapper. `redash-bootstrap` then seeds the required Redash Ingestor sources only; it must not run the Redash Ingestor partial Prisma schema against the shared PostgreSQL `public` schema, because that database also contains Petyr forecast tables. Long-running app and worker containers depend on these one-shot services completing successfully.
 
 The first Redash data sync is opt-in:
 

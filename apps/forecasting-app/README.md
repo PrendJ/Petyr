@@ -13,6 +13,7 @@ This base app includes:
 - Management Objectives in Management View, with `/forecasting/entry/objectives` kept as a management-only compatibility route;
 - PostgreSQL database backup export/import in `/petyr-admin`;
 - Excel-first monthly forecast import/export in `/petyr-admin`;
+- persisted sanitized performance results in `/petyr-admin`;
 - local UI components needed by the rendering;
 - Dockerfile;
 - Prisma read model for Redash snapshots;
@@ -165,6 +166,18 @@ POST /api/petyr/admin/import-monthly-forecast-xlsx
 Excel is the recommended bulk admin format for 2026 historical input and CSM-friendly
 forecast updates. CSV import/export routes remain available as legacy/advanced
 compatibility.
+
+Petyr Admin performance results use:
+
+```txt
+GET /api/petyr/admin/performance-results
+```
+
+The endpoint requires `petyr:admin` and reads `petyr_performance_measurement`.
+Forecasting and Redash Ingestor write only sanitized operation measurements:
+service, operation, status, duration, row count, measured time and small scalar
+metadata. Browser DevTools timings, raw Redash payloads, workbook contents,
+customer rows and secrets are not stored.
 
 Petyr Admin database backup workflow uses:
 

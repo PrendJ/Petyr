@@ -410,6 +410,7 @@ Temporary internal admin area.
 
 Sections, in display order:
 - Data health diagnostics for the Redash Ingestor to PostgreSQL to Petyr service flow;
+- Performance test results for sanitized server-side operation measurements;
 - an operator link to the Redash Ingestor dashboard at `/redash-ingestor`;
 - PostgreSQL database backup export/import for server migration and controlled recovery;
 - AI model settings for the future OpenRouter-backed notes and forecast explanation flow;
@@ -471,6 +472,20 @@ and official Business Units without a configured objective for the current year.
 Initial Forecast data health warns when `forecast_annual_snapshot` is missing or
 when the current year has no `snapshot_type=initial` rows.
 
+The performance results endpoint is:
+
+```txt
+GET /api/petyr/admin/performance-results
+```
+
+It requires `petyr:admin`, reads only PostgreSQL and returns the latest persisted
+server-side measurement for each documented Petyr/Redash performance check plus
+a short recent history. Measurements are written to
+`petyr_performance_measurement` with sanitized service, operation, status,
+duration, row count, timestamp and scalar metadata only. The endpoint must not
+return raw Redash payloads, uploaded workbook contents, customer rows, secrets or
+browser DevTools timing values.
+
 The recommended monthly forecast Excel export endpoint is:
 
 ```txt
@@ -509,9 +524,10 @@ columns, creates one save session with source `Admin Excel Import`, logs changed
 values and returns imported/skipped row counts, errors, warnings and a preview of
 problematic rows when available.
 
-Excel import performance is outside this cycle. Do not add new import
-performance tasks in this package unless a later task explicitly selects that
-scope.
+Excel import performance/status visibility is now limited to sanitized
+operational measurements and the existing import result counters. Do not change
+monthly import business behavior, worksheet contract, forecast ownership or audit
+semantics unless a later task explicitly selects that scope.
 
 The monthly template export endpoint is:
 
