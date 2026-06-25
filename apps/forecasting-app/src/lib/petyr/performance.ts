@@ -10,6 +10,8 @@ export const PETYR_PERFORMANCE_CHECKS = [
   "getCompanyDetail",
   "getForecastEntryContext",
   "getForecastEntryCompanies",
+  "getForecastEntryBatch",
+  "getAnnualForecastEntryBatch",
   "getPetyrDataHealth",
   "exportMonthlyForecastWorkbookXlsx",
   "importMonthlyForecastWorkbookXlsx",

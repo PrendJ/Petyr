@@ -28,8 +28,8 @@ Project-specific backlog items should be placed in the most specific backlog ava
 - **Area:** Petyr / Forecasting App / Forecast Entry performance
 - **Problem/question:** The first current-month batch-entry implementation may reuse existing Forecast Entry read models per company to preserve correctness and avoid schema/data-flow changes. This can become too broad for CSMs with large portfolios.
 - **Impact:** Correctness is preserved, but `/forecasting/entry` and `GET /api/petyr/forecast-entry/batch` could become slow if each selected CSM portfolio triggers repeated broad PostgreSQL reads.
-- **Status:** Open.
-- **Proposal / next action:** Measure warm `/forecasting/entry` and `GET /api/petyr/forecast-entry/batch?csmName=...` on real data through the documented performance checklist. If thresholds are exceeded, add a company-scoped batch query path that loads campaign, monthly forecast, AI cache and status rows once per selected CSM/current month.
+- **Status:** Resolved on 2026-06-25 for the first Monthly/Annual batch read optimization pass.
+- **Proposal / next action:** Use Petyr Admin Performance Results to compare `getForecastEntryBatch` and `getAnnualForecastEntryBatch` on production-sized CSM portfolios. If p95 remains high after the portfolio-scoped read model and lazy Annual loading, open a follow-up for targeted indexes or materialized aggregate views.
 
 ## Define browser-side performance measurement capture for Petyr
 

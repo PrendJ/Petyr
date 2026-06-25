@@ -350,19 +350,7 @@ export default function AnnualForecastEntryBatchWorkspace({
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_180px_minmax(0,1fr)] lg:items-end">
-          <PetyrSelectField
-            label="CSM"
-            disabled={isLoading || isSaving}
-            value={selectedCsm}
-            onChange={(event) => void loadAnnualBatch(event.target.value, selectedYear)}
-          >
-            {batch.data.csmOptions.map((csmName) => (
-              <option key={csmName} value={csmName}>
-                {csmName}
-              </option>
-            ))}
-          </PetyrSelectField>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[180px_minmax(0,1fr)] lg:items-end">
           <PetyrSelectField
             label="Year"
             disabled={isLoading || isSaving}
@@ -384,7 +372,7 @@ export default function AnnualForecastEntryBatchWorkspace({
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <LegendChip className="border-blue-300 bg-blue-100" label="FC AI placeholder" />
+            <LegendChip className="border-blue-300 bg-blue-100" label="Forecast AI placeholder" />
             <LegendChip className="border-violet-300 bg-violet-100" label="AI confirmed" />
             <LegendChip className="border-emerald-300 bg-emerald-100" label="Manual value" />
             <LegendChip className="border-slate-300 bg-white" label="Saved value" />
@@ -401,19 +389,19 @@ export default function AnnualForecastEntryBatchWorkspace({
               <TableRow className="hover:bg-transparent">
                 <TableHead className="sticky left-0 z-20 min-w-[220px] bg-white">Customer</TableHead>
                 <TableHead className="min-w-[120px]">Active</TableHead>
-                <TableHead className="min-w-[160px]">FC Initial</TableHead>
-                <TableHead className="min-w-[150px]">FC Ongoing</TableHead>
+                <TableHead className="w-[104px] min-w-[104px]">Forecast Initial</TableHead>
+                <TableHead className="min-w-[150px]">Forecast Ongoing</TableHead>
                 <TableHead className="min-w-[150px]">Confidence</TableHead>
                 {batch.data.businessUnits.map((businessUnit) => (
-                  <TableHead key={businessUnit} className="min-w-[150px] text-right">
+                  <TableHead key={businessUnit} className="min-w-[105px] text-right">
                     {businessUnit}
                   </TableHead>
                 ))}
                 <TableHead className="min-w-[140px] text-right">Revenue EUR</TableHead>
                 <TableHead className="min-w-[140px] text-right">Planned EUR</TableHead>
-                <TableHead className="min-w-[130px] text-right">Revenue / FC</TableHead>
-                <TableHead className="min-w-[130px] text-right">Planned / FC</TableHead>
-                <TableHead className="min-w-[140px] text-right">Uncovered / FC</TableHead>
+                <TableHead className="min-w-[130px] text-right">Revenue / Forecast</TableHead>
+                <TableHead className="min-w-[130px] text-right">Planned / Forecast</TableHead>
+                <TableHead className="min-w-[140px] text-right">Uncovered / Forecast</TableHead>
                 <TableHead className="min-w-[120px]">History</TableHead>
               </TableRow>
             </TableHeader>
@@ -458,7 +446,7 @@ export default function AnnualForecastEntryBatchWorkspace({
                           value={initialValues[company.companyName] ?? ""}
                           onChange={(event) => updateInitial(company.companyName, event.target.value)}
                           placeholder="n/a"
-                          className={`h-10 min-w-[130px] rounded-xl text-right font-semibold ${
+                          className={`h-10 min-w-[91px] rounded-xl text-right font-semibold ${
                             touchedInitial.has(company.companyName) ? "border-emerald-300 bg-emerald-50" : "bg-white"
                           }`}
                         />
@@ -508,7 +496,7 @@ export default function AnnualForecastEntryBatchWorkspace({
                               onFocus={() => acceptAiPlaceholder(company, cell)}
                               onClick={() => acceptAiPlaceholder(company, cell)}
                               onChange={(event) => updateValue(company, cell, event.target.value)}
-                              className={`h-10 min-w-[130px] rounded-xl text-right font-semibold ${inputClass}`}
+                              className={`h-10 min-w-[91px] rounded-xl text-right font-semibold ${inputClass}`}
                             />
                             {sourceState ? (
                               <div className="mt-1 text-right text-[11px] font-medium text-slate-500">
@@ -517,9 +505,10 @@ export default function AnnualForecastEntryBatchWorkspace({
                             ) : cell.savedForecast.hasSavedValue ? (
                               <div className="mt-1 text-right text-[11px] text-slate-500">
                                 {cell.savedForecast.valueSource === "ai_confirmed" ? "AI confirmed" : "Saved"}
+                                {cell.aiForecast.value !== null ? ` (${formatPetyrCurrencyValue(cell.aiForecast.value)} AI Forecast)` : ""}
                               </div>
                             ) : aiPlaceholder ? (
-                              <div className="mt-1 text-right text-[11px] text-blue-700">FC AI</div>
+                              <div className="mt-1 text-right text-[11px] text-blue-700">Forecast AI</div>
                             ) : null}
                           </TableCell>
                         );

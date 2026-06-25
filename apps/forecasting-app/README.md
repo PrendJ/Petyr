@@ -167,7 +167,7 @@ The read endpoint requires `petyr:read`; the save endpoint and normal
 `/forecasting/entry` page require `petyr:forecast:write`. The normal page works
 only on the current server month/year, exposes only a CSM filter, official Petyr
 Business Units, current-month active forecast cells, read-only Closed Revenue
-and one note per company. The old full single-company Forecast Entry workspace
+and one note per company. Monthly data is loaded on the initial page render through a portfolio-scoped batch read model; Annual Forecast Entry is lazy-loaded only when the Annual tab is opened. The old full single-company Forecast Entry workspace
 is preserved at `/forecasting/entry/old` and requires `petyr:admin`.
 
 Normal Forecast Entry annual batch workflow uses:
@@ -177,11 +177,10 @@ GET /api/petyr/forecast-entry/annual-batch?csmName=...&year=YYYY
 POST /api/petyr/forecast-entry/annual-batch/save
 ```
 
-The annual section is a separate tab inside `/forecasting/entry`. It exposes CSM
-and Year filters, stores customer + year FC Initial and Confidence in
+The annual section is a separate tab inside `/forecasting/entry`. It exposes the Year filter; the visible CSM selector is scoped to Monthly Forecast Entry. It stores customer + year Forecast Initial and Confidence in
 `forecast_annual_entry`, stores annual BU values in `forecast_annual`, and
 audits effective changes through `forecast_save_session` /
-`forecast_change_log` with source `Annual Forecast Entry`. After schema changes,
+`forecast_change_log` with source `Annual Forecast Entry`. Its read endpoint uses a portfolio-scoped PostgreSQL read model for the selected CSM/year instead of loading full Company Detail for each customer. After schema changes,
 run `npm run db:sync` locally or apply the reviewed Prisma migration/deploy step
 in managed environments.
 

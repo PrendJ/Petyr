@@ -191,8 +191,7 @@ Normal `/forecasting/entry` requires `petyr:forecast:write` and is accessible to
 users who can write CSM forecasts. It no longer shows the old full single-company
 editor. The Monthly section works only on the current server month/year, exposes
 only a CSM filter, and renders the selected CSM's companies in one batch table.
-The Annual section is separate, exposes CSM and Year filters, and renders the
-selected CSM's full customer portfolio for the selected annual cycle.
+The Annual section is separate, exposes the Year filter, and renders the current annual portfolio for the selected annual cycle. The visible CSM selector belongs only to Monthly Forecast Entry.
 
 Normal Forecast Entry must not expose a company filter, Forecast Intelligence,
 deterministic preview, apply AI forecast, import/export, diagnostics or admin
@@ -219,9 +218,9 @@ through:
 GET /api/petyr/forecast-entry/batch
 ```
 
-The batch read endpoint requires `petyr:read`.
+The batch read endpoint requires `petyr:read`. It must use a portfolio-scoped PostgreSQL read model for the selected CSM and current server period, not one full per-company Forecast Entry context read per customer.
 
-Annual Forecast Entry reads CSM options, annual year options, official Business
+Annual Forecast Entry reads the selected annual portfolio, annual year options, official Business
 Units, customer active status, customer + year metadata, saved annual BU values,
 AI annual placeholders, selected-year Revenue, selected-year Planned, derived
 percentages and Company Detail history links through:
@@ -230,7 +229,7 @@ percentages and Company Detail history links through:
 GET /api/petyr/forecast-entry/annual-batch?csmName=...&year=YYYY
 ```
 
-The annual batch read endpoint requires `petyr:read`.
+The annual batch read endpoint requires `petyr:read`. It must use a portfolio-scoped PostgreSQL read model for the selected CSM and year, not one full Company Detail read per customer. The normal Forecast Entry page should load Monthly on initial render and lazy-load Annual only when the Annual tab is opened.
 
 The legacy single-company read endpoint remains available for the admin-only old
 workspace:
@@ -301,30 +300,30 @@ Annual Forecast Entry rules:
 - customer names link to Company Detail; the History action opens Company Detail
   at the change-history anchor in a new tab;
 - active status is a manual toggle persisted through `company_forecast_status`;
-- FC Initial is stored in `forecast_annual_entry.initial_forecast`, editable only
+- Forecast Initial is stored in `forecast_annual_entry.initial_forecast`, editable only
   from December 10 of year N-1 through January 10 of year N, and read-only
   outside that window;
-- FC Ongoing Confidence is stored in
+- Forecast Ongoing Confidence is stored in
   `forecast_annual_entry.ongoing_confidence`, accepts only `01 High`, `02 Mid`
   and `03 Low`, and is required when a row is modified;
 - Business Unit values use all official Petyr Business Units and are stored in
   `forecast_annual` with `value_source=manual` or `value_source=ai_confirmed`;
 - AI placeholders are displayed from cached AI forecast values but are not saved
-  and do not contribute to FC Ongoing until the CSM clicks/focuses or edits the
+  and do not contribute to Forecast Ongoing until the CSM clicks/focuses or edits the
   value;
-- FC Ongoing is derived as the sum of saved/confirmed BU values, not from the
+- Forecast Ongoing is derived as the sum of saved/confirmed BU values, not from the
   old Excel BU formula;
 - Revenue is selected-year campaign revenue closed through today, read from
   PostgreSQL-backed materialized data;
 - Planned is selected-year campaign revenue with end date from tomorrow through
   December 31 and status `Setup`, `Recruiting` or `Running`, read from the same
   PostgreSQL-backed materialized data for this Annual Entry workflow;
-- percentages are `Revenue / FC Ongoing`, `Planned / FC Ongoing`, and
-  `1 - Revenue% - Planned%`, with `n/a` when FC Ongoing is zero or missing;
+- percentages are `Revenue / Forecast Ongoing`, `Planned / Forecast Ongoing`, and
+  `1 - Revenue% - Planned%`, with `n/a` when Forecast Ongoing is zero or missing;
 - each effective annual save creates `forecast_save_session` and
   `forecast_change_log` audit rows with source `Annual Forecast Entry`;
 - annual saves reject unconfirmed placeholders, negative/non-numeric BU values,
-  FC Initial changes outside the edit window, unknown Business Units and missing
+  Forecast Initial changes outside the edit window, unknown Business Units and missing
   confidence on modified rows.
 
 Batch save rules:

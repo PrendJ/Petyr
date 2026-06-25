@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { PETYR_BUSINESS_UNITS, normalizePetyrBusinessUnit, type PetyrBusinessUnit } from "@/lib/petyr/constants";
+import { startPetyrPerformanceTimer } from "@/lib/petyr/performance";
 import { resolvePreferredCsmName } from "@/lib/petyr/csmIdentity";
 import {
   calculateAnnualForecastOngoing,
@@ -14,8 +15,10 @@ import {
   type PetyrAnnualForecastValueSource
 } from "@/lib/petyr/annualForecastEntryRules";
 import {
+  getAnnualForecastEntryPortfolioCompanies,
   getCompanyDetail,
   getForecastEntryCompanies,
+  type PetyrAnnualForecastEntryPortfolioCompany,
   type PetyrCampaignDetail,
   type PetyrCompanyDetail,
   type PetyrDataServiceResult
@@ -363,21 +366,16 @@ function sortAnnualCompanies(companies: AnnualForecastEntryBatchCompany[]) {
 
 function buildAnnualCompany(input: {
   company: CompanyOption;
-  detail: PetyrCompanyDetail;
+  portfolio: PetyrAnnualForecastEntryPortfolioCompany;
   entry: {
     initialForecast: Prisma.Decimal | null;
     ongoingConfidence: string | null;
   } | null;
   annualRows: Map<PetyrBusinessUnit, { value: Prisma.Decimal; valueSource: string; updatedAt: Date }>;
-  year: number;
-  today: Date;
 }): AnnualForecastEntryBatchCompany {
-  const revenueAndPlanned = summarizeRevenueAndPlanned(input.detail, input.year, input.today);
-  const aiForecasts = latestAnnualAiForecasts(input.detail, input.year);
-
   const businessUnits = PETYR_BUSINESS_UNITS.map<AnnualForecastEntryBatchCell>((businessUnit) => {
     const saved = input.annualRows.get(businessUnit);
-    const ai = aiForecasts.get(businessUnit);
+    const ai = input.portfolio.annualAiForecastsByBusinessUnit.get(businessUnit);
 
     return {
       businessUnit,
@@ -396,10 +394,10 @@ function buildAnnualCompany(input: {
     };
   });
   const fcOngoing = roundMoney(calculateAnnualForecastOngoing(businessUnits.map((cell) => cell.savedForecast.value)));
-  const revenue = roundMoney([...revenueAndPlanned.values()].reduce((sum, row) => sum + row.revenue, 0));
-  const planned = roundMoney([...revenueAndPlanned.values()].reduce((sum, row) => sum + row.planned, 0));
+  const revenue = roundMoney([...input.portfolio.revenueByBusinessUnit.values()].reduce((sum, value) => sum + value, 0));
+  const planned = roundMoney([...input.portfolio.plannedByBusinessUnit.values()].reduce((sum, value) => sum + value, 0));
   const percentages = calculateAnnualForecastPercentages({ revenue, planned, fcOngoing });
-  const isForecastActive = input.detail.companyStatus?.isActive ?? input.company.isForecastActive ?? true;
+  const isForecastActive = input.portfolio.companyStatus?.isActive ?? input.company.isForecastActive ?? true;
   const orderingBucket = isForecastActive
     ? "active"
     : revenue > 0 || planned > 0
@@ -407,8 +405,8 @@ function buildAnnualCompany(input: {
       : "inactive_empty";
 
   return {
-    companyName: input.detail.overview?.companyName ?? input.company.companyName,
-    csmName: input.detail.overview?.csmName ?? input.company.csmName ?? "Unassigned",
+    companyName: input.portfolio.companyName || input.company.companyName,
+    csmName: input.portfolio.csmName || input.company.csmName || "Unassigned",
     isForecastActive,
     initialForecast: decimalToNumber(input.entry?.initialForecast),
     ongoingConfidence: isPetyrAnnualConfidence(input.entry?.ongoingConfidence ?? "") ? input.entry?.ongoingConfidence as PetyrAnnualConfidence : null,
@@ -429,84 +427,107 @@ export async function getAnnualForecastEntryBatch(
   const diagnostics: string[] = [];
   const today = new Date();
   const selectedYear = parseYear(input.year, today);
-  const companiesResult = await getForecastEntryCompanies();
-  diagnostics.push(...companiesResult.diagnostics);
+  const finishPerformance = startPetyrPerformanceTimer("getAnnualForecastEntryBatch", { year: selectedYear });
 
-  const companies = toCompanyOptions(companiesResult.data);
-  const { selectedCsm, csmOptions } = selectCsm(input, companies);
-  const selectedCsmKey = normalizeKey(selectedCsm);
-  const scopedCompanies = companies.filter((company) => normalizeKey(company.csmName || "Unassigned") === selectedCsmKey);
-  const scopedCompanyNames = scopedCompanies.map((company) => company.companyName);
+  try {
+    const companiesResult = await getForecastEntryCompanies();
+    diagnostics.push(...companiesResult.diagnostics);
 
-  const [annualTableExists, entryTableExists] = await Promise.all([
-    relationExists("forecast_annual"),
-    relationExists("forecast_annual_entry")
-  ]);
-  const [annualRows, entryRows] = await Promise.all([
-    annualTableExists && scopedCompanyNames.length > 0
-      ? prisma.forecastAnnual.findMany({ where: { companyName: { in: scopedCompanyNames }, year: selectedYear } })
-      : Promise.resolve([]),
-    entryTableExists && scopedCompanyNames.length > 0
-      ? prisma.forecastAnnualEntry.findMany({ where: { companyName: { in: scopedCompanyNames }, year: selectedYear } })
-      : Promise.resolve([])
-  ]);
+    const companies = toCompanyOptions(companiesResult.data);
+    const { selectedCsm, csmOptions } = selectCsm(input, companies);
+    const selectedCsmKey = normalizeKey(selectedCsm);
+    const scopedCompanies = companies.filter((company) => normalizeKey(company.csmName || "Unassigned") === selectedCsmKey);
+    const scopedCompanyNames = scopedCompanies.map((company) => company.companyName);
 
-  if (!annualTableExists) {
-    diagnostics.push("forecast_annual is missing. Apply the forecasting app Prisma schema before Petyr can read annual BU forecasts.");
-  }
-  if (!entryTableExists) {
-    diagnostics.push("forecast_annual_entry is missing. Run Petyr schema sync before FC Initial and Confidence can be loaded.");
-  }
+    const [annualTableExists, entryTableExists, portfolioResult] = await Promise.all([
+      relationExists("forecast_annual"),
+      relationExists("forecast_annual_entry"),
+      getAnnualForecastEntryPortfolioCompanies({ companies: scopedCompanies, year: selectedYear })
+    ]);
+    diagnostics.push(...portfolioResult.diagnostics);
 
-  const annualRowsByCompany = new Map<string, Map<PetyrBusinessUnit, { value: Prisma.Decimal; valueSource: string; updatedAt: Date }>>();
-  for (const row of annualRows) {
-    const businessUnit = normalizeBusinessUnit(row.businessUnit);
-    if (!businessUnit) continue;
-    const companyKey = normalizeKey(row.companyName);
-    const byBusinessUnit = annualRowsByCompany.get(companyKey) ?? new Map();
-    byBusinessUnit.set(businessUnit, {
-      value: row.value,
-      valueSource: row.valueSource,
-      updatedAt: row.updatedAt
-    });
-    annualRowsByCompany.set(companyKey, byBusinessUnit);
-  }
+    const [annualRows, entryRows] = await Promise.all([
+      annualTableExists && scopedCompanyNames.length > 0
+        ? prisma.forecastAnnual.findMany({ where: { companyName: { in: scopedCompanyNames }, year: selectedYear } })
+        : Promise.resolve([]),
+      entryTableExists && scopedCompanyNames.length > 0
+        ? prisma.forecastAnnualEntry.findMany({ where: { companyName: { in: scopedCompanyNames }, year: selectedYear } })
+        : Promise.resolve([])
+    ]);
 
-  const entriesByCompany = new Map(entryRows.map((row) => [normalizeKey(row.companyName), row]));
-  const batchCompanies: AnnualForecastEntryBatchCompany[] = [];
-
-  for (const company of scopedCompanies) {
-    const detail = await getCompanyDetail(company.companyName, selectedYear);
-    diagnostics.push(...detail.diagnostics);
-    const companyKey = normalizeKey(detail.data.overview?.companyName ?? company.companyName);
-
-    batchCompanies.push(
-      buildAnnualCompany({
-        company,
-        detail: detail.data,
-        entry: entriesByCompany.get(companyKey) ?? null,
-        annualRows: annualRowsByCompany.get(companyKey) ?? new Map(),
-        year: selectedYear,
-        today
-      })
-    );
-  }
-
-  return {
-    source: "postgresql",
-    diagnostics: uniqueDiagnostics(diagnostics),
-    data: {
-      selectedCsm,
-      csmOptions,
-      selectedYear,
-      defaultYear: getAnnualForecastEntryDefaultYear(today),
-      yearOptions: getAnnualForecastEntryYearOptions(today),
-      initialMode: getAnnualForecastEntryInitialMode(selectedYear, today),
-      businessUnits: [...PETYR_BUSINESS_UNITS],
-      confidenceOptions: ["01 High", "02 Mid", "03 Low"],
-      companies: sortAnnualCompanies(batchCompanies)
+    if (!annualTableExists) {
+      diagnostics.push("forecast_annual is missing. Apply the forecasting app Prisma schema before Petyr can read annual BU forecasts.");
     }
-  };
+    if (!entryTableExists) {
+      diagnostics.push("forecast_annual_entry is missing. Run Petyr schema sync before FC Initial and Confidence can be loaded.");
+    }
+
+    const annualRowsByCompany = new Map<string, Map<PetyrBusinessUnit, { value: Prisma.Decimal; valueSource: string; updatedAt: Date }>>();
+    for (const row of annualRows) {
+      const businessUnit = normalizeBusinessUnit(row.businessUnit);
+      if (!businessUnit) continue;
+      const companyKey = normalizeKey(row.companyName);
+      const byBusinessUnit = annualRowsByCompany.get(companyKey) ?? new Map();
+      byBusinessUnit.set(businessUnit, {
+        value: row.value,
+        valueSource: row.valueSource,
+        updatedAt: row.updatedAt
+      });
+      annualRowsByCompany.set(companyKey, byBusinessUnit);
+    }
+
+    const entriesByCompany = new Map(entryRows.map((row) => [normalizeKey(row.companyName), row]));
+    const batchCompanies = scopedCompanies.map((company) => {
+      const companyKey = normalizeKey(company.companyName);
+      const portfolio = portfolioResult.data.get(companyKey) ?? {
+        companyName: company.companyName,
+        csmName: company.csmName || "Unassigned",
+        companyStatus: null,
+        revenueByBusinessUnit: new Map<string, number>(PETYR_BUSINESS_UNITS.map((businessUnit) => [businessUnit, 0])),
+        plannedByBusinessUnit: new Map<string, number>(PETYR_BUSINESS_UNITS.map((businessUnit) => [businessUnit, 0])),
+        annualAiForecastsByBusinessUnit: new Map<string, { value: number; confidenceScores: number[]; modelVersion: string | null; generatedAt: string | null }>(
+          PETYR_BUSINESS_UNITS.map((businessUnit) => [
+            businessUnit,
+            { value: 0, confidenceScores: [], modelVersion: null, generatedAt: null }
+          ])
+        )
+      } satisfies PetyrAnnualForecastEntryPortfolioCompany;
+
+      return buildAnnualCompany({
+        company,
+        portfolio,
+        entry: entriesByCompany.get(companyKey) ?? null,
+        annualRows: annualRowsByCompany.get(companyKey) ?? new Map()
+      });
+    });
+
+    finishPerformance({
+      status: "success",
+      rowCount: batchCompanies.length,
+      companiesCount: batchCompanies.length,
+      annualRows: annualRows.length,
+      entryRows: entryRows.length
+    });
+
+    return {
+      source: "postgresql",
+      diagnostics: uniqueDiagnostics(diagnostics),
+      data: {
+        selectedCsm,
+        csmOptions,
+        selectedYear,
+        defaultYear: getAnnualForecastEntryDefaultYear(today),
+        yearOptions: getAnnualForecastEntryYearOptions(today),
+        initialMode: getAnnualForecastEntryInitialMode(selectedYear, today),
+        businessUnits: [...PETYR_BUSINESS_UNITS],
+        confidenceOptions: ["01 High", "02 Mid", "03 Low"],
+        companies: sortAnnualCompanies(batchCompanies)
+      }
+    };
+  } catch (error) {
+    finishPerformance({ status: "failed" });
+    throw error;
+  }
 }
 
 function validateAnnualValues(values: unknown) {
@@ -567,7 +588,7 @@ function validateUpdates(updates: unknown): ValidatedAnnualUpdate[] {
     const initialForecast =
       Object.prototype.hasOwnProperty.call(update, "initialForecast") ? parseMoney(update.initialForecast) : null;
     if (Object.prototype.hasOwnProperty.call(update, "initialForecast") && !initialForecast) {
-      throw new AnnualForecastEntryBatchError(`${companyName}: FC Initial must be numeric and greater than or equal to 0.`, 400);
+      throw new AnnualForecastEntryBatchError(`${companyName}: Forecast Initial must be numeric and greater than or equal to 0.`, 400);
     }
 
     const confidenceValue = asString(update.confidence);

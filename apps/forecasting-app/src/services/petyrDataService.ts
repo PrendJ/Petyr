@@ -547,6 +547,27 @@ export type PetyrForecastEntryContext = {
   agreements: PetyrAgreementDetail[];
 };
 
+export type PetyrAnnualForecastEntryPortfolioCompany = {
+  companyName: string;
+  csmName: string;
+  companyStatus: {
+    isActive: boolean;
+    reason: string | null;
+    updatedAt: string;
+  } | null;
+  revenueByBusinessUnit: Map<string, number>;
+  plannedByBusinessUnit: Map<string, number>;
+  annualAiForecastsByBusinessUnit: Map<
+    string,
+    {
+      value: number;
+      confidenceScores: number[];
+      modelVersion: string | null;
+      generatedAt: string | null;
+    }
+  >;
+};
+
 function sqlIdentifier(identifier: string) {
   if (!SAFE_IDENTIFIER_PATTERN.test(identifier)) {
     throw new Error(`Unsafe PostgreSQL identifier: ${identifier}`);
@@ -3869,6 +3890,289 @@ function filterCampaignRowsByYearMonth(input: {
     return campaignDate?.getFullYear() === input.year && campaignDate.getMonth() + 1 === input.month;
   });
 }
+
+type PetyrForecastEntryBatchCompanyInput = {
+  companyName: string;
+  csmName: string;
+};
+
+function forecastEntryCellKey(companyName: string, businessUnit: string, suffix: string) {
+  return [normalizeKey(companyName), normalizeKey(businessUnit), suffix].join("\u0000");
+}
+
+export async function getForecastEntryContextsBatch(input: {
+  csmName: string;
+  companies: PetyrForecastEntryBatchCompanyInput[];
+  year: number;
+  month: number;
+}) {
+  const diagnostics: string[] = [];
+  const today = new Date();
+  const resolvedYear = resolveYear(input.year, diagnostics);
+  const resolvedMonth = resolveMonth(input.month, diagnostics);
+
+  if (input.companies.length === 0) {
+    return createResult<PetyrForecastEntryContext[]>([], diagnostics);
+  }
+
+  try {
+    const inputs = await loadOverviewInputs(resolvedYear, resolvedMonth, diagnostics);
+    const overviewRows = buildOverviewRows({
+      year: resolvedYear,
+      month: resolvedMonth,
+      today,
+      campaignDateColumnExists: Boolean(inputs.campaignContext.columns.endDate),
+      campaignRows: inputs.campaignRows,
+      agreementRows: inputs.agreementRows,
+      ownershipMaps: inputs.ownershipMaps,
+      monthlyRows: inputs.monthlyRows,
+      annualRows: inputs.annualRows,
+      companyStatuses: inputs.companyStatuses,
+      aiRows: inputs.aiRows
+    });
+    const requestedKeys = new Set(input.companies.map((company) => normalizeKey(company.companyName)));
+    const overviewByKey = new Map(overviewRows.map((row) => [normalizeKey(row.companyName), row]));
+    const statusByKey = new Map(inputs.companyStatuses.map((row) => [normalizeKey(row.companyName), row]));
+    const monthlyByKey = new Map<string, ForecastMonthly>();
+    const annualByKey = new Map<string, ForecastAnnual>();
+    const aiByKey = new Map<string, AiForecastCache>();
+    const revenueByKey = new Map<string, number>();
+
+    for (const row of inputs.monthlyRows) {
+      const companyKey = normalizeKey(row.companyName);
+      if (!requestedKeys.has(companyKey) || row.year !== resolvedYear || row.month !== resolvedMonth) continue;
+      monthlyByKey.set(forecastEntryCellKey(row.companyName, row.businessUnit, row.forecastType), row);
+    }
+
+    for (const row of inputs.annualRows) {
+      const companyKey = normalizeKey(row.companyName);
+      if (!requestedKeys.has(companyKey) || row.year !== resolvedYear) continue;
+      annualByKey.set(forecastEntryCellKey(row.companyName, row.businessUnit, "annual"), row);
+    }
+
+    for (const row of latestAiForecasts(inputs.aiRows)) {
+      const companyKey = normalizeKey(row.companyName);
+      if (!requestedKeys.has(companyKey) || row.year !== resolvedYear || row.month !== resolvedMonth) continue;
+      aiByKey.set(forecastEntryCellKey(row.companyName, row.businessUnit, "ai"), row);
+    }
+
+    for (const row of inputs.campaignRows) {
+      const companyName = normalizeCellValue(row.company_name);
+      const companyKey = normalizeKey(companyName);
+      if (!requestedKeys.has(companyKey)) continue;
+
+      const campaignDate = parseDate(row.end_date);
+      const inSelectedMonth = inputs.campaignContext.columns.endDate
+        ? campaignDate?.getFullYear() === resolvedYear && campaignDate.getMonth() + 1 === resolvedMonth
+        : true;
+      if (!inSelectedMonth) continue;
+      if (!isWorkedCampaign({
+        row,
+        campaignDate,
+        year: resolvedYear,
+        today,
+        campaignDateColumnExists: Boolean(inputs.campaignContext.columns.endDate)
+      })) {
+        continue;
+      }
+
+      const businessUnit = normalizeBusinessUnit(row.business_unit);
+      const key = forecastEntryCellKey(companyName, businessUnit, "revenue");
+      revenueByKey.set(key, (revenueByKey.get(key) ?? 0) + parseNumber(row.revenue_value));
+    }
+
+    addCampaignActualDiagnostics({
+      campaignContext: inputs.campaignContext,
+      diagnostics,
+      label: "Forecast Entry batch closed revenue",
+      year: resolvedYear
+    });
+
+    const contexts = input.companies.map<PetyrForecastEntryContext>((companyInput) => {
+      const company = overviewByKey.get(normalizeKey(companyInput.companyName)) ?? null;
+      const resolvedCompanyName = company?.companyName ?? companyInput.companyName;
+      const businessUnits = PETYR_BUSINESS_UNITS.map<PetyrForecastEntryBusinessUnitContext>((businessUnit) => {
+        const previousMonthForecast = monthlyByKey.get(forecastEntryCellKey(resolvedCompanyName, businessUnit, "previous_month"));
+        const ongoingForecast = monthlyByKey.get(forecastEntryCellKey(resolvedCompanyName, businessUnit, "ongoing"));
+        const annualForecast = annualByKey.get(forecastEntryCellKey(resolvedCompanyName, businessUnit, "annual"));
+        const aiForecast = aiByKey.get(forecastEntryCellKey(resolvedCompanyName, businessUnit, "ai"));
+
+        return {
+          businessUnit,
+          actualRevenue: roundMoney(revenueByKey.get(forecastEntryCellKey(resolvedCompanyName, businessUnit, "revenue")) ?? 0),
+          previousMonthForecast: monthlyForecastValueContext(previousMonthForecast),
+          ongoingForecast: monthlyForecastValueContext(ongoingForecast),
+          annualForecast: annualForecastValueContext(annualForecast),
+          aiForecast: {
+            value: decimalToNumber(aiForecast?.forecastValue),
+            confidenceScore: decimalToNumber(aiForecast?.confidenceScore),
+            modelVersion: aiForecast?.modelVersion ?? null,
+            explanation: aiForecast?.explanation ?? null,
+            generatedAt: aiForecast?.generatedAt.toISOString() ?? null
+          }
+        };
+      });
+
+      return {
+        csmName: input.csmName,
+        companyName: resolvedCompanyName,
+        year: resolvedYear,
+        month: resolvedMonth,
+        entryMode: getForecastEntryMode({ year: resolvedYear, month: resolvedMonth }),
+        company,
+        companyStatus: companyStatusToContext(statusByKey.get(normalizeKey(resolvedCompanyName))),
+        businessUnits,
+        campaigns: [],
+        agreements: []
+      };
+    });
+
+    return createResult(contexts, diagnostics);
+  } catch (error) {
+    diagnostics.push(`Unable to read Petyr Forecast Entry batch contexts from PostgreSQL: ${errorMessage(error)}`);
+    return createResult<PetyrForecastEntryContext[]>([], diagnostics);
+  }
+}
+
+function annualEntryStatusKey(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function isAnnualEntryRevenueCampaign(row: MaterializedCampaignRow, year: number, today: Date) {
+  const endDate = parseDate(row.end_date);
+  if (!endDate || endDate.getFullYear() !== year || startOfLocalDay(endDate).getTime() > startOfLocalDay(today).getTime()) {
+    return false;
+  }
+
+  const status = annualEntryStatusKey(normalizeCellValue(row.campaign_status));
+  return !isInvalidCampaignStatus(status) && !isPlanningOnlyCampaignStatus(status);
+}
+
+
+function isAnnualEntryPlannedCampaign(row: MaterializedCampaignRow, year: number, today: Date) {
+  const endDate = parseDate(row.end_date);
+  if (!endDate || endDate.getFullYear() !== year) return false;
+
+  const campaignDate = startOfLocalDay(endDate);
+  const tomorrow = startOfLocalDay(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const yearEnd = new Date(year, 11, 31);
+  if (campaignDate.getTime() < tomorrow.getTime() || campaignDate.getTime() > yearEnd.getTime()) return false;
+
+  return ["setup", "recruiting", "running"].includes(annualEntryStatusKey(normalizeCellValue(row.campaign_status)));
+}
+
+export async function getAnnualForecastEntryPortfolioCompanies(input: {
+  companies: PetyrForecastEntryBatchCompanyInput[];
+  year: number;
+}) {
+  const diagnostics: string[] = [];
+  const today = new Date();
+  const resolvedYear = resolveYear(input.year, diagnostics);
+  const reportingMonth = getReportingMonth(resolvedYear, today);
+
+  if (input.companies.length === 0) {
+    return createResult<Map<string, PetyrAnnualForecastEntryPortfolioCompany>>(new Map(), diagnostics);
+  }
+
+  try {
+    const inputs = await loadOverviewInputs(resolvedYear, reportingMonth, diagnostics);
+    const overviewRows = buildOverviewRows({
+      year: resolvedYear,
+      month: reportingMonth,
+      today,
+      campaignDateColumnExists: Boolean(inputs.campaignContext.columns.endDate),
+      campaignRows: inputs.campaignRows,
+      agreementRows: inputs.agreementRows,
+      ownershipMaps: inputs.ownershipMaps,
+      monthlyRows: inputs.monthlyRows,
+      annualRows: inputs.annualRows,
+      companyStatuses: inputs.companyStatuses,
+      aiRows: inputs.aiRows
+    });
+    const requestedKeys = new Set(input.companies.map((company) => normalizeKey(company.companyName)));
+    const overviewByKey = new Map(overviewRows.map((row) => [normalizeKey(row.companyName), row]));
+    const statusByKey = new Map(inputs.companyStatuses.map((row) => [normalizeKey(row.companyName), row]));
+    const byCompany = new Map<string, PetyrAnnualForecastEntryPortfolioCompany>();
+
+    function ensure(companyName: string, fallbackCsmName = "Unassigned") {
+      const overview = overviewByKey.get(normalizeKey(companyName));
+      const resolvedCompanyName = overview?.companyName ?? companyName;
+      const companyKey = normalizeKey(resolvedCompanyName);
+      const existing = byCompany.get(companyKey);
+      if (existing) return existing;
+
+      const created: PetyrAnnualForecastEntryPortfolioCompany = {
+        companyName: resolvedCompanyName,
+        csmName: overview?.csmName ?? fallbackCsmName,
+        companyStatus: companyStatusToContext(statusByKey.get(companyKey)),
+        revenueByBusinessUnit: new Map<string, number>(PETYR_BUSINESS_UNITS.map((businessUnit) => [businessUnit, 0])),
+        plannedByBusinessUnit: new Map<string, number>(PETYR_BUSINESS_UNITS.map((businessUnit) => [businessUnit, 0])),
+        annualAiForecastsByBusinessUnit: new Map<string, { value: number; confidenceScores: number[]; modelVersion: string | null; generatedAt: string | null }>(
+          PETYR_BUSINESS_UNITS.map((businessUnit) => [
+            businessUnit,
+            { value: 0, confidenceScores: [], modelVersion: null, generatedAt: null }
+          ])
+        )
+      };
+      byCompany.set(companyKey, created);
+      return created;
+    }
+
+    for (const company of input.companies) ensure(company.companyName, company.csmName || "Unassigned");
+
+    for (const row of inputs.campaignRows) {
+      const companyName = normalizeCellValue(row.company_name);
+      const companyKey = normalizeKey(companyName);
+      if (!requestedKeys.has(companyKey)) continue;
+
+      const bucket = ensure(companyName);
+      const businessUnit = normalizeBusinessUnit(row.business_unit);
+      const campaignDate = parseDate(row.end_date);
+
+      if (isAnnualEntryRevenueCampaign(row, resolvedYear, today)) {
+        bucket.revenueByBusinessUnit.set(
+          businessUnit,
+          (bucket.revenueByBusinessUnit.get(businessUnit) ?? 0) + parseNumber(row.revenue_value)
+        );
+      } else if (isAnnualEntryPlannedCampaign(row, resolvedYear, today)) {
+        bucket.plannedByBusinessUnit.set(
+          businessUnit,
+          (bucket.plannedByBusinessUnit.get(businessUnit) ?? 0) + parseNumber(row.revenue_value)
+        );
+      }
+    }
+
+    for (const row of latestAiForecasts(inputs.aiRows)) {
+      const companyKey = normalizeKey(row.companyName);
+      if (!requestedKeys.has(companyKey) || row.year !== resolvedYear || row.month < 1 || row.month > 12) continue;
+
+      const bucket = ensure(row.companyName);
+      const businessUnit = normalizeBusinessUnit(row.businessUnit);
+      const ai = bucket.annualAiForecastsByBusinessUnit.get(businessUnit);
+      if (!ai) continue;
+
+      ai.value += decimalToNumber(row.forecastValue) ?? 0;
+      const confidence = decimalToNumber(row.confidenceScore);
+      if (confidence !== null) ai.confidenceScores.push(confidence);
+      ai.modelVersion = row.modelVersion;
+      ai.generatedAt = row.generatedAt.toISOString();
+    }
+
+    addCampaignActualDiagnostics({
+      campaignContext: inputs.campaignContext,
+      diagnostics,
+      label: "Annual Forecast Entry revenue",
+      year: resolvedYear
+    });
+
+    return createResult(byCompany, diagnostics);
+  } catch (error) {
+    diagnostics.push(`Unable to read Annual Forecast Entry portfolio data from PostgreSQL: ${errorMessage(error)}`);
+    return createResult<Map<string, PetyrAnnualForecastEntryPortfolioCompany>>(new Map(), diagnostics);
+  }
+}
+
 
 export async function getForecastEntryContext(csmName: string, companyName: string, year: number, month: number) {
   const diagnostics: string[] = [];

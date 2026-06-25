@@ -116,7 +116,7 @@ function monthLabel(month: number) {
 
 function forecastTypeLabel(forecastType: string | null | undefined) {
   if (forecastType === "active_status") return "Company active status";
-  if (forecastType === "annual_initial_forecast") return "Annual FC Initial";
+  if (forecastType === "annual_initial_forecast") return "Annual Forecast Initial";
   if (forecastType === "annual_ongoing_confidence") return "Annual confidence";
   if (forecastType === "annual_forecast") return "Annual forecast";
   if (forecastType === "companyActiveStatus") return "Company active status";

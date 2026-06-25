@@ -48,10 +48,10 @@ export function getAnnualForecastEntryInitialMode(year: number, currentDate = ne
 
   return {
     editable,
-    label: editable ? "FC Initial editable" : "FC Initial read-only",
+    label: editable ? "Forecast Initial editable" : "Forecast Initial read-only",
     reason: editable
-      ? `FC Initial for ${year} can be edited from December 10 ${year - 1} through January 10 ${year}.`
-      : `FC Initial for ${year} is editable only from December 10 ${year - 1} through January 10 ${year}.`
+      ? `Forecast Initial for ${year} can be edited from December 10 ${year - 1} through January 10 ${year}.`
+      : `Forecast Initial for ${year} is editable only from December 10 ${year - 1} through January 10 ${year}.`
   };
 }
 

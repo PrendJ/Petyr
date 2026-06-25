@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -51,6 +52,15 @@ function buildBatchUrl(csmName: string) {
   const query = params.toString();
   return query ? `/api/petyr/forecast-entry/batch?${query}` : "/api/petyr/forecast-entry/batch";
 }
+
+function buildAnnualBatchUrl(csmName: string, year?: string) {
+  const params = new URLSearchParams();
+  if (csmName) params.set("csmName", csmName);
+  if (year) params.set("year", year);
+  const query = params.toString();
+  return query ? `/api/petyr/forecast-entry/annual-batch?${query}` : "/api/petyr/forecast-entry/annual-batch";
+}
+
 
 function buildEntryPageUrl(csmName: string) {
   const params = new URLSearchParams();
@@ -163,10 +173,10 @@ function LegendChip({ className, label }: { className: string; label: string }) 
 
 export default function ForecastEntryMonthlyBatchWorkspace({
   initialBatch,
-  initialAnnualBatch
+  initialAnnualYear
 }: {
   initialBatch: ForecastEntryBatchDataResult;
-  initialAnnualBatch: AnnualForecastEntryBatchDataResult;
+  initialAnnualYear?: string;
 }) {
   const [batch, setBatch] = useState(initialBatch);
   const [selectedCsm, setSelectedCsm] = useState(initialBatch.data.selectedCsm);
@@ -177,6 +187,9 @@ export default function ForecastEntryMonthlyBatchWorkspace({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [annualBatch, setAnnualBatch] = useState<AnnualForecastEntryBatchDataResult | null>(null);
+  const [isAnnualLoading, setIsAnnualLoading] = useState(false);
+  const [annualLoadAttempted, setAnnualLoadAttempted] = useState(false);
 
   const editableForecastType = batch.data.entryMode.editableForecastType;
   const isLocked = batch.data.entryMode.locked || !editableForecastType;
@@ -230,6 +243,33 @@ export default function ForecastEntryMonthlyBatchWorkspace({
       setIsLoading(false);
     }
   }
+
+  async function loadAnnualBatchIfNeeded() {
+    if (annualBatch || isAnnualLoading) return;
+
+    setIsAnnualLoading(true);
+    setAnnualLoadAttempted(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch(buildAnnualBatchUrl(batch.data.selectedCsm, initialAnnualYear), { cache: "no-store" });
+      const payload = (await response.json()) as AnnualForecastEntryBatchDataResult;
+
+      if (!response.ok) {
+        throw new Error("Unable to load Annual Forecast Entry.");
+      }
+
+      setAnnualBatch(payload);
+    } catch (error) {
+      setNotice({
+        type: "error",
+        text: error instanceof Error ? error.message : "Unable to load Annual Forecast Entry."
+      });
+    } finally {
+      setIsAnnualLoading(false);
+    }
+  }
+
 
   function acceptAiPlaceholder(company: ForecastEntryBatchCompany, cell: ForecastEntryBatchCell) {
     if (isLocked || !editableForecastType) return;
@@ -334,7 +374,7 @@ export default function ForecastEntryMonthlyBatchWorkspace({
       <section>
         <PetyrSectionTitle
           title="Forecast Entry"
-          description={`Current-month batch entry for ${selectedMonthLabel}. Select a CSM, update active forecast cells and save all company changes together.`}
+          description={`Switch between monthly and annual forecast entry. Monthly lets you select a CSM and update active forecast cells for ${selectedMonthLabel}.`}
           actions={
             <Badge variant={isLocked ? "outline" : "secondary"}>
               {isLocked ? batch.data.entryMode.label : activeLabel}
@@ -342,8 +382,36 @@ export default function ForecastEntryMonthlyBatchWorkspace({
           }
         />
 
-        <PetyrCard className="bg-white/95">
-          <CardContent className="grid grid-cols-1 gap-4 p-5 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-end">
+      </section>
+
+      {notice ? <PetyrInlineNotice tone={notice.type === "success" ? "success" : "danger"}>{notice.text}</PetyrInlineNotice> : null}
+
+      <Tabs
+        defaultValue="monthly"
+        className="space-y-5"
+        onValueChange={(value) => {
+          if (value === "annual") void loadAnnualBatchIfNeeded();
+        }}
+      >
+        <TabsList className="rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+          <TabsTrigger value="monthly" className="rounded-xl">
+            Monthly Forecast Entry
+          </TabsTrigger>
+          <TabsTrigger value="annual" className="rounded-xl">
+            Annual Forecast Entry
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="monthly" className="space-y-5">
+          <PetyrCard>
+        <CardHeader>
+          <CardTitle>Monthly Forecast Batch</CardTitle>
+          <CardDescription>
+            {batch.data.selectedCsm}: {batch.data.companies.length} compan{batch.data.companies.length === 1 ? "y" : "ies"} - {selectedMonthLabel}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-end">
             <PetyrSelectField
               label="CSM"
               disabled={isLoading || isSaving}
@@ -363,31 +431,8 @@ export default function ForecastEntryMonthlyBatchWorkspace({
                 ? batch.data.entryMode.reason
                 : `${activeLabel} is editable for the current server month. Other forecast fields and Closed Revenue are read-only.`}
             </PetyrInlineNotice>
-          </CardContent>
-        </PetyrCard>
-      </section>
+          </div>
 
-      {notice ? <PetyrInlineNotice tone={notice.type === "success" ? "success" : "danger"}>{notice.text}</PetyrInlineNotice> : null}
-
-      <Tabs defaultValue="monthly" className="space-y-5">
-        <TabsList className="rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
-          <TabsTrigger value="monthly" className="rounded-xl">
-            Monthly Forecast Entry
-          </TabsTrigger>
-          <TabsTrigger value="annual" className="rounded-xl">
-            Annual Forecast Entry
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="monthly" className="space-y-5">
-          <PetyrCard>
-        <CardHeader>
-          <CardTitle>Monthly Forecast Batch</CardTitle>
-          <CardDescription>
-            {batch.data.selectedCsm}: {batch.data.companies.length} compan{batch.data.companies.length === 1 ? "y" : "ies"} - {selectedMonthLabel}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
           <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
             <LegendChip className="border-blue-300 bg-blue-100" label="AI suggestion/placeholder" />
             <LegendChip className="border-violet-300 bg-violet-100" label="CSM validated from AI" />
@@ -409,7 +454,7 @@ export default function ForecastEntryMonthlyBatchWorkspace({
                     return (
                       <TableHead
                         key={businessUnit}
-                        className="min-w-[190px] border-l border-slate-200 bg-slate-50 text-center"
+                        className="min-w-[133px] border-l border-slate-200 bg-slate-50 text-center"
                         colSpan={expanded ? 3 : 1}
                       >
                         <button
@@ -431,17 +476,17 @@ export default function ForecastEntryMonthlyBatchWorkspace({
                   {batch.data.businessUnits.flatMap((businessUnit) => {
                     const expanded = expandedBusinessUnits.has(businessUnit);
                     const columns = [
-                      <TableHead key={`${businessUnit}-active`} className="min-w-[190px] border-l border-slate-200 bg-white text-xs">
+                      <TableHead key={`${businessUnit}-active`} className="min-w-[133px] border-l border-slate-200 bg-white text-xs">
                         {activeLabel}
                       </TableHead>
                     ];
 
                     if (expanded) {
                       columns.push(
-                        <TableHead key={`${businessUnit}-inactive`} className="min-w-[180px] bg-white text-xs">
+                        <TableHead key={`${businessUnit}-inactive`} className="min-w-[126px] bg-white text-xs">
                           {inactiveForecastLabel(editableForecastType)}
                         </TableHead>,
-                        <TableHead key={`${businessUnit}-closed`} className="min-w-[170px] bg-amber-50 text-xs">
+                        <TableHead key={`${businessUnit}-closed`} className="min-w-[119px] bg-amber-50 text-xs">
                           Closed Revenue
                         </TableHead>
                       );
@@ -491,14 +536,18 @@ export default function ForecastEntryMonthlyBatchWorkspace({
                               onFocus={() => acceptAiPlaceholder(company, cell)}
                               onClick={() => acceptAiPlaceholder(company, cell)}
                               onChange={(event) => updateValue(company, cell, event.target.value)}
-                              className={`h-10 min-w-[150px] rounded-xl text-right font-semibold ${isLocked ? "bg-slate-100" : activeInputClass}`}
+                              className={`h-10 min-w-[105px] rounded-xl text-right font-semibold ${isLocked ? "bg-slate-100" : activeInputClass}`}
                             />
                             {sourceState ? (
                               <div className="mt-1 text-[11px] font-medium text-slate-500">
                                 {sourceState === "accepted_ai" ? "Validated from AI" : "Manual edit"}
                               </div>
                             ) : current.hasSavedCsmValue ? (
-                              <div className="mt-1 text-[11px] text-slate-500">Saved CSM forecast</div>
+                              <div className="mt-1 text-[11px] text-slate-500">
+                                Saved CSM forecast
+                                {cell.aiForecast.value !== null ? ` (${formatPetyrCurrencyValue(cell.aiForecast.value)} AI Forecast)` : ""}
+                              </div>
+
                             ) : aiPlaceholder ? (
                               <div className="mt-1 text-[11px] text-blue-700">AI suggestion</div>
                             ) : null}
@@ -548,8 +597,26 @@ export default function ForecastEntryMonthlyBatchWorkspace({
         </TabsContent>
 
         <TabsContent value="annual" className="space-y-5">
-          <AnnualForecastEntryBatchWorkspace initialBatch={initialAnnualBatch} />
+          {annualBatch ? (
+            <AnnualForecastEntryBatchWorkspace initialBatch={annualBatch} />
+          ) : (
+            <PetyrCard>
+              <CardContent className="space-y-4 p-5">
+                <PetyrInlineNotice tone={notice?.type === "error" ? "danger" : "success"}>
+                  {isAnnualLoading
+                    ? "Loading Annual Forecast Entry..."
+                    : notice?.type === "error"
+                      ? notice.text
+                      : "Annual Forecast Entry will load when this tab is opened."}
+                </PetyrInlineNotice>
+                <Button type="button" className="rounded-xl" disabled={isAnnualLoading} onClick={() => void loadAnnualBatchIfNeeded()}>
+                  {isAnnualLoading ? "Loading annual data" : annualLoadAttempted ? "Retry Annual Forecast Entry" : "Load Annual Forecast Entry"}
+                </Button>
+              </CardContent>
+            </PetyrCard>
+          )}
         </TabsContent>
+
       </Tabs>
     </PetyrWorkspaceShell>
   );

@@ -2,10 +2,12 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getForecastEntryMode, type EditableForecastType, type ForecastEntryMode } from "@/lib/forecastEntryMode";
 import { PETYR_BUSINESS_UNITS, type PetyrBusinessUnit } from "@/lib/petyr/constants";
+import { startPetyrPerformanceTimer } from "@/lib/petyr/performance";
 import { resolvePreferredCsmName } from "@/lib/petyr/csmIdentity";
 import {
   getForecastEntryCompanies,
   getForecastEntryContext,
+  getForecastEntryContextsBatch,
   type PetyrDataServiceResult,
   type PetyrForecastEntryContext,
   type PetyrForecastValueContext
@@ -239,35 +241,45 @@ function companyFromContext(context: PetyrForecastEntryContext, fallback: Compan
 export async function getForecastEntryBatch(input: ForecastEntryBatchQuery = {}): Promise<ForecastEntryBatchDataResult> {
   const diagnostics: string[] = [];
   const { year, month } = currentServerPeriod();
-  const companiesResult = await getForecastEntryCompanies();
-  diagnostics.push(...companiesResult.diagnostics);
+  const finishPerformance = startPetyrPerformanceTimer("getForecastEntryBatch", { year, month });
 
-  const companies = toCompanyOptions(companiesResult.data);
-  const { selectedCsm, csmOptions } = selectCsm(input, companies);
-  const selectedCsmKey = normalizeKey(selectedCsm);
-  const scopedCompanies = companies.filter((company) => normalizeKey(company.csmName || "Unassigned") === selectedCsmKey);
+  try {
+    const companiesResult = await getForecastEntryCompanies();
+    diagnostics.push(...companiesResult.diagnostics);
 
-  const contexts = await Promise.all(
-    scopedCompanies.map(async (company) => {
-      const context = await getForecastEntryContext(selectedCsm, company.companyName, year, month);
-      diagnostics.push(...context.diagnostics);
-      return companyFromContext(context.data, company);
-    })
-  );
-
-  return {
-    source: "postgresql",
-    diagnostics: uniqueDiagnostics(diagnostics),
-    data: {
-      selectedCsm,
-      csmOptions,
+    const companies = toCompanyOptions(companiesResult.data);
+    const { selectedCsm, csmOptions } = selectCsm(input, companies);
+    const selectedCsmKey = normalizeKey(selectedCsm);
+    const scopedCompanies = companies.filter((company) => normalizeKey(company.csmName || "Unassigned") === selectedCsmKey);
+    const contextsResult = await getForecastEntryContextsBatch({
+      csmName: selectedCsm,
+      companies: scopedCompanies,
       year,
-      month,
-      entryMode: getForecastEntryMode({ year, month }),
-      businessUnits: [...PETYR_BUSINESS_UNITS],
-      companies: contexts
-    }
-  };
+      month
+    });
+    diagnostics.push(...contextsResult.diagnostics);
+
+    const contexts = contextsResult.data.map((context, index) => companyFromContext(context, scopedCompanies[index]));
+
+    finishPerformance({ status: "success", rowCount: contexts.length, companiesCount: contexts.length });
+
+    return {
+      source: "postgresql",
+      diagnostics: uniqueDiagnostics(diagnostics),
+      data: {
+        selectedCsm,
+        csmOptions,
+        year,
+        month,
+        entryMode: getForecastEntryMode({ year, month }),
+        businessUnits: [...PETYR_BUSINESS_UNITS],
+        companies: contexts
+      }
+    };
+  } catch (error) {
+    finishPerformance({ status: "failed" });
+    throw error;
+  }
 }
 
 function parseRequiredCurrentPeriod(input: ForecastEntryBatchSaveInput) {

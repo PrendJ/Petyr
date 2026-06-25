@@ -10,8 +10,23 @@ type TabsContextValue = {
 
 const TabsContext = React.createContext<TabsContextValue | null>(null);
 
-export function Tabs({ defaultValue, className, children }: { defaultValue: string; className?: string; children: React.ReactNode }) {
-  const [value, setValue] = React.useState(defaultValue);
+export function Tabs({
+  defaultValue,
+  className,
+  children,
+  onValueChange
+}: {
+  defaultValue: string;
+  className?: string;
+  children: React.ReactNode;
+  onValueChange?: (value: string) => void;
+}) {
+  const [value, setValueState] = React.useState(defaultValue);
+  const setValue = React.useCallback((nextValue: string) => {
+    setValueState(nextValue);
+    onValueChange?.(nextValue);
+  }, [onValueChange]);
+
   return (
     <TabsContext.Provider value={{ value, setValue }}>
       <div className={className}>{children}</div>
