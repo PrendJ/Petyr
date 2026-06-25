@@ -13,6 +13,16 @@ Each decision should include:
 
 ---
 
+## 2026-06-25 - Add CSM Annual Forecast Entry as a separate normal Forecast Entry tab
+
+- **Status:** Accepted.
+- **Context:** Normal `/forecasting/entry` had recently been narrowed to a current-month CSM batch workflow while the old full single-company Forecast Entry stayed available at `/forecasting/entry/old` for admins. Product now asked for a new CSM-facing Annual Forecast Entry section inside the normal Forecast Entry page, separate from Monthly, with CSM + Year filters, portfolio-wide annual entry, FC Initial windowing, confidence, AI placeholders and auditability.
+- **Decision:** Keep Monthly Forecast Entry as the current-month batch tab and add Annual Forecast Entry as a separate tab in the same normal `/forecasting/entry` workspace. Annual customer + year metadata is stored in `forecast_annual_entry`, Business Unit annual forecast values stay in `forecast_annual` with `value_source=manual|ai_confirmed`, and effective annual saves reuse `forecast_save_session` / `forecast_change_log` with source `Annual Forecast Entry` so Company Detail remains the operational history surface.
+- **Alternatives discarded:** Reopening the old full single-company Annual Forecast to CSMs; storing all annual values in a new duplicate BU table; treating unclicked AI placeholders as saved annual values; changing the global Management View planned-through-year-end calculation.
+- **Reason:** Product needs a fast portfolio annual entry workflow for CSMs while preserving existing Monthly behavior and existing Management View semantics. The existing `forecast_annual` grain already matches company + Business Unit + year, so only customer/year metadata and value-source tracking were missing.
+- **Consequences:** `/forecasting/entry` now contains both Monthly and Annual tabs. Annual FC Initial is editable only from December 10 of the previous year through January 10 of the selected year. Annual Planned includes future `Setup`, `Recruiting` and `Running` campaigns only in the Annual Forecast Entry read model, per the explicit task, while the broader Management View planned calculation remains unchanged until a separate product decision revises it. Deployments must apply the updated Petyr Prisma superset schema before saving annual entry metadata.
+- **Related docs:** `apps/forecasting-app/prisma/schema.prisma`, `apps/forecasting-app/src/services/annualForecastEntryBatchService.ts`, `apps/forecasting-app/src/components/petyr/AnnualForecastEntryBatchWorkspace.tsx`, `docs/04_data_model.md`, `docs/05_forecasting_product_spec.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+
 ## 2026-06-24 - Preserve old Forecast Entry as admin-only legacy and make normal Entry CSM batch
 
 - **Status:** Accepted.

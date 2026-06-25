@@ -5,6 +5,10 @@ import {
   PETYR_OPENROUTER_MODEL_SETTING_KEY,
   resolvePetyrAiModelSettingRead
 } from "../src/services/petyrAiModelSettingsService";
+import {
+  mapLatestPetyrCompanyIntelligenceToActionResult,
+  resolveVisiblePetyrCompanyIntelligenceResult
+} from "../src/lib/petyr/companyIntelligenceState";
 
 import {
   PETYR_FORECAST_INTELLIGENCE_PAYLOAD_VERSION,
@@ -14,6 +18,7 @@ import {
   validatePetyrForecastIntelligenceOutput,
   hashPetyrForecastIntelligencePayload,
   sanitizePetyrForecastIntelligenceCsmNote,
+  selectLatestSuccessfulPetyrCompanyIntelligence,
   type PetyrForecastIntelligenceCacheAdapter,
   type PetyrForecastIntelligenceCacheWrite,
   type PetyrForecastIntelligenceOutput,
@@ -331,6 +336,7 @@ function createMemoryCache(seed: PetyrForecastIntelligenceOutput | null = null) 
       if (!cached) return null;
       return {
         output: cached,
+        generatedAt: "2026-06-10T00:00:00.000Z",
         createdAt: "2026-06-10T00:00:00.000Z",
         updatedAt: "2026-06-10T00:00:00.000Z"
       };
@@ -338,7 +344,11 @@ function createMemoryCache(seed: PetyrForecastIntelligenceOutput | null = null) 
     async save(write) {
       writes.push(write);
       if (write.status === "success" && write.validatedOutput) cached = write.validatedOutput;
-      return { action: writes.length === 1 ? "created" : "updated" };
+      return {
+        action: writes.length === 1 ? "created" : "updated",
+        generatedAt: "2026-06-11T00:00:00.000Z",
+        updatedAt: "2026-06-11T00:00:00.000Z"
+      };
     }
   };
 
@@ -465,6 +475,167 @@ test("reuses cached validated output for matching provider model prompt and inpu
   assert.deepEqual(result.output, baseOutput);
 });
 
+test("manual force refresh bypasses matching cached Forecast Intelligence output", async () => {
+  const payload = createPayload();
+  const cache = createMemoryCache(baseOutput);
+  let calls = 0;
+
+  const result = await generatePetyrForecastIntelligence({
+    payload,
+    apiKey: "test-key",
+    model: "test/model",
+    cache: cache.adapter,
+    forceRefresh: true,
+    client: async () => {
+      calls += 1;
+      return JSON.stringify(baseRawOutput);
+    }
+  });
+
+  assert.equal(calls, 1);
+  assert.equal(result.ok, true);
+  assert.equal(result.status, "success");
+  assert.equal(result.openRouterCalled, true);
+  assert.equal(result.cacheAction, "created");
+  assert.equal(cache.writes.length, 1);
+});
+
+test("latest Company Intelligence selector returns only newest successful sentinel row", () => {
+  const rows = [
+    {
+      companyName: "Company A",
+      year: 2026,
+      status: "success",
+      businessUnit: "__forecast_intelligence__",
+      month: 0,
+      forecastValue: 0,
+      providerModel: "older/model",
+      promptVersion: "prompt",
+      inputHash: "older",
+      validatedOutput: baseOutput,
+      generatedAt: new Date("2026-06-10T10:00:00.000Z"),
+      updatedAt: new Date("2026-06-10T10:00:00.000Z")
+    },
+    {
+      companyName: "Company A",
+      year: 2026,
+      status: "failed",
+      businessUnit: "__forecast_intelligence__",
+      month: 0,
+      forecastValue: 0,
+      providerModel: "failed/model",
+      promptVersion: "prompt",
+      inputHash: "failed",
+      validatedOutput: baseOutput,
+      generatedAt: new Date("2026-06-12T10:00:00.000Z"),
+      updatedAt: new Date("2026-06-12T10:00:00.000Z")
+    },
+    {
+      companyName: "Company A",
+      year: 2026,
+      status: "success",
+      businessUnit: "__forecast_intelligence__",
+      month: 0,
+      forecastValue: 0,
+      providerModel: "latest/model",
+      promptVersion: "prompt",
+      inputHash: "latest",
+      validatedOutput: baseOutput,
+      generatedAt: new Date("2026-06-11T10:00:00.000Z"),
+      updatedAt: new Date("2026-06-11T10:00:00.000Z")
+    }
+  ];
+
+  const latest = selectLatestSuccessfulPetyrCompanyIntelligence(rows);
+
+  assert.equal(latest?.model, "latest/model");
+  assert.equal(latest?.inputHash, "latest");
+  assert.deepEqual(latest?.output, baseOutput);
+});
+
+test("latest Company Intelligence selector ignores numeric AI Forecast cache rows", () => {
+  const latest = selectLatestSuccessfulPetyrCompanyIntelligence([
+    {
+      companyName: "Company A",
+      year: 2026,
+      status: "success",
+      businessUnit: "QA",
+      month: 7,
+      forecastValue: 100,
+      providerModel: "numeric/model",
+      promptVersion: "prompt",
+      inputHash: "numeric",
+      validatedOutput: baseOutput,
+      generatedAt: new Date("2026-06-12T10:00:00.000Z"),
+      updatedAt: new Date("2026-06-12T10:00:00.000Z")
+    },
+    {
+      companyName: "Company A",
+      year: 2026,
+      status: "success",
+      businessUnit: "__forecast_intelligence__",
+      month: 0,
+      forecastValue: 0,
+      providerModel: "sentinel/model",
+      promptVersion: "prompt",
+      inputHash: "sentinel",
+      validatedOutput: baseOutput,
+      generatedAt: new Date("2026-06-11T10:00:00.000Z"),
+      updatedAt: new Date("2026-06-11T10:00:00.000Z")
+    }
+  ]);
+
+  assert.equal(latest?.model, "sentinel/model");
+  assert.equal(latest?.inputHash, "sentinel");
+});
+
+test("Company Detail initial Intelligence mapping preserves latest persisted output and timestamp", () => {
+  const mapped = mapLatestPetyrCompanyIntelligenceToActionResult({
+    companyName: "Company A",
+    year: 2026,
+    status: "success",
+    model: "test/model",
+    promptVersion: "prompt",
+    outputSchemaVersion: "schema",
+    inputHash: "hash",
+    output: baseOutput,
+    generatedAt: "2026-06-11T10:00:00.000Z",
+    updatedAt: "2026-06-11T10:01:00.000Z"
+  });
+
+  assert.equal(mapped?.ok, true);
+  assert.equal(mapped?.status, "success");
+  assert.equal(mapped?.generatedAt, "2026-06-11T10:00:00.000Z");
+  assert.deepEqual(mapped?.output, baseOutput);
+});
+
+test("failed Company Intelligence generation keeps previous successful result visible", () => {
+  const previous = mapLatestPetyrCompanyIntelligenceToActionResult({
+    companyName: "Company A",
+    year: 2026,
+    status: "success",
+    model: "test/model",
+    promptVersion: "prompt",
+    outputSchemaVersion: "schema",
+    inputHash: "hash",
+    output: baseOutput,
+    generatedAt: "2026-06-11T10:00:00.000Z",
+    updatedAt: "2026-06-11T10:01:00.000Z"
+  });
+  assert.ok(previous);
+
+  const failed = {
+    ...previous,
+    ok: false,
+    status: "failed" as const,
+    output: null,
+    errorMessage: "OpenRouter failed",
+    generatedAt: null
+  };
+
+  assert.equal(resolveVisiblePetyrCompanyIntelligenceResult(previous, failed), previous);
+});
+
 test("deterministic payload remains available when AI is not configured", async () => {
   const payload = createPayload();
   const cache = createMemoryCache();
@@ -556,12 +727,12 @@ test("CSM change notes from other years are excluded", () => {
 
 test("CSM change note sanitization removes URLs emails token-like strings and excess whitespace", () => {
   const sanitized = sanitizePetyrForecastIntelligenceCsmNote(
-    "Check https://example.test/deal and owner@example.com with token sk_live_abcdefghijklmnopqrstuvwxyz123456   now"
+    "Check https://example.test/deal and owner@example.com with token NOT_A_REAL_TOKEN_abcdefghijklmnopqrstuvwxyz123456   now"
   );
 
   assert.doesNotMatch(sanitized, /https:\/\/example/);
   assert.doesNotMatch(sanitized, /owner@example/);
-  assert.doesNotMatch(sanitized, /sk_live_abcdefghijklmnopqrstuvwxyz123456/);
+  assert.doesNotMatch(sanitized, /NOT_A_REAL_TOKEN_abcdefghijklmnopqrstuvwxyz123456/);
   assert.match(sanitized, /\[redacted_url\]/);
   assert.match(sanitized, /\[redacted_email\]/);
   assert.match(sanitized, /\[redacted_token\]/);

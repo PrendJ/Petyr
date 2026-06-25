@@ -44,6 +44,7 @@ type RawCompanyPreviewPayload = {
   llmPreview?: unknown;
   useLlmPreview?: unknown;
   includeLlmPreview?: unknown;
+  forceRefresh?: unknown;
 };
 
 type CurrentRunForecastRow = Omit<PetyrAiForecastManualForecastRow, "businessUnit"> & {
@@ -106,6 +107,7 @@ export type PetyrAiForecastCompanyAiIntelligence = {
   openRouterCalled: boolean;
   retried: boolean;
   cacheAction: "created" | "updated" | "reused" | "none";
+  generatedAt: string | null;
 };
 
 export type PetyrAiForecastCompanyPreviewResult = {
@@ -1004,7 +1006,8 @@ function notRequestedIntelligence(model: string): PetyrAiForecastCompanyAiIntell
     validationErrors: [],
     openRouterCalled: false,
     retried: false,
-    cacheAction: "none"
+    cacheAction: "none",
+    generatedAt: null
   };
 }
 
@@ -1023,7 +1026,8 @@ function mapIntelligenceResult(result: PetyrForecastIntelligenceRunResult): Pety
     validationErrors: result.validationErrors,
     openRouterCalled: result.openRouterCalled,
     retried: result.retried,
-    cacheAction: result.cacheAction
+    cacheAction: result.cacheAction,
+    generatedAt: result.generatedAt
   };
 }
 
@@ -1384,6 +1388,7 @@ async function maybeRunIntelligence(input: {
   year: number;
   modelVersion: string;
   payload: PetyrForecastIntelligencePayload;
+  forceRefresh?: boolean;
 }) {
   if (!input.requested) return null;
 
@@ -1394,7 +1399,8 @@ async function maybeRunIntelligence(input: {
     cache: createPetyrForecastIntelligenceCacheAdapter({
       companyName: input.companyName,
       year: input.year
-    })
+    }),
+    forceRefresh: input.forceRefresh
   });
 }
 
@@ -1546,6 +1552,7 @@ export async function generatePetyrAiForecastCompanyPreview(
     parseBoolean(input.llmPreview, false) ||
     parseBoolean(input.useLlmPreview, false) ||
     parseBoolean(input.includeLlmPreview, false);
+  const forceRefresh = parseBoolean(input.forceRefresh, false);
 
   if (!dryRun) {
     return runNonDryRunSave({ companyName, requestedCompanyName: companyName, year });
@@ -1560,7 +1567,8 @@ export async function generatePetyrAiForecastCompanyPreview(
     companyName: base.signals.companyName,
     year,
     modelVersion,
-    payload: base.intelligencePayload
+    payload: base.intelligencePayload,
+    forceRefresh
   });
   const intelligence = intelligenceResult ? mapIntelligenceResult(intelligenceResult) : notRequestedIntelligence(modelVersion);
 

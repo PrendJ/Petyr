@@ -13,6 +13,20 @@ type CompanyResult = {
   deterministicCandidatesCount: number;
 };
 
+type PreflightDiagnostics = {
+  missingForecastRelations: string[];
+  warningForecastRelations: string[];
+  missingRedashRelations: string[];
+  emptyRedashRelations: string[];
+  relationStatus: Array<{
+    relationName: string;
+    exists: boolean;
+    rowCount: number | null;
+    severity: "required" | "warning";
+  }>;
+  notes: string[];
+};
+
 type DailyRunResult = {
   ok: true;
   mode: "all_active";
@@ -31,6 +45,19 @@ type DailyRunResult = {
   skippedRows: number;
   companies: CompanyResult[];
   diagnostics: string[];
+  preflightDiagnostics?: PreflightDiagnostics;
+};
+
+type DailyRunError = {
+  error?: string;
+  detail?: string;
+  missingForecastRelations?: string[];
+  missingRedashRelations?: string[];
+  emptyRedashRelations?: string[];
+  warningForecastRelations?: string[];
+  originalErrorClass?: string;
+  safeOriginalMessage?: string;
+  preflightDiagnostics?: PreflightDiagnostics | null;
 };
 
 const endpoint = "/api/petyr/admin/daily-ai-forecast/run";
@@ -44,14 +71,78 @@ function StatBox({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+function InlineList({ items }: { items: string[] }) {
+  if (items.length === 0) return <span className="text-slate-500">n/a</span>;
+  return <span>{items.join(", ")}</span>;
+}
+
+function DiagnosticsPanel({ diagnostics }: { diagnostics: PreflightDiagnostics }) {
+  return (
+    <details className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700" open>
+      <summary className="cursor-pointer font-semibold text-slate-900">Daily AI Forecast preflight diagnostics</summary>
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Missing forecast relations</div>
+          <div className="mt-1 text-sm"><InlineList items={diagnostics.missingForecastRelations} /></div>
+        </div>
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Forecast warnings</div>
+          <div className="mt-1 text-sm"><InlineList items={diagnostics.warningForecastRelations} /></div>
+        </div>
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Missing Redash relations</div>
+          <div className="mt-1 text-sm"><InlineList items={diagnostics.missingRedashRelations} /></div>
+        </div>
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Empty Redash relations</div>
+          <div className="mt-1 text-sm"><InlineList items={diagnostics.emptyRedashRelations} /></div>
+        </div>
+      </div>
+
+      {diagnostics.relationStatus.length > 0 ? (
+        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full min-w-[640px] text-left text-xs">
+            <thead className="bg-slate-50 uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-3 py-2 font-medium">Relation</th>
+                <th className="px-3 py-2 font-medium">Severity</th>
+                <th className="px-3 py-2 font-medium">Exists</th>
+                <th className="px-3 py-2 font-medium text-right">Rows</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {diagnostics.relationStatus.map((row) => (
+                <tr key={row.relationName}>
+                  <td className="px-3 py-2 font-medium text-slate-900">{row.relationName}</td>
+                  <td className="px-3 py-2">{row.severity}</td>
+                  <td className="px-3 py-2">{row.exists ? "yes" : "no"}</td>
+                  <td className="px-3 py-2 text-right">{row.rowCount === null ? "n/a" : formatPetyrInteger(row.rowCount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {diagnostics.notes.length > 0 ? (
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-slate-600">
+          {diagnostics.notes.map((note) => <li key={note}>{note}</li>)}
+        </ul>
+      ) : null}
+    </details>
+  );
+}
+
 export default function PetyrDailyAiForecastRunControl() {
   const [secret, setSecret] = useState("");
   const [result, setResult] = useState<DailyRunResult | null>(null);
+  const [errorDetails, setErrorDetails] = useState<DailyRunError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
 
   async function runDailyForecast() {
     setMessage(null);
+    setErrorDetails(null);
 
     if (!secret.trim()) {
       setMessage("Enter APP_INTERNAL_SECRET before running Daily AI Forecast.");
@@ -79,10 +170,11 @@ export default function PetyrDailyAiForecastRunControl() {
           confirmed: true
         })
       });
-      const payload = (await response.json()) as DailyRunResult | { error?: string; detail?: string };
+      const payload = (await response.json()) as DailyRunResult | DailyRunError;
 
       if (!response.ok || !("ok" in payload)) {
-        const errorPayload = payload as { error?: string; detail?: string };
+        const errorPayload = payload as DailyRunError;
+        setErrorDetails(errorPayload);
         setMessage(errorPayload.detail || errorPayload.error || "Unable to run Daily AI Forecast.");
         return;
       }
@@ -131,6 +223,22 @@ export default function PetyrDailyAiForecastRunControl() {
       </div>
 
       {message ? <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">{message}</div> : null}
+
+      {errorDetails ? (
+        <div className="space-y-3">
+          <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-950">
+            <div className="font-semibold">{errorDetails.error ?? "Daily AI Forecast error"}</div>
+            {errorDetails.detail ? <div className="mt-1">{errorDetails.detail}</div> : null}
+            {errorDetails.originalErrorClass || errorDetails.safeOriginalMessage ? (
+              <div className="mt-2 text-xs text-red-900">
+                {errorDetails.originalErrorClass ? <div>Error class: {errorDetails.originalErrorClass}</div> : null}
+                {errorDetails.safeOriginalMessage ? <div>Original message: {errorDetails.safeOriginalMessage}</div> : null}
+              </div>
+            ) : null}
+          </div>
+          {errorDetails.preflightDiagnostics ? <DiagnosticsPanel diagnostics={errorDetails.preflightDiagnostics} /> : null}
+        </div>
+      ) : null}
 
       {result ? (
         <div className="space-y-5">
@@ -182,6 +290,8 @@ export default function PetyrDailyAiForecastRunControl() {
               </ul>
             </details>
           ) : null}
+
+          {result.preflightDiagnostics ? <DiagnosticsPanel diagnostics={result.preflightDiagnostics} /> : null}
         </div>
       ) : null}
     </div>

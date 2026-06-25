@@ -13,7 +13,7 @@ Implementato:
 - `petyr-ai-forecast-worker`: worker notturno per salvare la deterministic preview come AI Forecast;
 - preview dati salvati a database.
 - schema Prisma Petyr per forecast mensile, annuale, sessioni di salvataggio,
-  change log, stato company e cache AI.
+  metadati annuali customer/year, change log, stato company e cache AI.
 
 ## Avvio rapido
 

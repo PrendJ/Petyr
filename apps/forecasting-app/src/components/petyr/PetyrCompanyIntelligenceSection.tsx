@@ -6,6 +6,7 @@ import { generatePetyrCompanyIntelligenceAction } from "@/app/forecasting/aiFore
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PetyrEmptyState, PetyrInlineNotice } from "@/components/petyr/PetyrLayoutPrimitives";
+import { resolveVisiblePetyrCompanyIntelligenceResult } from "@/lib/petyr/companyIntelligenceState";
 import type { PetyrCompanyIntelligenceActionResult } from "@/types/petyrAiForecastManualAction";
 
 type PetyrCompanyIntelligenceSectionProps = {
@@ -13,6 +14,7 @@ type PetyrCompanyIntelligenceSectionProps = {
   year: number;
   selectedMonth?: number | null;
   context?: "forecast-entry" | "company-detail";
+  initialResult?: PetyrCompanyIntelligenceActionResult | null;
 };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -46,6 +48,18 @@ function severityTone(severity: "low" | "medium" | "high"): "info" | "warning" |
   return "info";
 }
 
+function formatGeneratedAt(value: string | null | undefined) {
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(date);
+}
+
 function TextList({
   title,
   children
@@ -65,15 +79,18 @@ export function PetyrCompanyIntelligenceSection({
   companyName,
   year,
   selectedMonth = null,
-  context = "forecast-entry"
+  context = "forecast-entry",
+  initialResult = null
 }: PetyrCompanyIntelligenceSectionProps) {
-  const [result, setResult] = useState<PetyrCompanyIntelligenceActionResult | null>(null);
+  const [result, setResult] = useState<PetyrCompanyIntelligenceActionResult | null>(initialResult);
+  const [lastAttempt, setLastAttempt] = useState<PetyrCompanyIntelligenceActionResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [clientError, setClientError] = useState<string | null>(null);
   const company = companyName.trim();
   const canGenerate = company.length > 0 && Number.isInteger(year);
   const output = result?.output ?? null;
   const contextLabel = context === "company-detail" ? "Company Detail" : "Forecast Entry";
+  const generatedAtLabel = formatGeneratedAt(result?.generatedAt);
 
   async function generateIntelligence() {
     if (!canGenerate || isGenerating) return;
@@ -87,7 +104,8 @@ export function PetyrCompanyIntelligenceSection({
         year,
         selectedMonth
       });
-      setResult(nextResult);
+      setLastAttempt(nextResult);
+      setResult((current) => resolveVisiblePetyrCompanyIntelligenceResult(current, nextResult));
     } catch (error) {
       setClientError(error instanceof Error ? error.message : "Unable to generate Intelligence.");
     } finally {
@@ -103,6 +121,7 @@ export function PetyrCompanyIntelligenceSection({
             <h2 className="text-base font-semibold text-slate-900">Intelligence</h2>
             <Badge variant="outline">CSM</Badge>
             <Badge variant="secondary">Consultative</Badge>
+            {generatedAtLabel ? <Badge variant="outline">Last generated: {generatedAtLabel}</Badge> : null}
           </div>
           <p className="mt-1 text-sm text-slate-500">
             {company || "Company"} - {year} - {contextLabel}
@@ -127,6 +146,12 @@ export function PetyrCompanyIntelligenceSection({
 
       {clientError ? <PetyrInlineNotice tone="danger">{redactedText(clientError)}</PetyrInlineNotice> : null}
 
+      {lastAttempt && !lastAttempt.ok ? (
+        <PetyrInlineNotice tone="danger">
+          {redactedText(lastAttempt.summary)}
+        </PetyrInlineNotice>
+      ) : null}
+
       {result ? (
         <PetyrInlineNotice tone={toneForStatus(result.status)}>
           {redactedText(result.summary)}
@@ -135,10 +160,10 @@ export function PetyrCompanyIntelligenceSection({
         <PetyrEmptyState>Generate Intelligence to read OpenRouter-backed guidance for this company.</PetyrEmptyState>
       ) : null}
 
-      {result && !result.ok ? (
+      {lastAttempt && !lastAttempt.ok ? (
         <div className="space-y-3">
-          {result.errorMessage ? <PetyrInlineNotice tone="danger">{redactedText(result.errorMessage)}</PetyrInlineNotice> : null}
-          {result.validationErrors.map((error) => (
+          {lastAttempt.errorMessage ? <PetyrInlineNotice tone="danger">{redactedText(lastAttempt.errorMessage)}</PetyrInlineNotice> : null}
+          {lastAttempt.validationErrors.map((error) => (
             <PetyrInlineNotice key={`${error.path}-${error.message}`} tone="danger">
               {error.path}: {error.message}
             </PetyrInlineNotice>

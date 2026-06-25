@@ -170,6 +170,27 @@ Business Units, current-month active forecast cells, read-only Closed Revenue
 and one note per company. The old full single-company Forecast Entry workspace
 is preserved at `/forecasting/entry/old` and requires `petyr:admin`.
 
+Normal Forecast Entry annual batch workflow uses:
+
+```txt
+GET /api/petyr/forecast-entry/annual-batch?csmName=...&year=YYYY
+POST /api/petyr/forecast-entry/annual-batch/save
+```
+
+The annual section is a separate tab inside `/forecasting/entry`. It exposes CSM
+and Year filters, stores customer + year FC Initial and Confidence in
+`forecast_annual_entry`, stores annual BU values in `forecast_annual`, and
+audits effective changes through `forecast_save_session` /
+`forecast_change_log` with source `Annual Forecast Entry`. After schema changes,
+run `npm run db:sync` locally or apply the reviewed Prisma migration/deploy step
+in managed environments.
+
+Focused Annual Forecast Entry rules test:
+
+```bash
+npm run test:annual-forecast-entry
+```
+
 Petyr Admin monthly forecast Excel workflow uses:
 
 ```txt

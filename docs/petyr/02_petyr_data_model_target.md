@@ -50,6 +50,7 @@ Implemented Petyr-owned tables:
 - year
 - value
 - ai_forecast_value
+- value_source: manual | ai_confirmed
 - status: draft | consolidated
 - note
 - created_by
@@ -61,6 +62,27 @@ Implemented Petyr-owned tables:
 
 `forecast_annual` is the current/latest annual CSM forecast source. Management
 View reads it as Ongoing Forecast.
+
+## forecast_annual_entry
+
+- id
+- company_name
+- csm_name
+- year
+- initial_forecast
+- ongoing_confidence: 01 High | 02 Mid | 03 Low
+- created_by
+- created_at
+- updated_by
+- updated_at
+
+`forecast_annual_entry` stores customer + year metadata for the CSM-facing
+Annual Forecast Entry section. The Business Unit annual values remain in
+`forecast_annual`; FC Ongoing is derived by summing only saved or confirmed BU
+values. Unclicked AI placeholders are not persisted and do not contribute.
+
+FC Initial is editable only from December 10 of the previous year through
+January 10 of the selected year. Outside that window it is read-only.
 
 ## forecast_annual_snapshot
 

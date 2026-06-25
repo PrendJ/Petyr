@@ -8,6 +8,7 @@ import { CardContent, CardDescription, CardHeader, CardTitle } from "@/component
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   PetyrCard,
   PetyrInlineNotice,
@@ -15,7 +16,9 @@ import {
   PetyrWorkspaceShell
 } from "@/components/petyr/PetyrLayoutPrimitives";
 import { PetyrSelectField } from "@/components/petyr/PetyrForecastNavigation";
+import AnnualForecastEntryBatchWorkspace from "@/components/petyr/AnnualForecastEntryBatchWorkspace";
 import { formatPetyrCurrencyValue, formatPetyrNumber } from "@/lib/petyr/formatters";
+import type { AnnualForecastEntryBatchDataResult } from "@/services/annualForecastEntryBatchService";
 import type {
   ForecastEntryBatchCell,
   ForecastEntryBatchCompany,
@@ -158,7 +161,13 @@ function LegendChip({ className, label }: { className: string; label: string }) 
   );
 }
 
-export default function ForecastEntryMonthlyBatchWorkspace({ initialBatch }: { initialBatch: ForecastEntryBatchDataResult }) {
+export default function ForecastEntryMonthlyBatchWorkspace({
+  initialBatch,
+  initialAnnualBatch
+}: {
+  initialBatch: ForecastEntryBatchDataResult;
+  initialAnnualBatch: AnnualForecastEntryBatchDataResult;
+}) {
   const [batch, setBatch] = useState(initialBatch);
   const [selectedCsm, setSelectedCsm] = useState(initialBatch.data.selectedCsm);
   const [expandedBusinessUnits, setExpandedBusinessUnits] = useState<Set<string>>(() => new Set());
@@ -360,7 +369,18 @@ export default function ForecastEntryMonthlyBatchWorkspace({ initialBatch }: { i
 
       {notice ? <PetyrInlineNotice tone={notice.type === "success" ? "success" : "danger"}>{notice.text}</PetyrInlineNotice> : null}
 
-      <PetyrCard>
+      <Tabs defaultValue="monthly" className="space-y-5">
+        <TabsList className="rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+          <TabsTrigger value="monthly" className="rounded-xl">
+            Monthly Forecast Entry
+          </TabsTrigger>
+          <TabsTrigger value="annual" className="rounded-xl">
+            Annual Forecast Entry
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="monthly" className="space-y-5">
+          <PetyrCard>
         <CardHeader>
           <CardTitle>Monthly Forecast Batch</CardTitle>
           <CardDescription>
@@ -524,7 +544,13 @@ export default function ForecastEntryMonthlyBatchWorkspace({ initialBatch }: { i
             {isSaving ? "Saving forecast" : "Save forecast"}
           </Button>
         </CardContent>
-      </PetyrCard>
+          </PetyrCard>
+        </TabsContent>
+
+        <TabsContent value="annual" className="space-y-5">
+          <AnnualForecastEntryBatchWorkspace initialBatch={initialAnnualBatch} />
+        </TabsContent>
+      </Tabs>
     </PetyrWorkspaceShell>
   );
 }

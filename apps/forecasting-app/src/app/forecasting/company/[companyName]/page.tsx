@@ -5,10 +5,12 @@ import { CardContent, CardDescription, CardHeader, CardTitle } from "@/component
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requirePetyrPagePermission } from "@/lib/petyr/auth";
 import { hasPetyrPermission, PETYR_PERMISSIONS } from "@/lib/petyr/authCore";
+import { mapLatestPetyrCompanyIntelligenceToActionResult } from "@/lib/petyr/companyIntelligenceState";
 import { resolvePreferredCsmName } from "@/lib/petyr/csmIdentity";
 import { formatPetyrCurrencyValue, formatPetyrNumber, formatPetyrPercent } from "@/lib/petyr/formatters";
 import { getCompanyDetail, getForecastEntryCompanies, type PetyrCompanyDetail } from "@/services/petyrDataService";
 import { getPetyrCompanyAlerts, type PetyrAlert, type PetyrAlertSeverity, type PetyrAlertType } from "@/services/petyrAlertService";
+import { getLatestPetyrCompanyIntelligence } from "@/services/petyrForecastIntelligenceCacheService";
 import { CompanyBusinessUnitRevenueChart, CompanyMonthlyTrendChart } from "./CompanyDetailCharts";
 import { PetyrFloatingDiagnosticsMenu } from "@/components/petyr/PetyrFloatingDiagnosticsMenu";
 import { CompanyBusinessUnitMonthlyView } from "@/components/petyr/CompanyBusinessUnitMonthlyView";
@@ -108,10 +110,15 @@ function formatDateTime(value: string | null | undefined) {
 }
 
 function monthLabel(month: number) {
+  if (month === 0) return "Annual";
   return MONTHS[month - 1] ?? String(month);
 }
 
 function forecastTypeLabel(forecastType: string | null | undefined) {
+  if (forecastType === "active_status") return "Company active status";
+  if (forecastType === "annual_initial_forecast") return "Annual FC Initial";
+  if (forecastType === "annual_ongoing_confidence") return "Annual confidence";
+  if (forecastType === "annual_forecast") return "Annual forecast";
   if (forecastType === "companyActiveStatus") return "Company active status";
   if (forecastType === "ongoing") return "Ongoing forecast";
   if (forecastType === "previous_month") return "Previous-month forecast";
@@ -119,11 +126,13 @@ function forecastTypeLabel(forecastType: string | null | undefined) {
 }
 
 function formatChangeValue(fieldName: string, value: string | null) {
-  if (fieldName === "companyActiveStatus") {
+  if (fieldName === "companyActiveStatus" || fieldName === "active_status") {
     if (value === "active") return "Active";
     if (value === "inactive") return "Inactive";
     return "n/a";
   }
+
+  if (fieldName === "annual_ongoing_confidence") return value || "n/a";
 
   return formatMoney(value);
 }
@@ -177,16 +186,18 @@ function EmptyTableState({ text }: { text: string }) {
 }
 
 function SectionCard({
+  id,
   title,
   description,
   children
 }: {
+  id?: string;
   title: string;
   description?: string;
   children: ReactNode;
 }) {
   return (
-    <PetyrCard>
+    <PetyrCard id={id}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         {description ? <CardDescription>{description}</CardDescription> : null}
@@ -753,10 +764,11 @@ export default async function CompanyDetailPage({ params, searchParams }: Compan
   const selectedYear = parseYearParam(rawYear) ?? new Date().getFullYear();
   const companyName = decodeRouteParam(routeParams.companyName).trim();
   const yearDiagnostics = rawYear && !parseYearParam(rawYear) ? [`Invalid year query parameter "${rawYear}" ignored.`] : [];
-  const [result, alertsResult, navigationResult] = await Promise.all([
+  const [result, alertsResult, navigationResult, latestIntelligence] = await Promise.all([
     getCompanyDetail(companyName, selectedYear),
     getPetyrCompanyAlerts(companyName, { year: selectedYear }),
-    getForecastEntryCompanies()
+    getForecastEntryCompanies(),
+    getLatestPetyrCompanyIntelligence({ companyName, year: selectedYear })
   ]);
   const data = result.data;
   const overview = data.overview;
@@ -781,6 +793,7 @@ export default async function CompanyDetailPage({ params, searchParams }: Compan
   const diagnostics = [...new Set([...yearDiagnostics, ...result.diagnostics, ...alertsResult.diagnostics, ...navigationResult.diagnostics])];
   const canViewAdminTools = hasPetyrPermission(identity, PETYR_PERMISSIONS.admin);
   const canRunIntelligence = hasPetyrPermission(identity, PETYR_PERMISSIONS.forecastWrite);
+  const initialIntelligenceResult = mapLatestPetyrCompanyIntelligenceToActionResult(latestIntelligence);
 
   return (
     <PetyrWorkspaceShell activeSection="company" companyDetailHref={companyDetailHref} forecastEntryHref={forecastEntryHref}>
@@ -836,6 +849,7 @@ export default async function CompanyDetailPage({ params, searchParams }: Compan
           companyName={displayCompanyName}
           year={selectedYear}
           context="company-detail"
+          initialResult={initialIntelligenceResult}
         />
       ) : null}
 
@@ -847,7 +861,7 @@ export default async function CompanyDetailPage({ params, searchParams }: Compan
         <AgreementsSection rows={data.agreements} />
       </SectionCard>
 
-      <SectionCard title="Change history" description="Latest forecast save sessions and grouped Business Unit changes.">
+      <SectionCard id="history-changes" title="Change history" description="Latest forecast save sessions and grouped Business Unit changes.">
         <ChangeHistorySection rows={data.changeHistory} />
       </SectionCard>
 

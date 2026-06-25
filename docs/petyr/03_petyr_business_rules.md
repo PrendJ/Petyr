@@ -55,6 +55,29 @@ If month > current month:
 Annual forecast is not a yearly objective and must not be used as a fallback
 for Branch or Business Unit objectives.
 
+## Annual Forecast Entry
+
+The normal Forecast Entry page has a separate CSM-facing Annual Forecast Entry
+section alongside Monthly Forecast Entry.
+
+Rules:
+
+- CSM filter follows the same ownership/preselection logic as Monthly.
+- Year options start at 2026, include at least 2026 and 2027, and progressively
+  expose the next year.
+- Default year is current year until December 9, next year from December 10
+  through December 31, and the new current year from January 1.
+- FC Initial is editable only from December 10 of year N-1 through January 10 of
+  year N.
+- FC Ongoing is the sum of saved or AI-confirmed annual Business Unit values.
+  Unclicked FC AI placeholders are not saved and do not contribute.
+- FC Ongoing Confidence is required on modified rows and accepts only `01 High`,
+  `02 Mid` and `03 Low`.
+- Annual Entry Planned includes future `Setup`, `Recruiting` and `Running`
+  campaigns for the selected year in this workflow. This does not change the
+  broader Management View planned-through-year-end rule unless a future decision
+  updates it.
+
 ## Initial Forecast
 
 Initial Forecast is the frozen annual baseline used for Management View

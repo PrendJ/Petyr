@@ -1,6 +1,7 @@
 import ForecastEntryMonthlyBatchWorkspace from "@/components/petyr/ForecastEntryMonthlyBatchWorkspace";
 import { requirePetyrPagePermission } from "@/lib/petyr/auth";
 import { PETYR_PERMISSIONS } from "@/lib/petyr/authCore";
+import { getAnnualForecastEntryBatch } from "@/services/annualForecastEntryBatchService";
 import { getForecastEntryBatch } from "@/services/forecastEntryBatchService";
 
 export const dynamic = "force-dynamic";
@@ -17,17 +18,25 @@ function firstParam(value: string | string[] | undefined) {
 
 function getForecastEntryQuery(searchParams: SearchParams) {
   return {
-    csmName: firstParam(searchParams.csmName)?.trim() ?? ""
+    csmName: firstParam(searchParams.csmName)?.trim() ?? "",
+    year: firstParam(searchParams.year)?.trim() ?? ""
   };
 }
 
 export default async function ForecastEntryPage({ searchParams }: ForecastEntryPageProps) {
   const identity = await requirePetyrPagePermission(PETYR_PERMISSIONS.forecastWrite);
   const resolvedSearchParams = (await searchParams) ?? {};
-  const initialBatch = await getForecastEntryBatch({
-    ...getForecastEntryQuery(resolvedSearchParams),
-    preferredCsmName: identity.user.displayName
-  });
+  const query = getForecastEntryQuery(resolvedSearchParams);
+  const [initialBatch, initialAnnualBatch] = await Promise.all([
+    getForecastEntryBatch({
+      csmName: query.csmName,
+      preferredCsmName: identity.user.displayName
+    }),
+    getAnnualForecastEntryBatch({
+      ...query,
+      preferredCsmName: identity.user.displayName
+    })
+  ]);
 
-  return <ForecastEntryMonthlyBatchWorkspace initialBatch={initialBatch} />;
+  return <ForecastEntryMonthlyBatchWorkspace initialBatch={initialBatch} initialAnnualBatch={initialAnnualBatch} />;
 }

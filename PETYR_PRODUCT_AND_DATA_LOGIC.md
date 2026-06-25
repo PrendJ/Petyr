@@ -423,6 +423,69 @@ target-year/cutoff semantics are tracked in `BACKLOG.md`. A server-side
 consolidation service and protected manual endpoint exist for controlled
 recovery operations until the real scheduler is selected.
 
+### 10.2 Annual Forecast Entry
+
+Normal `/forecasting/entry` contains a separate Annual Forecast Entry section
+for CSMs, distinct from the Monthly Forecast Entry section.
+
+Filters:
+
+- CSM, using the same CSM ownership/preselection logic as Monthly Forecast Entry;
+- Year, starting at 2026 and including at least 2026 and 2027.
+
+Year rules:
+
+- options never include years before 2026;
+- each year progressively exposes the following year;
+- before December 10, the default is the current year;
+- from December 10 through December 31, the default is the following year;
+- from January 1, the default is the new current year.
+
+Table rules:
+
+- rows are all customers assigned to the selected CSM;
+- sorting is active customers first, inactive customers with Revenue or Planned
+  second, inactive customers without Revenue or Planned last;
+- inactive customers remain visible with muted styling;
+- customer names link to Company Detail;
+- History opens Company Detail at the change-history anchor in a new tab;
+- active status is manual and stored through `company_forecast_status`.
+
+Annual values:
+
+- FC Initial is stored by customer + year in `forecast_annual_entry`;
+- FC Initial is editable only from December 10 of year N-1 through January 10 of
+  year N, then read-only;
+- FC Ongoing Confidence is stored by customer + year and accepts only `01 High`,
+  `02 Mid` and `03 Low`;
+- confidence is required when a row is modified;
+- Business Unit annual forecast values use the official Petyr Business Units and
+  remain stored in `forecast_annual`;
+- each saved Business Unit value records `value_source=manual` or
+  `value_source=ai_confirmed`;
+- unclicked FC AI placeholders are not saved and do not contribute to FC Ongoing;
+- clicked FC AI placeholders are saved as AI-confirmed if the value is not
+  changed, or manual if the CSM edits the value;
+- FC Ongoing is the sum of saved/confirmed Business Unit annual values.
+
+Annual Revenue / Planned:
+
+- Revenue is selected-year campaign revenue closed through today;
+- Planned is selected-year future campaign revenue from tomorrow through
+  December 31 for statuses `Setup`, `Recruiting` and `Running` in the Annual
+  Forecast Entry workflow;
+- both read from PostgreSQL materialized Redash-derived data, never Redash
+  directly.
+
+Audit:
+
+- every effective Annual Forecast Entry save is grouped in
+  `forecast_save_session` and written to `forecast_change_log` with source
+  `Annual Forecast Entry`;
+- audit rows include changed field, previous value, new value, user, timestamp,
+  company, year and Business Unit when applicable. BU forecast audit values also
+  include whether the new value is manual or AI-confirmed.
+
 ---
 
 ## 11. Closed revenue YTD
@@ -930,7 +993,7 @@ It must show:
 - company active status;
 - AI forecast cache as read-only evidence.
 
-Company Detail must show change history but must not be the main monthly forecast editing area. It must not expose the AI Forecast apply action or numeric AI Forecast row generation; those actions belong only in Forecast Entry's admin-visible support tool. Company Detail may expose CSM-facing Forecast Intelligence generation for users with `petyr:forecast:write`; that action is consultative only, may call OpenRouter through the existing Forecast Intelligence path, may save/reuse only the sentinel intelligence cache row and must not modify forecast values. Admin-only Data diagnostics must be available from the floating bottom-right menu instead of a support card in the body.
+Company Detail must show change history but must not be the main monthly forecast editing area. It must not expose the AI Forecast apply action or numeric AI Forecast row generation; those actions belong only in Forecast Entry's admin-visible support tool. Company Detail may expose CSM-facing Forecast Intelligence generation for users with `petyr:forecast:write`; that action is consultative only, may call OpenRouter through the existing Forecast Intelligence path, may save/reuse only the sentinel intelligence cache row and must not modify forecast values. On page load, Company Detail should render the latest successful Forecast Intelligence sentinel row for the selected company and year when one exists, including a visible last-generated timestamp. Manual regeneration must force a fresh OpenRouter-backed Intelligence attempt; a successful attempt replaces the visible guidance, while a failed attempt shows the error without clearing the previous successful guidance. Admin-only Data diagnostics must be available from the floating bottom-right menu instead of a support card in the body.
 
 Campaign detail should show:
 

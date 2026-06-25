@@ -155,6 +155,7 @@ model ForecastAnnual {
   year            Int
   value           Decimal              @db.Decimal(14, 2)
   aiForecastValue Decimal?             @map("ai_forecast_value") @db.Decimal(14, 2)
+  valueSource     String               @default("manual") @map("value_source")
   status          ForecastAnnualStatus @default(draft)
   note            String?              @db.Text
   createdBy       String               @map("created_by")
@@ -167,8 +168,27 @@ model ForecastAnnual {
   @@unique([companyName, businessUnit, year], map: "forecast_annual_company_bu_year_key")
   @@index([companyName, year], map: "forecast_annual_company_year_idx")
   @@index([csmName, year], map: "forecast_annual_csm_year_idx")
+  @@index([valueSource], map: "forecast_annual_value_source_idx")
   @@index([status], map: "forecast_annual_status_idx")
   @@map("forecast_annual")
+}
+
+model ForecastAnnualEntry {
+  id                String   @id @default(cuid())
+  companyName       String   @map("company_name")
+  csmName           String   @map("csm_name")
+  year              Int
+  initialForecast   Decimal? @map("initial_forecast") @db.Decimal(14, 2)
+  ongoingConfidence String?  @map("ongoing_confidence")
+  createdBy         String   @map("created_by")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedBy         String?  @map("updated_by")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([companyName, year], map: "forecast_annual_entry_company_year_key")
+  @@index([csmName, year], map: "forecast_annual_entry_csm_year_idx")
+  @@index([ongoingConfidence], map: "forecast_annual_entry_confidence_idx")
+  @@map("forecast_annual_entry")
 }
 
 model ForecastAnnualSnapshot {

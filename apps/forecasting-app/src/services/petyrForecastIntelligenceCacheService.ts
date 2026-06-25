@@ -8,8 +8,12 @@ import {
 import type {
   PetyrForecastIntelligenceCacheAdapter,
   PetyrForecastIntelligenceCacheWrite,
-  PetyrForecastIntelligenceOutput
+  PetyrForecastIntelligenceOutput,
+  PetyrLatestCompanyIntelligence
 } from "@/services/petyrForecastIntelligenceService";
+import { selectLatestSuccessfulPetyrCompanyIntelligence } from "@/services/petyrForecastIntelligenceService";
+
+export type { PetyrLatestCompanyIntelligence } from "@/services/petyrForecastIntelligenceService";
 
 function asJson(value: unknown) {
   return value as Prisma.InputJsonValue;
@@ -66,6 +70,7 @@ export function createPetyrForecastIntelligenceCacheAdapter(input: {
 
       return {
         output: row.validatedOutput,
+        generatedAt: row.generatedAt?.toISOString() ?? null,
         createdAt: row.createdAt.toISOString(),
         updatedAt: row.updatedAt.toISOString()
       };
@@ -73,6 +78,7 @@ export function createPetyrForecastIntelligenceCacheAdapter(input: {
 
     async save(write) {
       const existing = await findExisting(write);
+      const generatedAt = new Date();
       const data = {
         companyName: input.companyName,
         businessUnit: PETYR_FORECAST_INTELLIGENCE_CACHE_BUSINESS_UNIT,
@@ -82,7 +88,7 @@ export function createPetyrForecastIntelligenceCacheAdapter(input: {
         confidenceScore: null,
         modelVersion: modelVersionForIntelligenceCache(write),
         explanation: write.validatedOutput?.stakeholder_notes[0]?.note ?? write.errorMessage,
-        generatedAt: new Date(),
+        generatedAt,
         provider: write.provider,
         providerModel: write.model,
         promptVersion: write.promptVersion,
@@ -94,15 +100,39 @@ export function createPetyrForecastIntelligenceCacheAdapter(input: {
       };
 
       if (existing) {
-        await prisma.aiForecastCache.update({
+        const updated = await prisma.aiForecastCache.update({
           where: { id: existing.id },
           data
         });
-        return { action: "updated" as const };
+        return { action: "updated" as const, generatedAt: updated.generatedAt.toISOString(), updatedAt: updated.updatedAt.toISOString() };
       }
 
-      await prisma.aiForecastCache.create({ data });
-      return { action: "created" as const };
+      const created = await prisma.aiForecastCache.create({ data });
+      return { action: "created" as const, generatedAt: created.generatedAt.toISOString(), updatedAt: created.updatedAt.toISOString() };
     }
   };
+}
+
+export async function getLatestPetyrCompanyIntelligence(input: {
+  companyName: string;
+  year: number;
+}): Promise<PetyrLatestCompanyIntelligence | null> {
+  const rows = await prisma.aiForecastCache.findMany({
+    where: {
+      companyName: input.companyName,
+      businessUnit: PETYR_FORECAST_INTELLIGENCE_CACHE_BUSINESS_UNIT,
+      year: input.year,
+      month: PETYR_FORECAST_INTELLIGENCE_CACHE_MONTH,
+      forecastValue: new Prisma.Decimal(0),
+      status: "success",
+      validatedOutput: { not: Prisma.JsonNull }
+    },
+    orderBy: [
+      { generatedAt: "desc" },
+      { updatedAt: "desc" }
+    ],
+    take: 10
+  });
+
+  return selectLatestSuccessfulPetyrCompanyIntelligence(rows);
 }

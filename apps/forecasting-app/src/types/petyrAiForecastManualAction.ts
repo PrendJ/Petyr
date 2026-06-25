@@ -293,6 +293,7 @@ export type PetyrAiForecastIntelligenceActionResult = {
   openRouterCalled: boolean;
   retried: boolean;
   cacheAction: "created" | "updated" | "reused" | "none";
+  generatedAt: string | null;
 };
 
 export type PetyrCompanyIntelligenceActionResult = {
@@ -312,6 +313,7 @@ export type PetyrCompanyIntelligenceActionResult = {
   openRouterCalled: boolean;
   retried: boolean;
   cacheAction: PetyrAiForecastIntelligenceActionResult["cacheAction"];
+  generatedAt: string | null;
   diagnostics: string[];
   summary: string;
 };

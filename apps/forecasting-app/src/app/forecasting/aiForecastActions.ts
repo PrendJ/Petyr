@@ -108,7 +108,8 @@ function emptyAiIntelligence(model = "n/a"): PetyrAiForecastIntelligenceActionRe
     validationErrors: [],
     openRouterCalled: false,
     retried: false,
-    cacheAction: "none"
+    cacheAction: "none",
+    generatedAt: null
   };
 }
 
@@ -163,6 +164,7 @@ function companyIntelligenceErrorResult(
     openRouterCalled: false,
     retried: false,
     cacheAction: "none",
+    generatedAt: null,
     diagnostics: [],
     summary: error
   };
@@ -216,7 +218,8 @@ export async function generatePetyrCompanyIntelligenceAction(
       companyName: input.companyName,
       year: input.year,
       dryRun: true,
-      llmPreview: true
+      llmPreview: true,
+      forceRefresh: true
     });
 
     if (!result.dryRun) {
@@ -250,6 +253,7 @@ export async function generatePetyrCompanyIntelligenceAction(
       openRouterCalled: intelligence.openRouterCalled,
       retried: intelligence.retried,
       cacheAction: intelligence.cacheAction,
+      generatedAt: intelligence.generatedAt,
       diagnostics: result.diagnostics,
       summary
     };

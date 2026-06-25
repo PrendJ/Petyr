@@ -17,7 +17,8 @@
     "worker:ai-forecast:once": "tsx src/worker/nightlyDeterministicAiForecast.ts --once",
     "worker:ai-forecast:loop": "tsx src/worker/nightlyDeterministicAiForecast.ts --loop",
     "test:auth": "tsc -p tsconfig.auth-test.json && node --test .tmp/auth-test/tests/petyrAuth.test.js",
-    "test:ai-forecast": "tsc -p tsconfig.ai-forecast-test.json && node --test .tmp/ai-forecast-test/tests/aiForecastIntelligence.test.js"
+    "test:ai-forecast": "tsc -p tsconfig.ai-forecast-test.json && node --test .tmp/ai-forecast-test/tests/aiForecastIntelligence.test.js",
+    "test:annual-forecast-entry": "tsc -p tsconfig.annual-forecast-entry-test.json && node --test .tmp/annual-forecast-entry-test/tests/annualForecastEntryRules.test.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1069.0",

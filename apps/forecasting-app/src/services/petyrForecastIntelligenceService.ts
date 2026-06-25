@@ -1,6 +1,10 @@
 import { createHash } from "crypto";
 
-import { type PetyrBusinessUnit } from "../lib/petyr/constants";
+import {
+  PETYR_FORECAST_INTELLIGENCE_CACHE_BUSINESS_UNIT,
+  PETYR_FORECAST_INTELLIGENCE_CACHE_MONTH,
+  type PetyrBusinessUnit
+} from "../lib/petyr/constants";
 
 export const PETYR_FORECAST_INTELLIGENCE_PAYLOAD_VERSION = "petyr_forecast_intelligence_payload_v3";
 export const PETYR_FORECAST_INTELLIGENCE_PROMPT_VERSION = "petyr_forecast_intelligence_prompt_v5";
@@ -331,8 +335,37 @@ export type PetyrForecastIntelligenceRequestPayloadSummary = {
 
 export type PetyrForecastIntelligenceCachedOutput = {
   output: PetyrForecastIntelligenceOutput;
+  generatedAt: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type PetyrLatestCompanyIntelligence = {
+  companyName: string;
+  year: number;
+  status: "success";
+  model: string | null;
+  promptVersion: string | null;
+  outputSchemaVersion: string;
+  inputHash: string | null;
+  output: PetyrForecastIntelligenceOutput;
+  generatedAt: string;
+  updatedAt: string;
+};
+
+type LatestCompanyIntelligenceCandidate = {
+  companyName: string;
+  year: number;
+  status: string;
+  businessUnit: string;
+  month: number;
+  forecastValue: { toString(): string } | number | string;
+  providerModel: string | null;
+  promptVersion: string | null;
+  inputHash: string | null;
+  validatedOutput: unknown;
+  generatedAt: Date | string | null;
+  updatedAt: Date | string;
 };
 
 export type PetyrForecastIntelligenceCacheWrite = {
@@ -353,7 +386,7 @@ export type PetyrForecastIntelligenceCacheAdapter = {
     promptVersion: string;
     inputHash: string;
   }): Promise<PetyrForecastIntelligenceCachedOutput | null>;
-  save(input: PetyrForecastIntelligenceCacheWrite): Promise<{ action: "created" | "updated" }>;
+  save(input: PetyrForecastIntelligenceCacheWrite): Promise<{ action: "created" | "updated"; generatedAt: string; updatedAt: string | null }>;
 };
 
 export type PetyrForecastIntelligenceOpenRouterClient = (input: {
@@ -379,10 +412,65 @@ export type PetyrForecastIntelligenceRunResult = {
   retried: boolean;
   cacheAction: "created" | "updated" | "reused" | "none";
   rawModelContent: string | null;
+  generatedAt: string | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isOutput(value: unknown): value is PetyrForecastIntelligenceOutput {
+  return typeof value === "object" && value !== null;
+}
+
+function isZeroForecastValue(value: LatestCompanyIntelligenceCandidate["forecastValue"]) {
+  return Number(value.toString()) === 0;
+}
+
+function toIso(value: Date | string | null | undefined) {
+  if (!value) return null;
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+export function selectLatestSuccessfulPetyrCompanyIntelligence(
+  rows: LatestCompanyIntelligenceCandidate[]
+): PetyrLatestCompanyIntelligence | null {
+  const sortedRows = [...rows]
+    .filter((row) => (
+      row.status === "success" &&
+      row.businessUnit === PETYR_FORECAST_INTELLIGENCE_CACHE_BUSINESS_UNIT &&
+      row.month === PETYR_FORECAST_INTELLIGENCE_CACHE_MONTH &&
+      isZeroForecastValue(row.forecastValue) &&
+      isOutput(row.validatedOutput)
+    ))
+    .sort((left, right) => {
+      const generatedDelta = (toIso(right.generatedAt) ?? "").localeCompare(toIso(left.generatedAt) ?? "");
+      if (generatedDelta !== 0) return generatedDelta;
+      return (toIso(right.updatedAt) ?? "").localeCompare(toIso(left.updatedAt) ?? "");
+    });
+
+  const row = sortedRows[0];
+  if (!row || !isOutput(row.validatedOutput)) return null;
+
+  const generatedAt = toIso(row.generatedAt) ?? toIso(row.updatedAt);
+  const updatedAt = toIso(row.updatedAt);
+  if (!generatedAt || !updatedAt) return null;
+
+  return {
+    companyName: row.companyName,
+    year: row.year,
+    status: "success",
+    model: row.providerModel,
+    promptVersion: row.promptVersion,
+    outputSchemaVersion: PETYR_FORECAST_INTELLIGENCE_OUTPUT_SCHEMA_VERSION,
+    inputHash: row.inputHash,
+    output: row.validatedOutput,
+    generatedAt,
+    updatedAt
+  };
 }
 
 function addError(errors: PetyrForecastIntelligenceValidationError[], path: string, message: string) {
@@ -977,7 +1065,7 @@ async function saveFailure(input: {
     errorMessage: input.errorMessage
   });
 
-  return cacheWrite.action;
+  return cacheWrite;
 }
 
 export async function generatePetyrForecastIntelligence(input: {
@@ -1019,14 +1107,15 @@ export async function generatePetyrForecastIntelligence(input: {
         openRouterCalled: false,
         retried: false,
         cacheAction: "reused",
-        rawModelContent: null
+        rawModelContent: null,
+        generatedAt: cached.generatedAt ?? cached.updatedAt
       };
     }
   }
 
   if (!input.apiKey) {
     const errorMessage = "OPENROUTER_API_KEY is not configured; Forecast Intelligence was not generated.";
-    const cacheAction = await saveFailure({
+    const cacheWrite = await saveFailure({
       cache: input.cache,
       provider,
       model: input.model,
@@ -1050,8 +1139,9 @@ export async function generatePetyrForecastIntelligence(input: {
       errorMessage,
       openRouterCalled: false,
       retried: false,
-      cacheAction,
-      rawModelContent: null
+      cacheAction: cacheWrite.action,
+      rawModelContent: null,
+      generatedAt: null
     };
   }
 
@@ -1091,7 +1181,8 @@ export async function generatePetyrForecastIntelligence(input: {
         openRouterCalled: true,
         retried: false,
         cacheAction: cacheWrite.action,
-        rawModelContent: firstContent
+        rawModelContent: firstContent,
+        generatedAt: cacheWrite.generatedAt
       };
     }
 
@@ -1130,12 +1221,13 @@ export async function generatePetyrForecastIntelligence(input: {
         openRouterCalled: true,
         retried: true,
         cacheAction: cacheWrite.action,
-        rawModelContent: retryContent
+        rawModelContent: retryContent,
+        generatedAt: cacheWrite.generatedAt
       };
     }
 
     const errorMessage = "Forecast Intelligence output did not pass validation after one strict JSON retry.";
-    const cacheAction = await saveFailure({
+    const cacheWrite = await saveFailure({
       cache: input.cache,
       provider,
       model: input.model,
@@ -1159,12 +1251,13 @@ export async function generatePetyrForecastIntelligence(input: {
       errorMessage,
       openRouterCalled: true,
       retried: true,
-      cacheAction,
-      rawModelContent: null
+      cacheAction: cacheWrite.action,
+      rawModelContent: null,
+      generatedAt: null
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const cacheAction = await saveFailure({
+    const cacheWrite = await saveFailure({
       cache: input.cache,
       provider,
       model: input.model,
@@ -1188,8 +1281,9 @@ export async function generatePetyrForecastIntelligence(input: {
       errorMessage,
       openRouterCalled: true,
       retried: false,
-      cacheAction,
-      rawModelContent: null
+      cacheAction: cacheWrite.action,
+      rawModelContent: null,
+      generatedAt: null
     };
   }
 }

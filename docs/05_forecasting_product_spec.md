@@ -184,16 +184,19 @@ do not read `RedashSnapshot.payload` directly.
 
 ### `/forecasting/entry`
 
-Dedicated current-month Monthly Forecast batch-entry workspace for CSMs.
+Dedicated Forecast Entry workspace for CSMs, split into separate Monthly and
+Annual sections.
 
 Normal `/forecasting/entry` requires `petyr:forecast:write` and is accessible to
 users who can write CSM forecasts. It no longer shows the old full single-company
-editor. The normal page works only on the current server month/year, exposes only
-a CSM filter, and renders the selected CSM's companies in one batch table.
+editor. The Monthly section works only on the current server month/year, exposes
+only a CSM filter, and renders the selected CSM's companies in one batch table.
+The Annual section is separate, exposes CSM and Year filters, and renders the
+selected CSM's full customer portfolio for the selected annual cycle.
 
-Normal Forecast Entry must not expose a company filter, Annual Forecast, Forecast
-Intelligence, deterministic preview, apply AI forecast, import/export,
-diagnostics or admin tools. Those remain outside the normal CSM batch workflow.
+Normal Forecast Entry must not expose a company filter, Forecast Intelligence,
+deterministic preview, apply AI forecast, import/export, diagnostics or admin
+tools. Those remain outside the normal CSM batch workflow.
 
 The old full Forecast Entry experience is preserved as an admin-only legacy route:
 
@@ -218,6 +221,17 @@ GET /api/petyr/forecast-entry/batch
 
 The batch read endpoint requires `petyr:read`.
 
+Annual Forecast Entry reads CSM options, annual year options, official Business
+Units, customer active status, customer + year metadata, saved annual BU values,
+AI annual placeholders, selected-year Revenue, selected-year Planned, derived
+percentages and Company Detail history links through:
+
+```txt
+GET /api/petyr/forecast-entry/annual-batch?csmName=...&year=YYYY
+```
+
+The annual batch read endpoint requires `petyr:read`.
+
 The legacy single-company read endpoint remains available for the admin-only old
 workspace:
 
@@ -226,8 +240,9 @@ GET /api/petyr/forecast-entry
 ```
 
 `/forecasting/entry` remains directly navigable. Optional `csmName` can preselect
-the CSM; company/year/month query parameters are ignored by the normal batch
-page because the normal workflow is current-month CSM batch entry.
+the CSM. Optional `year` can preselect the Annual Forecast Entry year. Company
+and month query parameters are ignored by the normal page because the normal
+workflow is CSM batch entry, not single-company editing.
 
 Forecast Entry uses the shared Petyr workspace shell. The shared workspace header
 must expose a top-right `?` help control in every workspace section and link to
@@ -264,6 +279,53 @@ POST /api/petyr/forecast-entry/batch/save
 ```
 
 The batch save endpoint requires `petyr:forecast:write`.
+
+The annual save endpoint is:
+
+```txt
+POST /api/petyr/forecast-entry/annual-batch/save
+```
+
+The annual save endpoint requires `petyr:forecast:write`.
+
+Annual Forecast Entry rules:
+- Year options start at 2026, include at least 2026 and 2027, and progressively
+  include the next year as time advances.
+- The default year is the current year until December 9, switches to the next
+  year from December 10 through December 31, and becomes the new current year on
+  January 1.
+- rows are all companies/customers assigned to the selected CSM;
+- ordering is active customers first, then inactive customers with Revenue or
+  Planned, then inactive customers without Revenue or Planned;
+- inactive rows remain visible with muted styling;
+- customer names link to Company Detail; the History action opens Company Detail
+  at the change-history anchor in a new tab;
+- active status is a manual toggle persisted through `company_forecast_status`;
+- FC Initial is stored in `forecast_annual_entry.initial_forecast`, editable only
+  from December 10 of year N-1 through January 10 of year N, and read-only
+  outside that window;
+- FC Ongoing Confidence is stored in
+  `forecast_annual_entry.ongoing_confidence`, accepts only `01 High`, `02 Mid`
+  and `03 Low`, and is required when a row is modified;
+- Business Unit values use all official Petyr Business Units and are stored in
+  `forecast_annual` with `value_source=manual` or `value_source=ai_confirmed`;
+- AI placeholders are displayed from cached AI forecast values but are not saved
+  and do not contribute to FC Ongoing until the CSM clicks/focuses or edits the
+  value;
+- FC Ongoing is derived as the sum of saved/confirmed BU values, not from the
+  old Excel BU formula;
+- Revenue is selected-year campaign revenue closed through today, read from
+  PostgreSQL-backed materialized data;
+- Planned is selected-year campaign revenue with end date from tomorrow through
+  December 31 and status `Setup`, `Recruiting` or `Running`, read from the same
+  PostgreSQL-backed materialized data for this Annual Entry workflow;
+- percentages are `Revenue / FC Ongoing`, `Planned / FC Ongoing`, and
+  `1 - Revenue% - Planned%`, with `n/a` when FC Ongoing is zero or missing;
+- each effective annual save creates `forecast_save_session` and
+  `forecast_change_log` audit rows with source `Annual Forecast Entry`;
+- annual saves reject unconfirmed placeholders, negative/non-numeric BU values,
+  FC Initial changes outside the edit window, unknown Business Units and missing
+  confidence on modified rows.
 
 Batch save rules:
 - current server month/year is validated server-side;
@@ -391,7 +453,7 @@ Validation:
 
 Company detail.
 
-Company Detail uses the shared Petyr workspace shell and remains read-only for data edits. It must expose the Forecast Entry-style navigator for CSM filter, company selection, previous/next company and year load, using the same Forecast Entry company ordering. The year/load control appears to the left of previous/next company navigation; the previous/next helper must not repeat the CSM name. It must not expose the manual AI Forecast apply action. It may expose the same CSM-facing `Intelligence` section for users with `petyr:forecast:write`; this consultative action may call OpenRouter through the existing Forecast Intelligence path and may save/reuse only the sentinel Forecast Intelligence cache row, never numeric AI Forecast rows or CSM-owned forecast data.
+Company Detail uses the shared Petyr workspace shell and remains read-only for data edits. It must expose the Forecast Entry-style navigator for CSM filter, company selection, previous/next company and year load, using the same Forecast Entry company ordering. The year/load control appears to the left of previous/next company navigation; the previous/next helper must not repeat the CSM name. It must not expose the manual AI Forecast apply action. It may expose the same CSM-facing `Intelligence` section for users with `petyr:forecast:write`; this consultative action may call OpenRouter through the existing Forecast Intelligence path and may save/reuse only the sentinel Forecast Intelligence cache row, never numeric AI Forecast rows or CSM-owned forecast data. On load/reload, the section renders the latest successful persisted Intelligence for the selected company + year when available, scoped to the sentinel row only. The visible metadata must show `Last generated: <localized date/time>`, preferring `generated_at` and falling back to `updated_at` when needed.
 
 Sections:
 - Forecast Entry-style navigator with CSM filter, company selection, year/load on the left, and previous/next company navigation without repeating the CSM name;
@@ -788,7 +850,7 @@ write.
 
 The OpenRouter prompt receives only the normalized Forecast Intelligence payload after Petyr local code has computed all metrics, integer-EUR forecast values, signed deltas, local risks, trend signals, agreement residual allocation, sanitized Business Unit attribution and a deterministic evidence registry. Internal consultative scenarios may remain part of local deterministic data, but Forecast Intelligence must not request, validate, render or chart rounding/adjustment scenarios. OpenRouter is consultative only: it must return JSON business analysis limited to stakeholder notes, risks, watchouts and opportunities, using `evidence_refs` copied from the deterministic registry to support its main claims. It must not generate `numeric_evidence`, recalculate or modify `aiForecastValue`, invent official forecast evidence absent from the registry or return prescriptive operational instructions. Petyr enriches the validated UI output by converting `evidence_refs` into `numeric_evidence` from server-owned registry `display_value` fields. CSM-entered monthly and annual forecast values are comparison reference data in the UI only; they must not be sent to OpenRouter and must not influence deterministic forecast values. Recent CSM save-session notes for the selected company/year may be sent as sanitized qualitative context with month, forecast type, source, timestamp and changed-BU count, but they are not authoritative numeric evidence.
 
-Forecast Entry may expose `Generate deterministic preview`, `Generate AI forecast` and `Apply AI forecast` actions for the currently selected company and year only inside the admin-visible support tool. Forecast Entry and Company Detail may also expose a CSM-facing `Generate Intelligence` action for users with `petyr:forecast:write`; this consultative action calls the dry-run Forecast Intelligence path, renders validated JSON guidance and must not expose Apply, OpenRouter I/O, raw prompt payloads or prompt/debug JSON. Company Detail may show saved numeric `ai_forecast_cache` suggestions as read-only evidence, but must not generate or apply numeric AI Forecast rows. The deterministic preview must not call OpenRouter. The AI forecast and Intelligence actions may call OpenRouter only for validated Forecast Intelligence JSON and may save or reuse the intelligence cache sentinel row. The UI must show Business Unit/month deterministic forecast rows separately from compact Forecast Intelligence sections for stakeholder notes, risks, watchouts and opportunities only. Each card keeps title/severity, model-generated insight text and server-generated numeric evidence under it. It must not show status/confidence/as-of/eligible-month/provider-call tiles, selected-month eligibility warnings, executive summary, key insights, drivers, forecast cues, chart-comparison candidates or rounding scenarios. A non-dry-run apply may run only after explicit user confirmation and may write only through the validated manual company flow to `ai_forecast_cache`. Browser code must not
+Forecast Entry may expose `Generate deterministic preview`, `Generate AI forecast` and `Apply AI forecast` actions for the currently selected company and year only inside the admin-visible support tool. Forecast Entry and Company Detail may also expose a CSM-facing `Generate Intelligence` action for users with `petyr:forecast:write`; this consultative action calls the dry-run Forecast Intelligence path, renders validated JSON guidance and must not expose Apply, OpenRouter I/O, raw prompt payloads or prompt/debug JSON. Company Detail may show saved numeric `ai_forecast_cache` suggestions as read-only evidence, but must not generate or apply numeric AI Forecast rows. The deterministic preview must not call OpenRouter. The AI forecast and Intelligence actions may call OpenRouter only for validated Forecast Intelligence JSON and may save or reuse the intelligence cache sentinel row. The manual CSM-facing `Generate Intelligence` action forces a fresh Intelligence generation attempt instead of reusing a same-hash cache hit; after a successful save, the UI replaces the previously visible persisted result and timestamp. Failed generation attempts must render the error while keeping the latest previous successful Intelligence visible. The UI must show Business Unit/month deterministic forecast rows separately from compact Forecast Intelligence sections for stakeholder notes, risks, watchouts and opportunities only. Each card keeps title/severity, model-generated insight text and server-generated numeric evidence under it. It must not show status/confidence/as-of/eligible-month/provider-call tiles, selected-month eligibility warnings, executive summary, key insights, drivers, forecast cues, chart-comparison candidates or rounding scenarios. A non-dry-run apply may run only after explicit user confirmation and may write only through the validated manual company flow to `ai_forecast_cache`. Browser code must not
 receive or expose `APP_INTERNAL_SECRET`, `OPENROUTER_API_KEY` or any equivalent
 server-side secret.
 

@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "noEmit": false,
+    "outDir": ".tmp/annual-forecast-entry-test",
+    "rootDir": ".",
+    "isolatedModules": false,
+    "incremental": false,
+    "tsBuildInfoFile": ".tmp/annual-forecast-entry-test/tsconfig.tsbuildinfo"
+  },
+  "include": [
+    "src/lib/petyr/annualForecastEntryRules.ts",
+    "tests/annualForecastEntryRules.test.ts"
+  ]
+}

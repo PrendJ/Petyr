@@ -102,6 +102,7 @@ Physical tables added by `apps/forecasting-app/prisma/schema.prisma`:
 ```txt
 forecast_monthly
 forecast_annual
+forecast_annual_entry
 forecast_annual_snapshot
 forecast_annual_snapshot_change_log
 forecast_save_session
@@ -166,6 +167,9 @@ Exceptional 2026 alignment:
 Purpose:
 - store yearly forecast drafts and consolidated annual forecasts;
 - keep annual notes and consolidation metadata.
+- store the current value source for Annual Forecast Entry Business Unit values:
+  `manual` or `ai_confirmed`. AI placeholders that a CSM has not clicked or
+  changed are not stored.
 
 Unique key:
 
@@ -182,6 +186,40 @@ consolidated
 
 This is the current/latest annual CSM forecast source for Ongoing Forecast in
 Management View. It must not be overwritten by Initial Forecast import/export.
+
+### forecast_annual_entry
+
+Purpose:
+- store customer + year metadata for the CSM-facing Annual Forecast Entry table;
+- keep the single FC Initial value for that customer/year;
+- keep the single FC Ongoing Confidence value for that customer/year.
+
+Unique key:
+
+```txt
+company_name + year
+```
+
+Important fields:
+- company_name;
+- csm_name;
+- year;
+- initial_forecast;
+- ongoing_confidence: `01 High`, `02 Mid`, `03 Low`;
+- created_by / updated_by;
+- created_at / updated_at.
+
+Rules:
+- FC Initial is editable only from December 10 of year N-1 through January 10
+  of year N. Outside that window it remains visible read-only.
+- FC Ongoing Confidence is required when an Annual Forecast Entry row is
+  modified.
+- FC Ongoing itself is not stored in this table. It is derived as the sum of
+  saved/confirmed `forecast_annual` Business Unit values for the same company
+  and year.
+- Effective Annual Forecast Entry changes are audited through
+  `forecast_save_session` and `forecast_change_log` with source
+  `Annual Forecast Entry`.
 
 Exceptional 2026 alignment:
 - `forecast_annual` may receive one-time 2026 rows copied from already closed Redash campaign revenue by the protected `/petyr-admin` 2026 alignment control or CLI fallback `npm run backfill:2026-ongoing-from-closed`;
@@ -327,7 +365,7 @@ write AI forecasts during this phase. Production AI generation must not overwrit
 historical AI forecast rows. Until append-only regeneration/versioning is
 defined, existing rows for the same company, Business Unit, year, month and
 model version should be skipped rather than overwritten. AI generation must
-never overwrite `forecast_monthly` or `forecast_annual` CSM values. Forecast Intelligence uses the sentinel `business_unit=__forecast_intelligence__`, `month=0` and `forecast_value=0`; numeric forecast readers must filter to successful months 1-12 and exclude the sentinel. Intelligence rows store provider, model, prompt version, input hash, request payload summary, validated output, status and error message. For sentinel rows, `model_version` is an internal cache key that includes provider model, prompt version and input hash so changed inputs do not collide with earlier cache entries.
+never overwrite `forecast_monthly` or `forecast_annual` CSM values. Forecast Intelligence uses the sentinel `business_unit=__forecast_intelligence__`, `month=0` and `forecast_value=0`; numeric forecast readers must filter to successful months 1-12 and exclude the sentinel. Intelligence rows store provider, model, prompt version, input hash, request payload summary, validated output, status, error message and generation metadata. For sentinel rows, `model_version` is an internal cache key that includes provider model, prompt version and input hash so changed inputs do not collide with earlier cache entries. Company Detail reads only the latest successful sentinel row for the selected company + year, ordered by `generated_at DESC` and then `updated_at DESC`, and uses `generated_at` as the visible generation timestamp with `updated_at` only as a fallback.
 
 ### management_objective
 
