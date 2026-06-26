@@ -20,7 +20,7 @@ This base app includes:
 - health API;
 - first DB preview API.
 
-`/forecasting` renders a lightweight shell immediately after Petyr read permission checks, then loads the full approved rendering data from `GET /api/petyr/forecasting/rendering-data` in the browser. While the refresh is running, users see a compact bottom-left loader (`Aggiornamento dati in corso...`). Forecasting data remains PostgreSQL-backed; this endpoint does not introduce Redash browser calls or schema changes.
+`/forecasting` renders a lightweight shell immediately after Petyr read permission checks, then loads the active approved-rendering view from `GET /api/petyr/forecasting/rendering-data?view=management|csm` in the browser. After the active view is usable, the client hydrates `view=all` in the background. While the active refresh is running, users see a compact bottom-left loader (`Aggiornamento dati in corso...`). Forecast Entry Monthly and Annual warmup starts immediately for users with `petyr:forecast:write` and is best-effort. Forecasting data remains PostgreSQL-backed; these endpoint variants do not introduce Redash browser calls or schema changes. Company Detail is intentionally on-demand and reads only the selected company/year.
 
 ## Important rule
 

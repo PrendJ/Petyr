@@ -67,6 +67,8 @@ const APPROVED_URGENT_ACTION_GROUPS: Array<Pick<ApprovedUrgentAction, "id" | "ti
 ];
 const APPROVED_URGENT_ACTION_IDS = new Set(APPROVED_URGENT_ACTION_GROUPS.map((group) => group.id));
 
+export type PetyrApprovedRenderingView = "all" | "management" | "csm";
+
 function monthLabel(month: number) {
   return MONTH_LABELS[month - 1] ?? String(month);
 }
@@ -467,83 +469,186 @@ export function getPetyrApprovedRenderingShellData(year = getPetyrDefaultYear())
   };
 }
 
-export async function getPetyrApprovedRenderingData(year = getPetyrDefaultYear()): Promise<PetyrApprovedRenderingData> {
-  const finishPerformance = startPetyrPerformanceTimer("getPetyrApprovedRenderingData", { year });
-
-  try {
-  const [managementResult, csmWorkspaceResult, currentBusinessUnits, previousBusinessUnits, twoYearsAgoBusinessUnits] = await Promise.all([
-    getManagementView(year),
-    getCsmOverviewWorkspace(year),
-    getBusinessUnitSummary(year),
-    getBusinessUnitSummary(year - 1),
-    getBusinessUnitSummary(year - 2)
-  ]);
-
-  const diagnostics = uniqueDiagnostics([
-    ...managementResult.diagnostics.map((message) => toDiagnostic(message)),
-    ...csmWorkspaceResult.diagnostics.map((message) => toDiagnostic(message)),
-    ...currentBusinessUnits.diagnostics.map((message) => toDiagnostic(message)),
-    ...previousBusinessUnits.diagnostics.map((message) => toDiagnostic(message)),
-    ...twoYearsAgoBusinessUnits.diagnostics.map((message) => toDiagnostic(message))
-  ]);
-  const monthlyManagement = managementResult.data.monthlyTrend.map(monthlyTrendToMetric);
-  const branchRows = managementResult.data.branchAggregates.map(branchRow);
-  const businessUnitRows = managementResult.data.businessUnitAggregates.map(businessUnitRow);
-  const managementRows = managementResult.data.csmAggregates.map(managementRow);
-  const csmCustomersFromWorkspace = csmWorkspaceResult.data.companies.map(customerRow);
-  const csmCustomersBase = csmCustomersFromWorkspace.length > 0
-    ? csmCustomersFromWorkspace
-    : managementResult.data.companies.map(customerRowFromCompanyOverview);
-  const hasRealPostgresData = (
-    csmCustomersBase.some(hasCustomerRealData) ||
-    hasManagementRealData(managementResult.data) ||
-    currentBusinessUnits.data.some(hasBusinessUnitRealData) ||
-    previousBusinessUnits.data.some(hasBusinessUnitRealData) ||
-    twoYearsAgoBusinessUnits.data.some(hasBusinessUnitRealData)
-  );
-
-  if (branchRows.length === 0) {
-    diagnostics.push(toDiagnostic(
-      hasRealPostgresData
+function addManagementDiagnostics(input: {
+  diagnostics: PetyrRenderingDiagnostic[];
+  branchRows: BranchRow[];
+  hasRealPostgresData: boolean;
+}) {
+  if (input.branchRows.length === 0) {
+    input.diagnostics.push(toDiagnostic(
+      input.hasRealPostgresData
         ? "No Branch rows are available from PostgreSQL/company ownership. Petyr is using real PostgreSQL campaign/agreement/forecast data with Branch fallback instead of mock values."
         : "No Branch rows are available from PostgreSQL/company ownership, and no real PostgreSQL fallback data is available.",
-      hasRealPostgresData ? "warning" : "blocking"
+      input.hasRealPostgresData ? "warning" : "blocking"
     ));
   }
+}
 
-  if (csmCustomersFromWorkspace.length === 0) {
-    diagnostics.push(toDiagnostic(
-      csmCustomersBase.length > 0
+function addCsmDiagnostics(input: {
+  diagnostics: PetyrRenderingDiagnostic[];
+  csmCustomersFromWorkspace: CustomerRow[];
+  csmCustomersBase: CustomerRow[];
+}) {
+  if (input.csmCustomersFromWorkspace.length === 0) {
+    input.diagnostics.push(toDiagnostic(
+      input.csmCustomersBase.length > 0
         ? "No Company Ownership-backed CSM Overview rows were available. Petyr is rendering real PostgreSQL company rows from Management View instead of mock customers."
         : "No Company Ownership-backed companies are available for CSM Overview, and no real PostgreSQL fallback customers are available.",
-      csmCustomersBase.length > 0 ? "warning" : "blocking"
+      input.csmCustomersBase.length > 0 ? "warning" : "blocking"
     ));
   }
+}
 
-  const trends = buildTrendNotes({
-    managementRows,
-    branchRows,
-    businessUnitRows,
-    diagnostics
-  });
+export async function getPetyrApprovedRenderingManagementData(year = getPetyrDefaultYear()): Promise<PetyrApprovedRenderingData> {
+  const finishPerformance = startPetyrPerformanceTimer("getPetyrApprovedRenderingData", { year, view: "management" });
 
-  return {
-    source: "postgresql",
-    year,
-    monthlyManagement,
-    budgetGroupSeries: businessUnitSeries(year, currentBusinessUnits.data, previousBusinessUnits.data, twoYearsAgoBusinessUnits.data),
-    branchRows,
-    businessUnitRows,
-    managementRows,
-    csmCustomersBase,
-    companyProfiles: buildCompanyProfiles(csmCustomersBase),
-    urgentActions: approvedUrgentActionsFromAlerts(csmWorkspaceResult.data),
-    positiveTrends: trends.positiveTrends,
-    negativeTrends: trends.negativeTrends,
-    forecastChangeLog: [],
-    diagnostics: uniqueDiagnostics(diagnostics)
-  };
+  try {
+    const [managementResult, previousBusinessUnits, twoYearsAgoBusinessUnits] = await Promise.all([
+      getManagementView(year),
+      getBusinessUnitSummary(year - 1),
+      getBusinessUnitSummary(year - 2)
+    ]);
+    const currentBusinessUnits = managementResult.data.businessUnits;
+    const diagnostics = uniqueDiagnostics([
+      ...managementResult.diagnostics.map((message) => toDiagnostic(message)),
+      ...previousBusinessUnits.diagnostics.map((message) => toDiagnostic(message)),
+      ...twoYearsAgoBusinessUnits.diagnostics.map((message) => toDiagnostic(message))
+    ]);
+    const monthlyManagement = managementResult.data.monthlyTrend.map(monthlyTrendToMetric);
+    const branchRows = managementResult.data.branchAggregates.map(branchRow);
+    const businessUnitRows = managementResult.data.businessUnitAggregates.map(businessUnitRow);
+    const managementRows = managementResult.data.csmAggregates.map(managementRow);
+    const csmCustomersBase = managementResult.data.companies.map(customerRowFromCompanyOverview);
+    const hasRealPostgresData = (
+      csmCustomersBase.some(hasCustomerRealData) ||
+      hasManagementRealData(managementResult.data) ||
+      currentBusinessUnits.some(hasBusinessUnitRealData) ||
+      previousBusinessUnits.data.some(hasBusinessUnitRealData) ||
+      twoYearsAgoBusinessUnits.data.some(hasBusinessUnitRealData)
+    );
+
+    addManagementDiagnostics({ diagnostics, branchRows, hasRealPostgresData });
+
+    const trends = buildTrendNotes({
+      managementRows,
+      branchRows,
+      businessUnitRows,
+      diagnostics
+    });
+
+    return {
+      ...getPetyrApprovedRenderingShellData(year),
+      monthlyManagement,
+      budgetGroupSeries: businessUnitSeries(year, currentBusinessUnits, previousBusinessUnits.data, twoYearsAgoBusinessUnits.data),
+      branchRows,
+      businessUnitRows,
+      managementRows,
+      csmCustomersBase,
+      companyProfiles: buildCompanyProfiles(csmCustomersBase),
+      positiveTrends: trends.positiveTrends,
+      negativeTrends: trends.negativeTrends,
+      diagnostics: uniqueDiagnostics(diagnostics)
+    };
   } finally {
     finishPerformance();
   }
+}
+
+export async function getPetyrApprovedRenderingCsmData(year = getPetyrDefaultYear()): Promise<PetyrApprovedRenderingData> {
+  const finishPerformance = startPetyrPerformanceTimer("getPetyrApprovedRenderingData", { year, view: "csm" });
+
+  try {
+    const csmWorkspaceResult = await getCsmOverviewWorkspace(year);
+    const csmCustomersFromWorkspace = csmWorkspaceResult.data.companies.map(customerRow);
+    const diagnostics = uniqueDiagnostics(csmWorkspaceResult.diagnostics.map((message) => toDiagnostic(message)));
+
+    addCsmDiagnostics({
+      diagnostics,
+      csmCustomersFromWorkspace,
+      csmCustomersBase: csmCustomersFromWorkspace
+    });
+
+    return {
+      ...getPetyrApprovedRenderingShellData(year),
+      csmCustomersBase: csmCustomersFromWorkspace,
+      companyProfiles: buildCompanyProfiles(csmCustomersFromWorkspace),
+      urgentActions: approvedUrgentActionsFromAlerts(csmWorkspaceResult.data),
+      diagnostics: uniqueDiagnostics(diagnostics)
+    };
+  } finally {
+    finishPerformance();
+  }
+}
+
+export async function getPetyrApprovedRenderingData(year = getPetyrDefaultYear()): Promise<PetyrApprovedRenderingData> {
+  const finishPerformance = startPetyrPerformanceTimer("getPetyrApprovedRenderingData", { year, view: "all" });
+
+  try {
+    const [managementResult, csmWorkspaceResult, previousBusinessUnits, twoYearsAgoBusinessUnits] = await Promise.all([
+      getManagementView(year),
+      getCsmOverviewWorkspace(year),
+      getBusinessUnitSummary(year - 1),
+      getBusinessUnitSummary(year - 2)
+    ]);
+    const currentBusinessUnits = managementResult.data.businessUnits;
+    const diagnostics = uniqueDiagnostics([
+      ...managementResult.diagnostics.map((message) => toDiagnostic(message)),
+      ...csmWorkspaceResult.diagnostics.map((message) => toDiagnostic(message)),
+      ...previousBusinessUnits.diagnostics.map((message) => toDiagnostic(message)),
+      ...twoYearsAgoBusinessUnits.diagnostics.map((message) => toDiagnostic(message))
+    ]);
+    const monthlyManagement = managementResult.data.monthlyTrend.map(monthlyTrendToMetric);
+    const branchRows = managementResult.data.branchAggregates.map(branchRow);
+    const businessUnitRows = managementResult.data.businessUnitAggregates.map(businessUnitRow);
+    const managementRows = managementResult.data.csmAggregates.map(managementRow);
+    const csmCustomersFromWorkspace = csmWorkspaceResult.data.companies.map(customerRow);
+    const csmCustomersBase = csmCustomersFromWorkspace.length > 0
+      ? csmCustomersFromWorkspace
+      : managementResult.data.companies.map(customerRowFromCompanyOverview);
+    const hasRealPostgresData = (
+      csmCustomersBase.some(hasCustomerRealData) ||
+      hasManagementRealData(managementResult.data) ||
+      currentBusinessUnits.some(hasBusinessUnitRealData) ||
+      previousBusinessUnits.data.some(hasBusinessUnitRealData) ||
+      twoYearsAgoBusinessUnits.data.some(hasBusinessUnitRealData)
+    );
+
+    addManagementDiagnostics({ diagnostics, branchRows, hasRealPostgresData });
+    addCsmDiagnostics({ diagnostics, csmCustomersFromWorkspace, csmCustomersBase });
+
+    const trends = buildTrendNotes({
+      managementRows,
+      branchRows,
+      businessUnitRows,
+      diagnostics
+    });
+
+    return {
+      source: "postgresql",
+      year,
+      monthlyManagement,
+      budgetGroupSeries: businessUnitSeries(year, currentBusinessUnits, previousBusinessUnits.data, twoYearsAgoBusinessUnits.data),
+      branchRows,
+      businessUnitRows,
+      managementRows,
+      csmCustomersBase,
+      companyProfiles: buildCompanyProfiles(csmCustomersBase),
+      urgentActions: approvedUrgentActionsFromAlerts(csmWorkspaceResult.data),
+      positiveTrends: trends.positiveTrends,
+      negativeTrends: trends.negativeTrends,
+      forecastChangeLog: [],
+      diagnostics: uniqueDiagnostics(diagnostics)
+    };
+  } finally {
+    finishPerformance();
+  }
+}
+
+export async function getPetyrApprovedRenderingDataForView(
+  view: PetyrApprovedRenderingView,
+  year = getPetyrDefaultYear()
+) {
+  if (view === "management") return getPetyrApprovedRenderingManagementData(year);
+  if (view === "csm") return getPetyrApprovedRenderingCsmData(year);
+  return getPetyrApprovedRenderingData(year);
 }

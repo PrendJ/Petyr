@@ -7,6 +7,7 @@ import {
   PetyrManagementObjectiveError,
   upsertManagementObjective
 } from "@/services/petyrManagementObjectiveService";
+import { invalidatePetyrReadCache } from "@/services/forecastEntryReadCache";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
   try {
     const payload = await request.json();
     const result = await upsertManagementObjective(payload);
+    invalidatePetyrReadCache((key) => key.startsWith("overview:"));
 
     return NextResponse.json(result);
   } catch (error) {

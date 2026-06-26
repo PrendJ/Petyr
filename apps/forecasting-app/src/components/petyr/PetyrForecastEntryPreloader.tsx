@@ -6,11 +6,9 @@ function runWhenIdle(callback: () => void) {
   return setTimeout(callback, 500);
 }
 
-function buildWarmupUrl(path: string, csmName: string) {
-  const params = new URLSearchParams({
-    csmName,
-    warmup: "1"
-  });
+function buildWarmupUrl(path: string, csmName: string | null) {
+  const params = new URLSearchParams({ warmup: "1" });
+  if (csmName) params.set("csmName", csmName);
 
   return `${path}?${params.toString()}`;
 }
@@ -23,7 +21,7 @@ export function PetyrForecastEntryPreloader({
   enabled: boolean;
 }) {
   useEffect(() => {
-    if (!enabled || !csmName) return;
+    if (!enabled) return;
 
     const controller = new AbortController();
     const handle = runWhenIdle(() => {
@@ -31,14 +29,16 @@ export function PetyrForecastEntryPreloader({
         const startedAt = performance.now();
 
         try {
-          await fetch(buildWarmupUrl("/api/petyr/forecast-entry/batch", csmName), {
-            cache: "no-store",
-            signal: controller.signal
-          });
-          await fetch(buildWarmupUrl("/api/petyr/forecast-entry/annual-batch", csmName), {
-            cache: "no-store",
-            signal: controller.signal
-          });
+          await Promise.all([
+            fetch(buildWarmupUrl("/api/petyr/forecast-entry/batch", csmName), {
+              cache: "no-store",
+              signal: controller.signal
+            }),
+            fetch(buildWarmupUrl("/api/petyr/forecast-entry/annual-batch", csmName), {
+              cache: "no-store",
+              signal: controller.signal
+            })
+          ]);
 
           console.info("Petyr Forecast Entry warmup complete", {
             durationMs: Math.round(performance.now() - startedAt)

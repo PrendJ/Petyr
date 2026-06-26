@@ -730,6 +730,44 @@ export async function getPetyrAlerts(input: PetyrAlertQuery = {}): Promise<Petyr
   return createResult(alerts, diagnostics);
 }
 
+function buildCompanyScopedOverviewWorkspace(
+  detail: PetyrCompanyDetail,
+  year: number,
+  currentMonth: number
+): PetyrCsmOverviewWorkspace | null {
+  const overview = detail.overview;
+  if (!overview) return null;
+
+  const months = Array.from({ length: 12 }, (_, index) => {
+    const month = index + 1;
+
+    return {
+      year,
+      month,
+      businessUnits: detail.monthlyBusinessUnitView.map((row) => {
+        const monthValue = row.months.find((item) => item.month === month);
+
+        return {
+          businessUnit: row.businessUnit,
+          actualRevenue: monthValue?.actualRevenue ?? 0,
+          previousMonthForecast: monthValue?.previousMonthForecast ?? 0,
+          ongoingForecast: monthValue?.ongoingForecast ?? 0,
+          aiForecast: monthValue?.aiForecast ?? 0
+        };
+      })
+    };
+  });
+
+  return {
+    year,
+    currentMonth,
+    nextMonth: Math.min(currentMonth + 1, 12),
+    csmNames: [overview.csmName],
+    companies: [{ ...overview, months }],
+    urgentActions: []
+  };
+}
+
 export async function getPetyrCompanyAlerts(
   companyName: string,
   input: Omit<PetyrAlertQuery, "companyName"> = {}
@@ -737,19 +775,20 @@ export async function getPetyrCompanyAlerts(
   const diagnostics: string[] = [];
   const currentDate = input.currentDate ?? new Date();
   const year = resolveYear(input.year, currentDate, diagnostics);
-  const [alertsResult, detailResult] = await Promise.all([
-    getPetyrAlerts({ ...input, companyName, year, currentDate }),
-    getCompanyDetail(companyName, year)
-  ]);
-  const month = resolveMonth(input.month, alertsResult.data[0]?.month ?? currentDate.getMonth() + 1, diagnostics);
+  const detailResult = await getCompanyDetail(companyName, year);
+  const month = resolveMonth(input.month, currentDate.getMonth() + 1, diagnostics);
   const resolvedCompanyName = detailResult.data.overview?.companyName ?? companyName;
+  const scopedOverview = buildCompanyScopedOverviewWorkspace(detailResult.data, year, month);
+  const alerts = scopedOverview
+    ? buildPetyrAlertsFromOverview(scopedOverview, { ...input, companyName: resolvedCompanyName, year, month, currentDate })
+    : [];
 
-  diagnostics.push(...alertsResult.diagnostics, ...detailResult.diagnostics);
+  diagnostics.push(...detailResult.diagnostics);
 
   return createResult(
     uniqueSortedAlerts(
       [
-        ...alertsResult.data,
+        ...alerts,
         ...buildCompanyAgreementExpiringAlerts(detailResult.data, resolvedCompanyName, year, month, currentDate),
         ...buildCompanyExpiredAgreementResidualAlerts(detailResult.data, resolvedCompanyName, year, month, currentDate)
       ],

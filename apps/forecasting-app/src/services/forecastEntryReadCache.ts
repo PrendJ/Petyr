@@ -1,4 +1,4 @@
-const FORECAST_ENTRY_READ_CACHE_TTL_MS = 60_000;
+const PETYR_READ_CACHE_TTL_MS = 60_000;
 
 type CacheEntry<T> = {
   expiresAt: number;
@@ -7,7 +7,7 @@ type CacheEntry<T> = {
 
 const readCache = new Map<string, CacheEntry<unknown>>();
 
-export async function getForecastEntryCachedRead<T>(key: string, loader: () => Promise<T>) {
+export async function getPetyrCachedRead<T>(key: string, loader: () => Promise<T>) {
   const now = Date.now();
   const existing = readCache.get(key) as CacheEntry<T> | undefined;
 
@@ -20,7 +20,7 @@ export async function getForecastEntryCachedRead<T>(key: string, loader: () => P
 
   const promise = loader();
   readCache.set(key, {
-    expiresAt: now + FORECAST_ENTRY_READ_CACHE_TTL_MS,
+    expiresAt: now + PETYR_READ_CACHE_TTL_MS,
     promise
   });
 
@@ -37,10 +37,13 @@ export async function getForecastEntryCachedRead<T>(key: string, loader: () => P
   }
 }
 
-export function invalidateForecastEntryReadCache(predicate?: (key: string) => boolean) {
+export function invalidatePetyrReadCache(predicate?: (key: string) => boolean) {
   for (const key of readCache.keys()) {
     if (!predicate || predicate(key)) {
       readCache.delete(key);
     }
   }
 }
+
+export const getForecastEntryCachedRead = getPetyrCachedRead;
+export const invalidateForecastEntryReadCache = invalidatePetyrReadCache;

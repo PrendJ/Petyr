@@ -19,6 +19,7 @@ import {
 } from "@/services/petyrManagementObjectiveService";
 import { logPetyrPerformance, startPetyrPerformanceTimer } from "@/lib/petyr/performance";
 import { resolvePreferredCsmName } from "@/lib/petyr/csmIdentity";
+import { getPetyrCachedRead } from "@/services/forecastEntryReadCache";
 
 const SAFE_IDENTIFIER_PATTERN = /^[a-z_][a-z0-9_]*$/;
 const SYSTEM_COLUMNS = new Set(["snapshot_id", "row_index", "synced_at"]);
@@ -1408,7 +1409,7 @@ function latestAiForecasts(rows: AiForecastCache[]) {
   return [...latestByKey.values()];
 }
 
-async function loadOverviewInputs(year: number, month: number, diagnostics: string[]) {
+async function loadOverviewInputsUncached(year: number, month: number, diagnostics: string[]) {
   const [campaignContext, agreementContext, ownershipContext] = await Promise.all([
     buildCampaignContext(diagnostics),
     buildAgreementContext(diagnostics),
@@ -3751,35 +3752,64 @@ export async function getCompanyDetail(companyName: string, year?: number) {
   });
 
   try {
-    const inputs = await loadOverviewInputs(resolvedYear, month, diagnostics);
+    const [campaignContext, agreementContext, ownershipContext] = await Promise.all([
+      buildCampaignContext(diagnostics),
+      buildAgreementContext(diagnostics),
+      buildOwnershipContext(diagnostics)
+    ]);
+    const ownershipRows = await queryOwnershipRows(ownershipContext);
+    const allOwnershipMaps = buildCompanyOwnershipMaps(ownershipRows);
+    const ownedCompany = companyOwnership(allOwnershipMaps, companyName);
+    const requestedCompanyNames = [...new Set([companyName, ownedCompany?.companyName].filter((value): value is string => Boolean(value)))];
+    const requestedCompanyKeys = new Set(requestedCompanyNames.map(normalizeKey));
+    const scopedOwnershipRows = ownershipRows.filter((row) => requestedCompanyKeys.has(normalizeKey(normalizeCellValue(row.company_name))));
+    const ownershipMaps = buildCompanyOwnershipMaps(scopedOwnershipRows);
+    const [campaignRows, agreementRows, monthlyRows, annualRows, companyStatuses, aiRows] = await Promise.all([
+      queryCampaignRowsForCompanies(campaignContext, requestedCompanyNames),
+      queryAgreementRowsForCompanies(agreementContext, requestedCompanyNames),
+      readForecastMonthlyRows(diagnostics, { companyName: { in: requestedCompanyNames }, year: resolvedYear }),
+      readForecastAnnualRows(diagnostics, { companyName: { in: requestedCompanyNames }, year: resolvedYear }),
+      readCompanyForecastStatuses(diagnostics, { companyName: { in: requestedCompanyNames } }),
+      readAiForecastCacheRows(diagnostics, { companyName: { in: requestedCompanyNames }, year: resolvedYear })
+    ]);
+    const latestAiRows = latestAiForecasts(aiRows);
+
+    if (ownershipContext.exists && ownershipContext.columns.company && ownershipRows.length === 0) {
+      diagnostics.push(`company_ownership is materialized but has no usable company owner rows. Petyr falls back to campaign/agreement CSM where available and groups Branch as "${UNASSIGNED_BRANCH}".`);
+    }
+
+    if (!ownershipMaps.hasRows) {
+      diagnostics.push(`Company Detail ownership fallback is active for "${companyName}": Petyr infers CSM from company rows where available and groups Branch as "${UNASSIGNED_BRANCH}" because canonical company ownership is unavailable for this company.`);
+    }
+
     const overviewRows = buildOverviewRows({
       year: resolvedYear,
       month,
       today,
-      campaignDateColumnExists: Boolean(inputs.campaignContext.columns.endDate),
-      campaignRows: inputs.campaignRows,
-      agreementRows: inputs.agreementRows,
-      ownershipMaps: inputs.ownershipMaps,
-      monthlyRows: inputs.monthlyRows,
-      annualRows: inputs.annualRows,
-      companyStatuses: inputs.companyStatuses,
-      aiRows: inputs.aiRows
+      campaignDateColumnExists: Boolean(campaignContext.columns.endDate),
+      campaignRows,
+      agreementRows,
+      ownershipMaps,
+      monthlyRows,
+      annualRows,
+      companyStatuses,
+      aiRows: latestAiRows
     });
     const overview = overviewRows.find((row) => normalizeKey(row.companyName) === normalizedCompany) ?? null;
     const companyKey = normalizeKey(overview?.companyName ?? companyName);
     const companyKeys = new Set([companyKey]);
-    const campaignDateColumnExists = Boolean(inputs.campaignContext.columns.endDate);
-    const monthlyForecasts = filterMonthlyRowsByCompanies(inputs.monthlyRows, companyKeys);
-    const annualForecasts = filterAnnualRowsByCompanies(inputs.annualRows, companyKeys);
-    const companyStatuses = inputs.companyStatuses.filter((row) => normalizeKey(row.companyName) === companyKey);
-    const aiForecastRows = filterAiRowsByCompanies(inputs.aiRows, companyKeys);
-    const allCompanyCampaignRows = filterCampaignRowsByCompanies(inputs.campaignRows, companyKeys);
+    const campaignDateColumnExists = Boolean(campaignContext.columns.endDate);
+    const monthlyForecasts = filterMonthlyRowsByCompanies(monthlyRows, companyKeys);
+    const annualForecasts = filterAnnualRowsByCompanies(annualRows, companyKeys);
+    const selectedCompanyStatuses = companyStatuses.filter((row) => normalizeKey(row.companyName) === companyKey);
+    const aiForecastRows = filterAiRowsByCompanies(latestAiRows, companyKeys);
+    const allCompanyCampaignRows = filterCampaignRowsByCompanies(campaignRows, companyKeys);
     const companyCampaignRows = filterCampaignRowsByYear({
       rows: allCompanyCampaignRows,
       campaignDateColumnExists,
       year: resolvedYear
     });
-    const companyAgreementRows = filterAgreementRowsByCompanies(inputs.agreementRows, companyKeys);
+    const companyAgreementRows = filterAgreementRowsByCompanies(agreementRows, companyKeys);
     const companyMonthlyTrend = buildMonthlyTrend({
       year: resolvedYear,
       today,
@@ -3809,7 +3839,7 @@ export async function getCompanyDetail(companyName: string, year?: number) {
     });
 
     addCampaignActualDiagnostics({
-      campaignContext: inputs.campaignContext,
+      campaignContext,
       diagnostics,
       label: `Company Detail closed revenue for ${overview?.companyName ?? (companyName || "unknown company")}`,
       year: resolvedYear
@@ -3853,7 +3883,7 @@ export async function getCompanyDetail(companyName: string, year?: number) {
           status: row.status,
           note: row.note
         })),
-        companyStatus: companyStatusToContext(companyStatuses[0]),
+        companyStatus: companyStatusToContext(selectedCompanyStatuses[0]),
         aiForecasts: latestAiForecasts(aiForecastRows).map((row) => ({
           businessUnit: row.businessUnit,
           year: row.year,
@@ -3955,6 +3985,21 @@ function selectScopedCsm(input: { csmName?: unknown; preferredCsmName?: unknown 
     selectedCsm: selected,
     csmOptions: selected && !csmOptions.includes(selected) ? [selected, ...csmOptions] : csmOptions
   };
+}
+
+async function loadOverviewInputs(year: number, month: number, diagnostics: string[]) {
+  const cached = await getPetyrCachedRead(`overview:${year}:${month}`, async () => {
+    const scopedDiagnostics: string[] = [];
+    const inputs = await loadOverviewInputsUncached(year, month, scopedDiagnostics);
+
+    return {
+      inputs,
+      diagnostics: scopedDiagnostics
+    };
+  });
+
+  diagnostics.push(...cached.value.diagnostics);
+  return cached.value.inputs;
 }
 
 async function getScopedOwnershipSelection(input: {

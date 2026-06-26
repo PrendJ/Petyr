@@ -592,7 +592,7 @@ export async function saveForecastEntryBatch(input: ForecastEntryBatchSaveInput)
     };
   });
 
-  invalidateForecastEntryReadCache((key) => key.startsWith("monthly:") || key.startsWith("annual:"));
+  invalidateForecastEntryReadCache((key) => key.startsWith("monthly:") || key.startsWith("annual:") || key.startsWith("overview:"));
 
   return {
     ok: true,

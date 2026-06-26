@@ -13,6 +13,16 @@ Each decision should include:
 
 ---
 
+## 2026-06-26 - Load Petyr active view first and warm background reads
+
+- **Status:** Accepted.
+- **Context:** `/forecasting` already rendered a lightweight shell, but its first browser data refresh still loaded Management, CSM Overview and multi-year Business Unit data as one full payload. Forecast Entry warmup waited for that full refresh and then loaded Monthly and Annual sequentially. Company Detail also reused broad overview inputs before filtering to one company.
+- **Decision:** `GET /api/petyr/forecasting/rendering-data` supports `view=management|csm|all` and loads the active view first. The browser then hydrates the complete payload in the background and starts Forecast Entry Monthly/Annual warmup immediately for forecast writers. Short-lived in-memory read dedupe covers overview reads, and Company Detail uses company-scoped PostgreSQL reads instead of the global overview input path.
+- **Alternatives discarded:** Keeping one full first refresh; adding a persistent browser/server cache; changing schema or precomputing materialized forecast views in this task; preloading Company Detail for every company.
+- **Reason:** The user-visible problem is waiting on non-visible data. Active-view-first loading improves perceived performance while preserving PostgreSQL-backed source data, permissions, calculations and save contracts.
+- **Consequences:** Management and CSM views may hydrate in two phases: active view first, complete cross-view data shortly after. Forecast Entry warmup is best-effort and may use the authenticated display name to resolve the CSM before rendering data has finished. Overview cache is process-local and invalidated after Forecast Entry or Management Objective saves.
+- **Related docs:** `apps/forecasting-app/src/app/api/petyr/forecasting/rendering-data/route.ts`, `apps/forecasting-app/src/components/petyr/PetyrForecastingDataHydrator.tsx`, `apps/forecasting-app/src/components/petyr/PetyrForecastEntryPreloader.tsx`, `apps/forecasting-app/src/services/petyrApprovedRenderingAdapter.ts`, `apps/forecasting-app/src/services/petyrDataService.ts`, `docs/05_forecasting_product_spec.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+
 ## 2026-06-26 - Make Annual Forecast Entry the canonical Initial Forecast source
 
 - **Status:** Accepted.

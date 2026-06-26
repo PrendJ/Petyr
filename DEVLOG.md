@@ -20,6 +20,16 @@ Each entry must include:
 
 ## 2026-06-26
 
+- **Area:** Petyr / Forecasting / Active-view-first data loading
+- **Change:** Split `/api/petyr/forecasting/rendering-data` with optional `view=management|csm|all`, updated `/forecasting` hydration to fetch the active view first and then the full payload in the background, and started Forecast Entry Monthly/Annual warmup immediately for users with `petyr:forecast:write`. Warmup now runs Monthly and Annual in parallel and can rely on server-side CSM resolution when the rendering data has not resolved a preferred CSM yet. Added short-lived overview read dedupe and invalidation after Forecast Entry or Management Objective saves. Company Detail and Company Detail alerts now use company-scoped reads instead of the broad overview load path.
+- **Reason:** Opening Management or CSM Overview should not wait for non-visible data or delayed Forecast Entry warmup. Company Detail is one company at a time and should not pay the cost of portfolio-level reads.
+- **Impact:** Perceived `/forecasting` load order changes, but data sources, Redash isolation, permissions, schema, calculations, save APIs and UI layout remain unchanged. The cache is best-effort, process-local and short-lived.
+- **Files/documents involved:** `apps/forecasting-app/src/app/api/petyr/forecasting/rendering-data/route.ts`, `apps/forecasting-app/src/components/petyr/PetyrForecastingDataHydrator.tsx`, `apps/forecasting-app/src/components/petyr/PetyrForecastEntryPreloader.tsx`, `apps/forecasting-app/src/services/petyrApprovedRenderingAdapter.ts`, `apps/forecasting-app/src/services/petyrDataService.ts`, `apps/forecasting-app/src/services/petyrAlertService.ts`, `apps/forecasting-app/src/services/forecastEntryReadCache.ts`, Forecast Entry and Management Objective save paths, `docs/05_forecasting_product_spec.md`, `apps/forecasting-app/README.md`, `DECISIONS.md`, `DEVLOG.md`.
+- **Validation:** Passed `npm.cmd run build` from `apps/forecasting-app`. Focused source checks confirmed `/forecasting/page.tsx` still only renders the shell server-side, Forecast Entry preloading no longer waits for rendering-data readiness, and Company Detail no longer uses the global `loadOverviewInputs(...)` path.
+- **Follow-up:** Compare `/petyr-admin` Performance Results for rendering, overview, Forecast Entry and Company Detail reads on production-sized portfolios.
+
+## 2026-06-26
+
 - **Area:** Petyr / Admin / Daily AI Forecast monitoring
 - **Change:** Added persisted Daily AI Forecast run measurements under operation `Daily AI Forecast run`, including duration, manual/scheduled source, selected/processed/failed company counts, saved/skipped cache rows, model version, run date and advisory-lock skip state. Petyr Admin now shows a dedicated Daily AI Forecast monitoring table and the manual-run control handles non-JSON HTML responses without throwing `Unexpected token '<'`.
 - **Reason:** Operators need to see whether each Daily AI Forecast run executed, how long it took, how many companies/rows it affected and whether it was manual or scheduled. The previous client assumed every response was JSON, so auth/proxy/error HTML produced an unhelpful parse error.
