@@ -114,9 +114,11 @@ function percentLabel(value: number | null | undefined) {
 }
 
 export default function AnnualForecastEntryBatchWorkspace({
-  initialBatch
+  initialBatch,
+  onBatchChange
 }: {
   initialBatch: AnnualForecastEntryBatchDataResult;
+  onBatchChange?: (batch: AnnualForecastEntryBatchDataResult) => void;
 }) {
   const [batch, setBatch] = useState(initialBatch);
   const [selectedCsm, setSelectedCsm] = useState(initialBatch.data.selectedCsm);
@@ -185,6 +187,7 @@ export default function AnnualForecastEntryBatchWorkspace({
       }
 
       resetLocalState(payload);
+      onBatchChange?.(payload);
     } catch (error) {
       setNotice({
         type: "error",
@@ -318,6 +321,7 @@ export default function AnnualForecastEntryBatchWorkspace({
       }
 
       resetLocalState(payload.batch);
+      onBatchChange?.(payload.batch);
       setNotice({
         type: "success",
         text: payload.noChanges
@@ -350,7 +354,19 @@ export default function AnnualForecastEntryBatchWorkspace({
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[180px_minmax(0,1fr)] lg:items-end">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_180px_minmax(0,1fr)] lg:items-end">
+          <PetyrSelectField
+            label="CSM"
+            disabled={isLoading || isSaving}
+            value={selectedCsm}
+            onChange={(event) => void loadAnnualBatch(event.target.value, selectedYear)}
+          >
+            {batch.data.csmOptions.map((csmName) => (
+              <option key={csmName} value={csmName}>
+                {csmName}
+              </option>
+            ))}
+          </PetyrSelectField>
           <PetyrSelectField
             label="Year"
             disabled={isLoading || isSaving}

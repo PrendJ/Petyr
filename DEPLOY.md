@@ -156,6 +156,15 @@ DATABASE_URL=postgresql://unguess:replace_with_url_encoded_real_password@postgre
 
 If Coolify already initialized the PostgreSQL volume with different credentials, changing `.env` or Coolify variables is not enough. Either keep the real credentials that initialized the volume, or delete/recreate the Coolify resource/volume after exporting any data that must be preserved.
 
+Before exposing production Petyr, configure production PostgreSQL backups at
+Coolify/host or equivalent database-backup level. The v1 production standard is
+daily backups retained for 5 days, weekly backups retained for 3 weeks, no other
+retention tier, encrypted offsite copy, RPO 24 hours and target RTO 8 hours.
+Petyr Admin SQL export/import is not sufficient for production backup
+compliance; it remains a migration and controlled-recovery workflow. The
+Platform owner must document restore drill evidence and keep backup credentials,
+offsite credentials and encryption keys outside this repository.
+
 Production auth variables must point to:
 
 ```env

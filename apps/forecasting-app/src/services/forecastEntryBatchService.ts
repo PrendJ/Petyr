@@ -8,10 +8,12 @@ import {
   getForecastEntryCompanies,
   getForecastEntryContext,
   getForecastEntryContextsBatch,
+  getForecastEntryScopedBatch,
   type PetyrDataServiceResult,
   type PetyrForecastEntryContext,
   type PetyrForecastValueContext
 } from "@/services/petyrDataService";
+import { getForecastEntryCachedRead, invalidateForecastEntryReadCache } from "@/services/forecastEntryReadCache";
 
 const SAVE_SOURCE = "Forecast Entry Batch";
 const SAVE_USER_FALLBACK = "petyr-forecast-entry-batch";
@@ -35,6 +37,7 @@ export class ForecastEntryBatchError extends Error {
 export type ForecastEntryBatchQuery = {
   csmName?: unknown;
   preferredCsmName?: unknown;
+  warmup?: unknown;
 };
 
 export type ForecastEntryBatchCell = {
@@ -133,6 +136,16 @@ function asString(value: unknown) {
 
 function normalizeKey(value: string) {
   return value.trim().toLowerCase();
+}
+
+function monthlyCacheKey(input: ForecastEntryBatchQuery, year: number, month: number) {
+  return [
+    "monthly",
+    year,
+    month,
+    normalizeKey(asString(input.csmName)),
+    normalizeKey(asString(input.preferredCsmName))
+  ].join(":");
 }
 
 function uniqueDiagnostics(values: string[]) {
@@ -239,43 +252,98 @@ function companyFromContext(context: PetyrForecastEntryContext, fallback: Compan
 }
 
 export async function getForecastEntryBatch(input: ForecastEntryBatchQuery = {}): Promise<ForecastEntryBatchDataResult> {
-  const diagnostics: string[] = [];
   const { year, month } = currentServerPeriod();
-  const finishPerformance = startPetyrPerformanceTimer("getForecastEntryBatch", { year, month });
+  const finishPerformance = startPetyrPerformanceTimer("getForecastEntryBatch", {
+    year,
+    month,
+    warmup: asString(input.warmup) === "1" || input.warmup === true
+  });
 
   try {
-    const companiesResult = await getForecastEntryCompanies();
-    diagnostics.push(...companiesResult.diagnostics);
-
-    const companies = toCompanyOptions(companiesResult.data);
-    const { selectedCsm, csmOptions } = selectCsm(input, companies);
-    const selectedCsmKey = normalizeKey(selectedCsm);
-    const scopedCompanies = companies.filter((company) => normalizeKey(company.csmName || "Unassigned") === selectedCsmKey);
-    const contextsResult = await getForecastEntryContextsBatch({
-      csmName: selectedCsm,
-      companies: scopedCompanies,
-      year,
-      month
-    });
-    diagnostics.push(...contextsResult.diagnostics);
-
-    const contexts = contextsResult.data.map((context, index) => companyFromContext(context, scopedCompanies[index]));
-
-    finishPerformance({ status: "success", rowCount: contexts.length, companiesCount: contexts.length });
-
-    return {
-      source: "postgresql",
-      diagnostics: uniqueDiagnostics(diagnostics),
-      data: {
-        selectedCsm,
-        csmOptions,
+    const cached = await getForecastEntryCachedRead(monthlyCacheKey(input, year, month), async () => {
+      const diagnostics: string[] = [];
+      const scopedResult = await getForecastEntryScopedBatch({
+        csmName: input.csmName,
+        preferredCsmName: input.preferredCsmName,
         year,
-        month,
-        entryMode: getForecastEntryMode({ year, month }),
-        businessUnits: [...PETYR_BUSINESS_UNITS],
-        companies: contexts
+        month
+      });
+
+      if (scopedResult) {
+        diagnostics.push(...scopedResult.diagnostics);
+        const contexts = scopedResult.contexts.map((context, index) => companyFromContext(context, scopedResult.companies[index]));
+
+        return {
+          result: {
+            source: "postgresql",
+            diagnostics: uniqueDiagnostics(diagnostics),
+            data: {
+              selectedCsm: scopedResult.selectedCsm,
+              csmOptions: scopedResult.csmOptions,
+              year,
+              month,
+              entryMode: getForecastEntryMode({ year, month }),
+              businessUnits: [...PETYR_BUSINESS_UNITS],
+              companies: contexts
+            }
+          } satisfies ForecastEntryBatchDataResult,
+          meta: {
+            fallback: false,
+            companiesCount: contexts.length,
+            scopedRowsCount: scopedResult.scopedRowsCount
+          }
+        };
       }
-    };
+
+      const companiesResult = await getForecastEntryCompanies();
+      diagnostics.push(...companiesResult.diagnostics);
+
+      const companies = toCompanyOptions(companiesResult.data);
+      const { selectedCsm, csmOptions } = selectCsm(input, companies);
+      const selectedCsmKey = normalizeKey(selectedCsm);
+      const scopedCompanies = companies.filter((company) => normalizeKey(company.csmName || "Unassigned") === selectedCsmKey);
+      const contextsResult = await getForecastEntryContextsBatch({
+        csmName: selectedCsm,
+        companies: scopedCompanies,
+        year,
+        month
+      });
+      diagnostics.push(...contextsResult.diagnostics);
+
+      const contexts = contextsResult.data.map((context, index) => companyFromContext(context, scopedCompanies[index]));
+
+      return {
+        result: {
+          source: "postgresql",
+          diagnostics: uniqueDiagnostics(diagnostics),
+          data: {
+            selectedCsm,
+            csmOptions,
+            year,
+            month,
+            entryMode: getForecastEntryMode({ year, month }),
+            businessUnits: [...PETYR_BUSINESS_UNITS],
+            companies: contexts
+          }
+        } satisfies ForecastEntryBatchDataResult,
+        meta: {
+          fallback: true,
+          companiesCount: contexts.length,
+          scopedRowsCount: 0
+        }
+      };
+    });
+
+    finishPerformance({
+      status: "success",
+      rowCount: cached.value.result.data.companies.length,
+      companiesCount: cached.value.result.data.companies.length,
+      cacheHit: cached.cacheHit,
+      fallback: cached.value.meta.fallback,
+      scopedRowsCount: cached.value.meta.scopedRowsCount
+    });
+
+    return cached.value.result;
   } catch (error) {
     finishPerformance({ status: "failed" });
     throw error;
@@ -523,6 +591,8 @@ export async function saveForecastEntryBatch(input: ForecastEntryBatchSaveInput)
       saveSessionIds
     };
   });
+
+  invalidateForecastEntryReadCache((key) => key.startsWith("monthly:") || key.startsWith("annual:"));
 
   return {
     ok: true,

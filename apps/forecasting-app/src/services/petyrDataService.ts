@@ -1,4 +1,4 @@
-import { Prisma, type AiForecastCache, type CompanyForecastStatus, type ForecastAnnual, type ForecastAnnualSnapshot, type ForecastMonthly } from "@prisma/client";
+import { Prisma, type AiForecastCache, type CompanyForecastStatus, type ForecastAnnual, type ForecastMonthly } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import {
   getRedashPetyrSourceMapping,
@@ -17,8 +17,8 @@ import {
   getManagementObjectiveMaps,
   type ManagementObjectiveMaps
 } from "@/services/petyrManagementObjectiveService";
-import { readInitialAnnualForecastSnapshots } from "@/services/petyrInitialAnnualForecastService";
 import { logPetyrPerformance, startPetyrPerformanceTimer } from "@/lib/petyr/performance";
+import { resolvePreferredCsmName } from "@/lib/petyr/csmIdentity";
 
 const SAFE_IDENTIFIER_PATTERN = /^[a-z_][a-z0-9_]*$/;
 const SYSTEM_COLUMNS = new Set(["snapshot_id", "row_index", "synced_at"]);
@@ -886,6 +886,74 @@ async function queryOwnershipRows(context: SourceContext<OwnershipColumns>) {
   logPetyrPerformance("queryOwnershipRows", {
     tableName: context.tableName,
     rowCount: rows.length
+  });
+
+  return rows;
+}
+
+function normalizedSqlValues(values: Iterable<string>) {
+  return [...new Set([...values].map((value) => normalizeKey(value)).filter(Boolean))];
+}
+
+async function queryCampaignRowsForCompanies(context: SourceContext<CampaignColumns>, companies: Iterable<string>) {
+  const companyKeys = normalizedSqlValues(companies);
+  if (!context.exists || !context.columns.company || companyKeys.length === 0) return [];
+
+  const rows = await prisma.$queryRaw<MaterializedCampaignRow[]>(Prisma.sql`
+    SELECT ${Prisma.join([
+      Prisma.sql`"row_index"::integer AS "row_index"`,
+      selectedTextColumn(context.columns.company, "company_name"),
+      selectedTextColumn(context.columns.csm, "csm_name"),
+      selectedTextColumn(context.columns.branch, "branch_name"),
+      selectedTextColumn(context.columns.businessUnit, "business_unit"),
+      selectedTextColumn(context.columns.revenue, "revenue_value"),
+      selectedTextColumn(context.columns.cost, "cost_value"),
+      selectedTextColumn(context.columns.grossMarginPct, "gross_margin_pct"),
+      selectedTextColumn(context.columns.campaignName, "campaign_name"),
+      selectedTextColumn(context.columns.status, "campaign_status"),
+      selectedTextColumn(context.columns.agreementName, "agreement_name"),
+      selectedTextColumn(context.columns.startDate, "start_date"),
+      selectedTextColumn(context.columns.endDate, "end_date"),
+      selectedTextColumn(context.columns.link, "campaign_link")
+    ])}
+    FROM ${sqlIdentifier(context.tableName)}
+    WHERE lower(trim(${sqlIdentifier(context.columns.company.dbColumnName)}::text)) IN (${Prisma.join(companyKeys)})
+  `);
+
+  logPetyrPerformance("queryCampaignRows", {
+    tableName: context.tableName,
+    rowCount: rows.length,
+    scoped: true,
+    companiesCount: companyKeys.length
+  });
+
+  return rows;
+}
+
+async function queryAgreementRowsForCompanies(context: SourceContext<AgreementColumns>, companies: Iterable<string>) {
+  const companyKeys = normalizedSqlValues(companies);
+  if (!context.exists || !context.columns.company || companyKeys.length === 0) return [];
+
+  const rows = await prisma.$queryRaw<MaterializedAgreementRow[]>(Prisma.sql`
+    SELECT ${Prisma.join([
+      selectedTextColumn(context.columns.company, "company_name"),
+      selectedTextColumn(context.columns.csm, "csm_name"),
+      selectedTextColumn(context.columns.agreementName, "agreement_name"),
+      selectedTextColumn(context.columns.status, "agreement_status"),
+      selectedTextColumn(context.columns.totalValue, "total_value"),
+      selectedTextColumn(context.columns.residualValue, "residual_value"),
+      selectedTextColumn(context.columns.expiryDate, "expiry_date"),
+      selectedTextColumn(context.columns.link, "agreement_link")
+    ])}
+    FROM ${sqlIdentifier(context.tableName)}
+    WHERE lower(trim(${sqlIdentifier(context.columns.company.dbColumnName)}::text)) IN (${Prisma.join(companyKeys)})
+  `);
+
+  logPetyrPerformance("queryAgreementRows", {
+    tableName: context.tableName,
+    rowCount: rows.length,
+    scoped: true,
+    companiesCount: companyKeys.length
   });
 
   return rows;
@@ -2292,7 +2360,6 @@ function buildBusinessUnitSummaryRows(input: {
   campaignRows: MaterializedCampaignRow[];
   monthlyRows: ForecastMonthly[];
   annualRows: ForecastAnnual[];
-  initialAnnualSnapshots?: ForecastAnnualSnapshot[];
   aiRows: AiForecastCache[];
   diagnostics?: PlannedFutureCampaignDiagnostics;
 }) {
@@ -2399,10 +2466,10 @@ function buildBusinessUnitSummaryRows(input: {
     }
   }
 
-  for (const row of input.initialAnnualSnapshots || []) {
-    if (row.year === input.year && row.snapshotType === "initial") {
+  for (const row of input.annualRows) {
+    if (row.year === input.year && row.initialForecast) {
       const summary = ensureBusinessUnit(row.businessUnit);
-      summary.initialForecast += decimalToNumber(row.value) || 0;
+      summary.initialForecast += decimalToNumber(row.initialForecast) || 0;
       summary.initialForecastRowsCount += 1;
     }
   }
@@ -2714,8 +2781,8 @@ function addManagementAnnualForecastValue(bucket: ManagementAggregateBucket, row
   bucket.annualForecastRows += 1;
 }
 
-function addManagementInitialForecastValue(bucket: ManagementAggregateBucket, row: ForecastAnnualSnapshot) {
-  bucket.initialForecast += decimalToNumber(row.value) ?? 0;
+function addManagementInitialForecastValue(bucket: ManagementAggregateBucket, row: ForecastAnnual) {
+  bucket.initialForecast += decimalToNumber(row.initialForecast) ?? 0;
   bucket.initialForecastRows += 1;
 }
 
@@ -2830,7 +2897,6 @@ function buildManagementAggregateRows(input: {
   ownershipMaps?: CompanyOwnershipMaps;
   monthlyRows: ForecastMonthly[];
   annualRows: ForecastAnnual[];
-  initialAnnualSnapshots: ForecastAnnualSnapshot[];
   objectiveMaps?: ManagementObjectiveMaps;
 }) {
   const branchBuckets = new Map<string, ManagementAggregateBucket>();
@@ -2916,8 +2982,8 @@ function buildManagementAggregateRows(input: {
     }
   }
 
-  for (const row of input.initialAnnualSnapshots) {
-    if (row.year !== input.year || row.snapshotType !== "initial") continue;
+  for (const row of input.annualRows) {
+    if (row.year !== input.year || !row.initialForecast) continue;
 
     const businessUnit = normalizeBusinessUnit(row.businessUnit);
     const csmName = normalizeCsm(companyOwnership(input.ownershipMaps, row.companyName)?.csmName ?? row.csmName);
@@ -3344,15 +3410,14 @@ export async function getManagementView(year: number) {
   });
 
   try {
-    const [inputs, objectiveMaps, initialAnnualSnapshots] = await Promise.all([
+    const [inputs, objectiveMaps] = await Promise.all([
       loadOverviewInputs(resolvedYear, reportingMonth, diagnostics),
-      getManagementObjectiveMaps(resolvedYear),
-      readInitialAnnualForecastSnapshots(resolvedYear, diagnostics)
+      getManagementObjectiveMaps(resolvedYear)
     ]);
     diagnostics.push(...objectiveMaps.diagnostics);
-    if (initialAnnualSnapshots.length === 0) {
+    if (!inputs.annualRows.some((row) => row.year === resolvedYear && row.initialForecast)) {
       diagnostics.push(
-        `Initial Forecast snapshot is missing for ${resolvedYear}. Management View shows Initial Forecast as n/a until the 2026 Excel bootstrap or future year-end consolidation writes forecast_annual_snapshot rows.`
+        `Initial Forecast is missing for ${resolvedYear}. Management View shows Initial Forecast as n/a until Annual Forecast Entry saves per-Business Unit Initial values during the December 10-January 10 window.`
       );
     }
     addCampaignActualDiagnostics({
@@ -3402,7 +3467,6 @@ export async function getManagementView(year: number) {
       ownershipMaps: inputs.ownershipMaps,
       monthlyRows: inputs.monthlyRows,
       annualRows: inputs.annualRows,
-      initialAnnualSnapshots,
       objectiveMaps
     });
     addMissingManagementObjectiveDiagnostics({
@@ -3450,8 +3514,7 @@ export async function getManagementView(year: number) {
       campaignDateColumnExists: true,
       campaignRows: [],
       monthlyRows: [],
-      annualRows: [],
-      initialAnnualSnapshots: []
+      annualRows: []
     });
 
     return createResult<PetyrManagementView>(
@@ -3688,10 +3751,7 @@ export async function getCompanyDetail(companyName: string, year?: number) {
   });
 
   try {
-    const [inputs, initialAnnualSnapshots] = await Promise.all([
-      loadOverviewInputs(resolvedYear, month, diagnostics),
-      readInitialAnnualForecastSnapshots(resolvedYear, diagnostics)
-    ]);
+    const inputs = await loadOverviewInputs(resolvedYear, month, diagnostics);
     const overviewRows = buildOverviewRows({
       year: resolvedYear,
       month,
@@ -3711,7 +3771,6 @@ export async function getCompanyDetail(companyName: string, year?: number) {
     const campaignDateColumnExists = Boolean(inputs.campaignContext.columns.endDate);
     const monthlyForecasts = filterMonthlyRowsByCompanies(inputs.monthlyRows, companyKeys);
     const annualForecasts = filterAnnualRowsByCompanies(inputs.annualRows, companyKeys);
-    const initialForecastSnapshots = initialAnnualSnapshots.filter((row) => normalizeKey(row.companyName) === companyKey);
     const companyStatuses = inputs.companyStatuses.filter((row) => normalizeKey(row.companyName) === companyKey);
     const aiForecastRows = filterAiRowsByCompanies(inputs.aiRows, companyKeys);
     const allCompanyCampaignRows = filterCampaignRowsByCompanies(inputs.campaignRows, companyKeys);
@@ -3745,7 +3804,6 @@ export async function getCompanyDetail(companyName: string, year?: number) {
       campaignRows: allCompanyCampaignRows,
       monthlyRows: monthlyForecasts,
       annualRows: annualForecasts,
-      initialAnnualSnapshots: initialForecastSnapshots,
       aiRows: aiForecastRows,
       diagnostics: plannedFutureDiagnostics
     });
@@ -3858,6 +3916,414 @@ export async function getForecastEntryCompanies() {
     );
   } finally {
     finishPerformance();
+  }
+}
+
+export type PetyrForecastEntryScopedCompany = {
+  companyName: string;
+  csmName: string;
+  isForecastActive: boolean | null;
+  priorityScore: number;
+};
+
+export type PetyrForecastEntryScopedBatch = {
+  selectedCsm: string;
+  csmOptions: string[];
+  companies: PetyrForecastEntryScopedCompany[];
+  contexts: PetyrForecastEntryContext[];
+  diagnostics: string[];
+  usedFallback: boolean;
+  scopedRowsCount: number;
+};
+
+export type PetyrAnnualForecastEntryScopedPortfolio = {
+  selectedCsm: string;
+  csmOptions: string[];
+  companies: PetyrForecastEntryScopedCompany[];
+  portfolio: Map<string, PetyrAnnualForecastEntryPortfolioCompany>;
+  diagnostics: string[];
+  usedFallback: boolean;
+  scopedRowsCount: number;
+};
+
+function selectScopedCsm(input: { csmName?: unknown; preferredCsmName?: unknown }, csmOptions: string[]) {
+  const requestedCsm = typeof input.csmName === "string" ? input.csmName.trim() : "";
+  const preferredCsm = requestedCsm ? null : resolvePreferredCsmName(input.preferredCsmName, csmOptions);
+  const selected = requestedCsm || preferredCsm || csmOptions[0] || "Unassigned";
+
+  return {
+    selectedCsm: selected,
+    csmOptions: selected && !csmOptions.includes(selected) ? [selected, ...csmOptions] : csmOptions
+  };
+}
+
+async function getScopedOwnershipSelection(input: {
+  csmName?: unknown;
+  preferredCsmName?: unknown;
+  diagnostics: string[];
+}) {
+  const ownershipContext = await buildOwnershipContext(input.diagnostics);
+  const ownershipRows = await queryOwnershipRows(ownershipContext);
+  const ownershipMaps = buildCompanyOwnershipMaps(ownershipRows);
+
+  if (!ownershipMaps.hasRows) {
+    input.diagnostics.push("Forecast Entry scoped read fell back because company_ownership has no usable company rows.");
+    return null;
+  }
+
+  const allCompanies = [...ownershipMaps.byCompany.values()];
+  const csmOptions = [...new Set(allCompanies.map((company) => company.csmName || "Unassigned"))].sort((left, right) =>
+    left.localeCompare(right)
+  );
+  const selection = selectScopedCsm(input, csmOptions);
+  const selectedCsmKey = normalizeKey(selection.selectedCsm);
+  const companies = allCompanies
+    .filter((company) => normalizeKey(company.csmName || "Unassigned") === selectedCsmKey)
+    .map<PetyrForecastEntryScopedCompany>((company) => ({
+      companyName: company.companyName,
+      csmName: company.csmName || "Unassigned",
+      isForecastActive: null,
+      priorityScore: 0
+    }));
+
+  return {
+    ...selection,
+    ownershipMaps,
+    companies
+  };
+}
+
+function priorityScoreFromOverview(company: PetyrCompanyOverview | null, fallbackActiveStatus: boolean | null) {
+  const isActive = company?.isForecastActive ?? fallbackActiveStatus;
+  const activeScore = isActive === false ? -100000 : 10000;
+  const dataGapScore = company?.dataQualityStatus === "Ready" ? 5000 : 0;
+  const forecastGapScore = (company?.previousMonthForecast ?? 0) <= 0 && (company?.ongoingForecast ?? 0) <= 0 ? 15000 : 0;
+
+  return activeScore + dataGapScore + forecastGapScore + (company?.residualAgreementValue ?? 0);
+}
+
+export async function getForecastEntryScopedBatch(input: {
+  csmName?: unknown;
+  preferredCsmName?: unknown;
+  year: number;
+  month: number;
+}): Promise<PetyrForecastEntryScopedBatch | null> {
+  const diagnostics: string[] = [];
+  const today = new Date();
+  const resolvedYear = resolveYear(input.year, diagnostics);
+  const resolvedMonth = resolveMonth(input.month, diagnostics);
+  const ownershipSelection = await getScopedOwnershipSelection({ ...input, diagnostics });
+
+  if (!ownershipSelection) return null;
+  if (ownershipSelection.companies.length === 0) {
+    return {
+      selectedCsm: ownershipSelection.selectedCsm,
+      csmOptions: ownershipSelection.csmOptions,
+      companies: [],
+      contexts: [],
+      diagnostics,
+      usedFallback: false,
+      scopedRowsCount: 0
+    };
+  }
+
+  try {
+    const selection = ownershipSelection;
+    const companyNames = selection.companies.map((company) => company.companyName);
+    const companyKeys = new Set(companyNames.map(normalizeKey));
+    const [campaignContext, agreementContext] = await Promise.all([
+      buildCampaignContext(diagnostics),
+      buildAgreementContext(diagnostics)
+    ]);
+    const [campaignRows, agreementRows, monthlyRows, companyStatuses, aiRows] = await Promise.all([
+      queryCampaignRowsForCompanies(campaignContext, companyNames),
+      queryAgreementRowsForCompanies(agreementContext, companyNames),
+      readForecastMonthlyRows(diagnostics, {
+        companyName: { in: companyNames },
+        year: resolvedYear,
+        month: resolvedMonth
+      }),
+      readCompanyForecastStatuses(diagnostics, { companyName: { in: companyNames } }),
+      readAiForecastCacheRows(diagnostics, {
+        companyName: { in: companyNames },
+        year: resolvedYear,
+        month: resolvedMonth
+      })
+    ]);
+    const latestAiRows = latestAiForecasts(aiRows);
+    const overviewRows = buildOverviewRows({
+      year: resolvedYear,
+      month: resolvedMonth,
+      today,
+      campaignDateColumnExists: Boolean(campaignContext.columns.endDate),
+      campaignRows,
+      agreementRows,
+      ownershipMaps: ownershipSelection.ownershipMaps,
+      monthlyRows,
+      annualRows: [],
+      companyStatuses,
+      aiRows: latestAiRows
+    });
+    const overviewByKey = new Map(overviewRows.map((row) => [normalizeKey(row.companyName), row]));
+    const statusByKey = new Map(companyStatuses.map((row) => [normalizeKey(row.companyName), row]));
+    const monthlyByKey = new Map<string, ForecastMonthly>();
+    const aiByKey = new Map<string, AiForecastCache>();
+    const revenueByKey = new Map<string, number>();
+
+    for (const row of monthlyRows) {
+      monthlyByKey.set(forecastEntryCellKey(row.companyName, row.businessUnit, row.forecastType), row);
+    }
+
+    for (const row of latestAiRows) {
+      aiByKey.set(forecastEntryCellKey(row.companyName, row.businessUnit, "ai"), row);
+    }
+
+    for (const row of campaignRows) {
+      const companyName = normalizeCellValue(row.company_name);
+      const companyKey = normalizeKey(companyName);
+      if (!companyKeys.has(companyKey)) continue;
+
+      const campaignDate = parseDate(row.end_date);
+      const inSelectedMonth = campaignContext.columns.endDate
+        ? campaignDate?.getFullYear() === resolvedYear && campaignDate.getMonth() + 1 === resolvedMonth
+        : true;
+      if (!inSelectedMonth) continue;
+      if (!isWorkedCampaign({
+        row,
+        campaignDate,
+        year: resolvedYear,
+        today,
+        campaignDateColumnExists: Boolean(campaignContext.columns.endDate)
+      })) {
+        continue;
+      }
+
+      const businessUnit = normalizeBusinessUnit(row.business_unit);
+      const key = forecastEntryCellKey(companyName, businessUnit, "revenue");
+      revenueByKey.set(key, (revenueByKey.get(key) ?? 0) + parseNumber(row.revenue_value));
+    }
+
+    addCampaignActualDiagnostics({
+      campaignContext,
+      diagnostics,
+      label: "Forecast Entry batch closed revenue",
+      year: resolvedYear
+    });
+    addBusinessUnitFallbackDiagnostics({
+      diagnostics,
+      campaignContext,
+      campaignRows,
+      label: "Forecast Entry batch Business Unit diagnostics"
+    });
+
+    const companies = ownershipSelection.companies
+      .map<PetyrForecastEntryScopedCompany>((company) => {
+        const overview = overviewByKey.get(normalizeKey(company.companyName)) ?? null;
+        const status = statusByKey.get(normalizeKey(company.companyName));
+
+        return {
+          ...company,
+          companyName: overview?.companyName ?? company.companyName,
+          csmName: overview?.csmName ?? company.csmName ?? "Unassigned",
+          isForecastActive: status?.isActive ?? overview?.isForecastActive ?? company.isForecastActive,
+          priorityScore: priorityScoreFromOverview(overview, status?.isActive ?? company.isForecastActive)
+        };
+      })
+      .sort((left, right) => right.priorityScore - left.priorityScore || left.companyName.localeCompare(right.companyName));
+
+    const contexts = companies.map<PetyrForecastEntryContext>((companyInput) => {
+      const company = overviewByKey.get(normalizeKey(companyInput.companyName)) ?? null;
+      const resolvedCompanyName = company?.companyName ?? companyInput.companyName;
+      const businessUnits = PETYR_BUSINESS_UNITS.map<PetyrForecastEntryBusinessUnitContext>((businessUnit) => {
+        const previousMonthForecast = monthlyByKey.get(forecastEntryCellKey(resolvedCompanyName, businessUnit, "previous_month"));
+        const ongoingForecast = monthlyByKey.get(forecastEntryCellKey(resolvedCompanyName, businessUnit, "ongoing"));
+        const aiForecast = aiByKey.get(forecastEntryCellKey(resolvedCompanyName, businessUnit, "ai"));
+
+        return {
+          businessUnit,
+          actualRevenue: roundMoney(revenueByKey.get(forecastEntryCellKey(resolvedCompanyName, businessUnit, "revenue")) ?? 0),
+          previousMonthForecast: monthlyForecastValueContext(previousMonthForecast),
+          ongoingForecast: monthlyForecastValueContext(ongoingForecast),
+          annualForecast: annualForecastValueContext(undefined),
+          aiForecast: {
+            value: decimalToNumber(aiForecast?.forecastValue),
+            confidenceScore: decimalToNumber(aiForecast?.confidenceScore),
+            modelVersion: aiForecast?.modelVersion ?? null,
+            explanation: aiForecast?.explanation ?? null,
+            generatedAt: aiForecast?.generatedAt.toISOString() ?? null
+          }
+        };
+      });
+
+      return {
+        csmName: ownershipSelection.selectedCsm,
+        companyName: resolvedCompanyName,
+        year: resolvedYear,
+        month: resolvedMonth,
+        entryMode: getForecastEntryMode({ year: resolvedYear, month: resolvedMonth }),
+        company,
+        companyStatus: companyStatusToContext(statusByKey.get(normalizeKey(resolvedCompanyName))),
+        businessUnits,
+        campaigns: [],
+        agreements: []
+      };
+    });
+
+    return {
+      selectedCsm: ownershipSelection.selectedCsm,
+      csmOptions: ownershipSelection.csmOptions,
+      companies,
+      contexts,
+      diagnostics,
+      usedFallback: false,
+      scopedRowsCount: campaignRows.length + agreementRows.length + monthlyRows.length + companyStatuses.length + aiRows.length
+    };
+  } catch (error) {
+    diagnostics.push(`Forecast Entry scoped read fell back after PostgreSQL error: ${errorMessage(error)}`);
+    return null;
+  }
+}
+
+export async function getAnnualForecastEntryScopedPortfolio(input: {
+  csmName?: unknown;
+  preferredCsmName?: unknown;
+  year: number;
+}): Promise<PetyrAnnualForecastEntryScopedPortfolio | null> {
+  const diagnostics: string[] = [];
+  const today = new Date();
+  const resolvedYear = resolveYear(input.year, diagnostics);
+  const ownershipSelection = await getScopedOwnershipSelection({ ...input, diagnostics });
+
+  if (!ownershipSelection) return null;
+  if (ownershipSelection.companies.length === 0) {
+    return {
+      selectedCsm: ownershipSelection.selectedCsm,
+      csmOptions: ownershipSelection.csmOptions,
+      companies: [],
+      portfolio: new Map(),
+      diagnostics,
+      usedFallback: false,
+      scopedRowsCount: 0
+    };
+  }
+
+  try {
+    const selection = ownershipSelection;
+    const companyNames = selection.companies.map((company) => company.companyName);
+    const companyKeys = new Set(companyNames.map(normalizeKey));
+    const campaignContext = await buildCampaignContext(diagnostics);
+    const [campaignRows, companyStatuses, aiRows] = await Promise.all([
+      queryCampaignRowsForCompanies(campaignContext, companyNames),
+      readCompanyForecastStatuses(diagnostics, { companyName: { in: companyNames } }),
+      readAiForecastCacheRows(diagnostics, {
+        companyName: { in: companyNames },
+        year: resolvedYear
+      })
+    ]);
+    const statusByKey = new Map(companyStatuses.map((row) => [normalizeKey(row.companyName), row]));
+    const byCompany = new Map<string, PetyrAnnualForecastEntryPortfolioCompany>();
+
+    function ensure(companyName: string, fallbackCsmName = "Unassigned") {
+      const companyKey = normalizeKey(companyName);
+      const ownership = selection.ownershipMaps.byCompany.get(companyKey);
+      const resolvedCompanyName = ownership?.companyName ?? companyName;
+      const resolvedKey = normalizeKey(resolvedCompanyName);
+      const existing = byCompany.get(resolvedKey);
+      if (existing) return existing;
+
+      const created: PetyrAnnualForecastEntryPortfolioCompany = {
+        companyName: resolvedCompanyName,
+        csmName: ownership?.csmName ?? fallbackCsmName,
+        companyStatus: companyStatusToContext(statusByKey.get(resolvedKey)),
+        revenueByBusinessUnit: new Map<string, number>(PETYR_BUSINESS_UNITS.map((businessUnit) => [businessUnit, 0])),
+        plannedByBusinessUnit: new Map<string, number>(PETYR_BUSINESS_UNITS.map((businessUnit) => [businessUnit, 0])),
+        annualAiForecastsByBusinessUnit: new Map<string, { value: number; confidenceScores: number[]; modelVersion: string | null; generatedAt: string | null }>(
+          PETYR_BUSINESS_UNITS.map((businessUnit) => [
+            businessUnit,
+            { value: 0, confidenceScores: [], modelVersion: null, generatedAt: null }
+          ])
+        )
+      };
+      byCompany.set(resolvedKey, created);
+      return created;
+    }
+
+    for (const company of selection.companies) ensure(company.companyName, company.csmName || "Unassigned");
+
+    for (const row of campaignRows) {
+      const companyName = normalizeCellValue(row.company_name);
+      const companyKey = normalizeKey(companyName);
+      if (!companyKeys.has(companyKey)) continue;
+
+      const bucket = ensure(companyName);
+      const businessUnit = normalizeBusinessUnit(row.business_unit);
+
+      if (isAnnualEntryRevenueCampaign(row, resolvedYear, today)) {
+        bucket.revenueByBusinessUnit.set(
+          businessUnit,
+          (bucket.revenueByBusinessUnit.get(businessUnit) ?? 0) + parseNumber(row.revenue_value)
+        );
+      } else if (isAnnualEntryPlannedCampaign(row, resolvedYear, today)) {
+        bucket.plannedByBusinessUnit.set(
+          businessUnit,
+          (bucket.plannedByBusinessUnit.get(businessUnit) ?? 0) + parseNumber(row.revenue_value)
+        );
+      }
+    }
+
+    for (const row of latestAiForecasts(aiRows)) {
+      const companyKey = normalizeKey(row.companyName);
+      if (!companyKeys.has(companyKey) || row.year !== resolvedYear || row.month < 1 || row.month > 12) continue;
+
+      const bucket = ensure(row.companyName);
+      const businessUnit = normalizeBusinessUnit(row.businessUnit);
+      const ai = bucket.annualAiForecastsByBusinessUnit.get(businessUnit);
+      if (!ai) continue;
+
+      ai.value += decimalToNumber(row.forecastValue) ?? 0;
+      const confidence = decimalToNumber(row.confidenceScore);
+      if (confidence !== null) ai.confidenceScores.push(confidence);
+      ai.modelVersion = row.modelVersion;
+      ai.generatedAt = row.generatedAt.toISOString();
+    }
+
+    addCampaignActualDiagnostics({
+      campaignContext,
+      diagnostics,
+      label: "Annual Forecast Entry revenue",
+      year: resolvedYear
+    });
+    addBusinessUnitFallbackDiagnostics({
+      diagnostics,
+      campaignContext,
+      campaignRows,
+      label: "Annual Forecast Entry Business Unit diagnostics"
+    });
+
+    const companies = selection.companies
+      .map<PetyrForecastEntryScopedCompany>((company) => {
+        const status = statusByKey.get(normalizeKey(company.companyName));
+
+        return {
+          ...company,
+          isForecastActive: status?.isActive ?? company.isForecastActive,
+          priorityScore: priorityScoreFromOverview(null, status?.isActive ?? company.isForecastActive)
+        };
+      })
+      .sort((left, right) => left.companyName.localeCompare(right.companyName));
+
+    return {
+      selectedCsm: selection.selectedCsm,
+      csmOptions: selection.csmOptions,
+      companies,
+      portfolio: byCompany,
+      diagnostics,
+      usedFallback: false,
+      scopedRowsCount: campaignRows.length + companyStatuses.length + aiRows.length
+    };
+  } catch (error) {
+    diagnostics.push(`Annual Forecast Entry scoped read fell back after PostgreSQL error: ${errorMessage(error)}`);
+    return null;
   }
 }
 

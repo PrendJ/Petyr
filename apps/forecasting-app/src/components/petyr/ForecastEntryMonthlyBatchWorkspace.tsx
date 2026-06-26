@@ -234,6 +234,17 @@ export default function ForecastEntryMonthlyBatchWorkspace({
 
       setBatch(payload);
       setSelectedCsm(payload.data.selectedCsm);
+
+      if (annualBatch) {
+        const annualResponse = await fetch(buildAnnualBatchUrl(payload.data.selectedCsm, String(annualBatch.data.selectedYear)), { cache: "no-store" });
+        const annualPayload = (await annualResponse.json()) as AnnualForecastEntryBatchDataResult;
+
+        if (!annualResponse.ok) {
+          throw new Error("Unable to load Annual Forecast Entry.");
+        }
+
+        setAnnualBatch(annualPayload);
+      }
     } catch (error) {
       setNotice({
         type: "error",
@@ -598,7 +609,16 @@ export default function ForecastEntryMonthlyBatchWorkspace({
 
         <TabsContent value="annual" className="space-y-5">
           {annualBatch ? (
-            <AnnualForecastEntryBatchWorkspace initialBatch={annualBatch} />
+            <AnnualForecastEntryBatchWorkspace
+              key={`${annualBatch.data.selectedCsm}-${annualBatch.data.selectedYear}`}
+              initialBatch={annualBatch}
+              onBatchChange={(nextBatch) => {
+                setAnnualBatch(nextBatch);
+                if (nextBatch.data.selectedCsm !== batch.data.selectedCsm) {
+                  void loadBatch(nextBatch.data.selectedCsm);
+                }
+              }}
+            />
           ) : (
             <PetyrCard>
               <CardContent className="space-y-4 p-5">

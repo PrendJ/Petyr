@@ -191,7 +191,7 @@ Normal `/forecasting/entry` requires `petyr:forecast:write` and is accessible to
 users who can write CSM forecasts. It no longer shows the old full single-company
 editor. The Monthly section works only on the current server month/year, exposes
 only a CSM filter, and renders the selected CSM's companies in one batch table.
-The Annual section is separate, exposes the Year filter, and renders the current annual portfolio for the selected annual cycle. The visible CSM selector belongs only to Monthly Forecast Entry.
+The Annual section is separate, exposes CSM and Year filters, and renders the current annual portfolio for the selected annual cycle. The Monthly and Annual CSM selectors stay synchronized: changing either selector reloads the other section to the same selected CSM when both sections are loaded.
 
 Normal Forecast Entry must not expose a company filter, Forecast Intelligence,
 deterministic preview, apply AI forecast, import/export, diagnostics or admin
@@ -368,7 +368,7 @@ One-time 2026 closed-revenue alignment:
 - fallback command: `npm run backfill:2026-ongoing-from-closed -- --dry-run`, then `npm run backfill:2026-ongoing-from-closed -- --apply` after reviewing the JSON preview;
 - it copies already closed 2026 Redash campaign revenue through the selected execution date into monthly `forecast_monthly` rows with both `forecast_type=previous_month` and `forecast_type=ongoing`, keeping the two monthly forecast values equal to real closed revenue for those months, and into `forecast_annual` rows that feed Management View Ongoing Forecast;
 - it is not a recurring feature, not a CSM workflow, not an import workflow and not a future scheduler;
-- it must not update Initial Forecast snapshots, Redash materialized closed revenue, AI forecast cache or Management Objectives.
+- it must not update Initial Forecast fields, Redash materialized closed revenue, AI forecast cache or Management Objectives.
 
 Petyr Admin Data Health must expose a PostgreSQL-only `Redash sync status` section for `master_campaigns`, `master_agreements` and `company_ownership`, showing source enabled state, latest sync status, run rows, finish time, error message, latest snapshot rows and materialized table rows. Forecasting app must not call Redash directly for this status.
 
@@ -392,20 +392,23 @@ Annual forecast rules:
 - consolidated rows are read-only unless the request is made by an admin.
 
 Initial Forecast rules:
-- 2026 has no historical Initial Forecast because it should have been defined in 2025;
-- 2026 requires a one-shot Excel export/import bootstrap compiled manually by CSMs;
-- the 2026 bootstrap import writes only Initial Forecast values and must not overwrite Ongoing Forecast;
-- Initial Forecast persists in `forecast_annual_snapshot` with `snapshot_type=initial`;
-- Ongoing Forecast remains the current/latest annual value in `forecast_annual`;
-- from 2027 onward, Initial Forecast is automatically frozen on January 1 in
-  `Europe/Rome` from the annual forecast in force for the newly started year or
-  service-defined annual cycle;
-- after freezing, later ongoing forecast updates must not modify Initial Forecast;
-- once an Initial Forecast snapshot is locked, later imports/consolidations must
-  not overwrite it unless a protected admin recovery call explicitly requests an
-  override;
-- the server-side consolidation service and protected manual endpoint are available;
-- real automatic scheduling mechanism and exact target-year/cutoff semantics remain backlog items.
+- Annual Forecast Entry is the canonical Initial Forecast workflow.
+- Forecast Initial is entered during the Annual Entry window from December 10 of
+  year N-1 through January 10 of year N.
+- `forecast_annual_entry.initial_forecast` stores the company/year Initial
+  Forecast total.
+- `forecast_annual.initial_forecast` stores the company + Business Unit + year
+  Initial Forecast values used by Business Unit, Management and Company Detail
+  views.
+- During the Forecast Initial window, saved Annual Entry Business Unit values
+  also populate the matching per-Business Unit Initial Forecast values, and the
+  company/year total is derived as their sum.
+- From January 11 onward, Forecast Initial is read-only; later Annual Entry
+  changes update Ongoing Forecast in `forecast_annual.value` without changing
+  the Initial Forecast fields.
+- The legacy Initial Forecast Excel import/export, snapshot read path and
+  scheduler/consolidation endpoint are deprecated and removed from the product
+  API.
 
 Management Objectives live at the bottom of Management View for users with
 `petyr:management:write`. The legacy direct route remains available as a
@@ -482,11 +485,11 @@ Company Detail Data diagnostics must be visible only to users with
 
 The Revenue by Business Unit section must use only `getCompanyDetail` data derived
 from PostgreSQL materialized Redash/Petyr tables. It reads Initial Forecast from
-`forecast_annual_snapshot` through the Company Detail read model when available,
-without changing Initial Forecast persistence. If no closed revenue or forecast
-values exist for the selected year, the chart area must show a diagnostic empty
-state instead of placeholder values. Planned future values, when available, remain
-visible in the table.
+Annual Forecast Entry data: company/year totals in `forecast_annual_entry` and
+per-Business Unit values in `forecast_annual.initial_forecast`. If no closed
+revenue or forecast values exist for the selected year, the chart area must show
+a diagnostic empty state instead of placeholder values. Planned future values,
+when available, remain visible in the table.
 
 Agreement links:
 - Master Agreements has no usable agreement link;
@@ -605,8 +608,9 @@ migrations with `npx prisma migrate deploy`. Missing, unknown or non-official
 campaign Business Unit values that are normalized to `Other` are warnings.
 Management Objective data health exposes objective counts by year plus Branches
 and official Business Units without a configured objective for the current year.
-Initial Forecast data health warns when `forecast_annual_snapshot` is missing or
-when the current year has no `snapshot_type=initial` rows.
+Initial Forecast data health warns when Annual Entry storage is missing or when
+the current year has no per-Business Unit Initial Forecast values in
+`forecast_annual.initial_forecast`.
 
 The performance results endpoint is:
 
@@ -681,53 +685,9 @@ ambiguous template.
 This CSV endpoint remains available as a legacy/advanced workflow. It must not be
 broken by the Excel workflow.
 
-Initial Forecast 2026 import/export is implemented as a separate one-shot
-workflow and must not change the existing monthly import behavior.
-
-The Initial Forecast Excel export endpoint is:
-
-```txt
-GET /api/petyr/admin/export-initial-forecast-xlsx?year=2026
-```
-
-It defaults to 2026 and creates a workbook with:
-
-- `Instructions`;
-- `Initial Forecast Input`;
-- `Reference - Business Units`;
-- `Reference - Companies`.
-
-`Initial Forecast Input` includes CSM, Company, Business Unit, Year, read-only
-Current annual forecast reference, editable Initial forecast value and Note.
-Closed revenue and management objective fields are not editable in this workbook.
-
-The Initial Forecast Excel import endpoint is:
-
-```txt
-POST /api/petyr/admin/import-initial-forecast-xlsx
-```
-
-It accepts only the Initial Forecast workbook shape, validates Company Ownership
-company/CSM data, official Business Units, year and non-negative numeric values,
-then writes only `forecast_annual_snapshot` rows and
-`forecast_annual_snapshot_change_log` audit entries. It must not write
-`forecast_annual`, `forecast_monthly`, closed revenue, AI forecast cache or
-management objectives.
-
-The protected manual consolidation endpoint for controlled operations is:
-
-```txt
-POST /api/petyr/admin/consolidate-initial-forecast
-```
-
-It requires `x-app-secret: APP_INTERNAL_SECRET`, calls
-`consolidateInitialAnnualForecast(year)`, writes source
-`year_end_consolidation`, and does not mutate Ongoing Forecast. The default
-business timezone is `Europe/Rome`. Without an explicit `year`, the service may
-infer the year only on January 1 in `Europe/Rome`; controlled manual recovery
-outside January 1 must pass the target `year`. Already locked Initial Forecast
-snapshots are skipped unless the protected request explicitly passes
-`overrideLocked=true`.
+Legacy Initial Forecast Excel import/export and the protected manual
+consolidation endpoint have been removed from the product API. Annual Forecast
+Entry is the only supported product workflow for Initial Forecast entry.
 
 The monthly forecast import endpoint is:
 

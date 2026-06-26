@@ -70,7 +70,7 @@ type ManagementObjectiveConfiguredKeyRow = {
   scopeKey: string | null;
 };
 
-type InitialSnapshotCountRow = {
+type InitialForecastCountRow = {
   rowCount: string;
 };
 
@@ -1159,36 +1159,48 @@ async function addBusinessUnitQualityWarnings(input: {
   }
 }
 
-async function addInitialForecastSnapshotDiagnostics(warnings: PetyrDataHealthIssue[]) {
-  const snapshotTableExists = await relationExists("forecast_annual_snapshot");
-  const changeLogTableExists = await relationExists("forecast_annual_snapshot_change_log");
+async function addAnnualEntryInitialForecastDiagnostics(warnings: PetyrDataHealthIssue[]) {
+  const annualEntryTableExists = await relationExists("forecast_annual_entry");
+  const annualTableExists = await relationExists("forecast_annual");
   const currentYear = new Date().getFullYear();
 
-  if (!snapshotTableExists) {
+  if (!annualEntryTableExists) {
     warnings.push(
       issue({
-        code: "INITIAL_FORECAST_SNAPSHOT_TABLE_MISSING",
-        message: "Initial Forecast cannot be populated because forecast_annual_snapshot is missing. Apply the forecasting app Prisma schema before importing the 2026 baseline or running future consolidation.",
-        tableName: "forecast_annual_snapshot"
+        code: "ANNUAL_ENTRY_TABLE_MISSING",
+        message: "Initial Forecast cannot be populated because forecast_annual_entry is missing. Apply the forecasting app Prisma schema before using Annual Forecast Entry.",
+        tableName: "forecast_annual_entry"
+      })
+    );
+  }
+
+  if (!annualTableExists) {
+    warnings.push(
+      issue({
+        code: "ANNUAL_FORECAST_TABLE_MISSING",
+        message: "Initial Forecast per Business Unit cannot be populated because forecast_annual is missing. Apply the forecasting app Prisma schema before using Annual Forecast Entry.",
+        tableName: "forecast_annual"
       })
     );
     return;
   }
 
-  if (!changeLogTableExists) {
+  const annualColumns = await getTableColumns("forecast_annual");
+  if (!annualColumns.some((column) => column.name === "initial_forecast")) {
     warnings.push(
       issue({
-        code: "INITIAL_FORECAST_SNAPSHOT_CHANGE_LOG_TABLE_MISSING",
-        message: "Initial Forecast audit logging table forecast_annual_snapshot_change_log is missing. Apply the forecasting app Prisma schema before importing or consolidating Initial Forecast.",
-        tableName: "forecast_annual_snapshot_change_log"
+        code: "ANNUAL_FORECAST_INITIAL_COLUMN_MISSING",
+        message: "Initial Forecast per Business Unit cannot be populated because forecast_annual.initial_forecast is missing. Apply the forecasting app Prisma schema before relying on Management View Initial Forecast.",
+        tableName: "forecast_annual"
       })
     );
+    return;
   }
 
-  const rows = await prisma.$queryRaw<InitialSnapshotCountRow[]>`
+  const rows = await prisma.$queryRaw<InitialForecastCountRow[]>`
     SELECT COUNT(*)::text AS "rowCount"
-    FROM "forecast_annual_snapshot"
-    WHERE "snapshot_type" = 'initial'
+    FROM "forecast_annual"
+    WHERE "initial_forecast" IS NOT NULL
       AND "year" = ${currentYear}
   `;
   const rowCount = Number(rows[0]?.rowCount ?? "0");
@@ -1196,9 +1208,9 @@ async function addInitialForecastSnapshotDiagnostics(warnings: PetyrDataHealthIs
   if (rowCount === 0) {
     warnings.push(
       issue({
-        code: "INITIAL_FORECAST_SNAPSHOT_EMPTY",
-        message: `No Initial Forecast snapshots exist for ${currentYear}. Management View shows Initial Forecast as n/a until the 2026 Excel bootstrap or future year-end consolidation writes rows.`,
-        tableName: "forecast_annual_snapshot"
+        code: "ANNUAL_ENTRY_INITIAL_FORECAST_EMPTY",
+        message: `No Annual Forecast Entry Initial Forecast values exist for ${currentYear}. Management View shows Initial Forecast as n/a until Annual Forecast Entry saves per-Business Unit Initial values during the December 10-January 10 window.`,
+        tableName: "forecast_annual"
       })
     );
   }
@@ -1262,7 +1274,7 @@ export async function getPetyrDataHealth(): Promise<PetyrDataHealthResult> {
       warnings,
       tables: materializedTables
     });
-    await addInitialForecastSnapshotDiagnostics(warnings);
+    await addAnnualEntryInitialForecastDiagnostics(warnings);
 
     finishPerformance({
       status: blockingIssues.length === 0 ? "success" : "warning",

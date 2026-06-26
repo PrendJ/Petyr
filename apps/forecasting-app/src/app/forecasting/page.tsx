@@ -1,4 +1,5 @@
 import PetyrMVPRendering from "@/components/petyr/PetyrMVPRendering";
+import { PetyrForecastEntryPreloader } from "@/components/petyr/PetyrForecastEntryPreloader";
 import { requirePetyrPagePermission } from "@/lib/petyr/auth";
 import { hasPetyrPermission, PETYR_PERMISSIONS } from "@/lib/petyr/authCore";
 import { resolvePreferredCsmName } from "@/lib/petyr/csmIdentity";
@@ -31,14 +32,18 @@ export default async function ForecastingPage({ searchParams }: ForecastingPageP
   );
   const canViewAdminTools = hasPetyrPermission(identity, PETYR_PERMISSIONS.admin);
   const canManageObjectives = hasPetyrPermission(identity, PETYR_PERMISSIONS.managementWrite);
+  const canWriteForecast = hasPetyrPermission(identity, PETYR_PERMISSIONS.forecastWrite);
 
   return (
-    <PetyrMVPRendering
-      data={renderingData}
-      activeView={activeView}
-      preferredCsmName={preferredCsmName}
-      canViewAdminTools={canViewAdminTools}
-      canManageObjectives={canManageObjectives}
-    />
+    <>
+      <PetyrMVPRendering
+        data={renderingData}
+        activeView={activeView}
+        preferredCsmName={preferredCsmName}
+        canViewAdminTools={canViewAdminTools}
+        canManageObjectives={canManageObjectives}
+      />
+      <PetyrForecastEntryPreloader csmName={preferredCsmName} enabled={canWriteForecast} />
+    </>
   );
 }

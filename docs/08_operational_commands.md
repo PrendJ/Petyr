@@ -117,7 +117,7 @@ npm run backfill:2026-ongoing-from-closed -- --dry-run
 npm run backfill:2026-ongoing-from-closed -- --apply
 ```
 
-Use this only once for the historical 2026 alignment after reviewing the dry-run preview. It copies already closed 2026 Redash campaign revenue through the selected execution date into monthly `forecast_monthly` previous-month and ongoing rows with the same real value, plus annual `forecast_annual` rows used by Management View Ongoing Forecast. It is not a CSM workflow, import workflow, scheduler or future-year process, and it must not update Initial Forecast snapshots, Redash materialized closed revenue, AI forecast cache or Management Objectives.
+Use this only once for the historical 2026 alignment after reviewing the dry-run preview. It copies already closed 2026 Redash campaign revenue through the selected execution date into monthly `forecast_monthly` previous-month and ongoing rows with the same real value, plus annual `forecast_annual` rows used by Management View Ongoing Forecast. It is not a CSM workflow, import workflow, scheduler or future-year process, and it must not update Initial Forecast fields, Redash materialized closed revenue, AI forecast cache or Management Objectives.
 
 Petyr AI Forecasting MVP is manual and company-by-company.
 
@@ -228,22 +228,62 @@ a new target server, disposable environment or controlled recovery after taking
 a backup. This is not a replacement for production retention, encryption,
 offsite storage or point-in-time recovery.
 
-Run a controlled manual Initial Forecast consolidation fallback:
+## Production PostgreSQL backup standard
 
-```bash
-curl -X POST http://localhost:8080/api/petyr/admin/consolidate-initial-forecast \
-  -H "Content-Type: application/json" \
-  -H "x-app-secret: $APP_INTERNAL_SECRET" \
-  -d '{"year":2027}'
+Production backups for the shared PostgreSQL data hub are owned by the Platform
+owner and must be configured at Coolify/host or equivalent database-backup
+level, not through the Petyr Admin browser export. Petyr Admin export/import is
+for migration, manual pre-change safety exports and controlled recovery only.
+
+Minimum production standard:
+
+```txt
+Frequency and retention:
+- Daily backups retained for 5 days.
+- Weekly backups retained for 3 weeks.
+- No other retention tier is part of the v1 standard.
+
+Recovery targets:
+- RPO: 24 hours.
+- Target RTO: 8 hours.
+
+Storage and protection:
+- Store the primary backup through the host/Coolify backup mechanism.
+- Copy each retained production backup to encrypted offsite storage.
+- Encrypt backups at rest and in transit.
+- Keep backup credentials, offsite credentials and encryption keys outside this repository.
+
+Ownership:
+- The Platform owner owns backup configuration, restore drill evidence, credential/key rotation and incident coordination.
 ```
 
-The target automatic schedule is January 1 in `Europe/Rome`, but the production
-scheduler mechanism is still a backlog item. Until that scheduler exists, use
-the protected endpoint only for controlled operations. Without an explicit
-`year`, Petyr infers the target year only on January 1 in `Europe/Rome`;
-manual recovery outside January 1 must pass the target year. Locked Initial
-Forecast snapshots are skipped unless an explicit admin recovery request passes
-`"overrideLocked":true`.
+Point-in-time recovery is not part of this v1 standard. If the business needs
+RPO below 24 hours, define WAL archiving/PITR in a separate decision before
+implementation.
+
+Restore drill checklist:
+
+```txt
+1. Select the latest retained daily backup, or the weekly backup being tested.
+2. Restore into a disposable non-production environment, never over production.
+3. Start the stack against the restored PostgreSQL database.
+4. Verify /forecasting, /petyr-admin data health and /redash-ingestor access.
+5. Verify row counts for the three required Redash latest tables.
+6. Record backup timestamp, restore start/end time, restored environment, checks performed and outcome.
+7. Destroy the disposable environment or remove access after evidence is recorded.
+```
+
+Useful restored-database checks:
+
+```bash
+docker compose exec postgres psql -U unguess -d unguess_redash -c "select count(*) from redash_raw_master_campaigns_latest;"
+docker compose exec postgres psql -U unguess -d unguess_redash -c "select count(*) from redash_raw_master_agreements_latest;"
+docker compose exec postgres psql -U unguess -d unguess_redash -c "select count(*) from redash_raw_company_ownership_latest;"
+```
+
+Initial Forecast is entered through Annual Forecast Entry in `/forecasting/entry`.
+The legacy Initial Forecast Excel import/export and manual consolidation
+fallback endpoints have been removed from the product API.
 
 ## PostgreSQL
 

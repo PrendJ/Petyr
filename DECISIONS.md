@@ -13,6 +13,27 @@ Each decision should include:
 
 ---
 
+## 2026-06-26 - Make Annual Forecast Entry the canonical Initial Forecast source
+
+- **Status:** Accepted.
+- **Context:** Older Petyr documentation and code treated Initial Forecast as a frozen snapshot populated by a 2026 Excel bootstrap or a future January 1 scheduler. Annual Forecast Entry later introduced the operational CSM/IGSM workflow where Forecast Initial is entered from December 10 through January 10, while Ongoing Forecast can continue changing afterward.
+- **Decision:** Annual Forecast Entry is the canonical Initial Forecast workflow. Store the company/year Forecast Initial total in `forecast_annual_entry.initial_forecast` and store per-company, per-Business Unit Initial Forecast values in `forecast_annual.initial_forecast`. Keep Ongoing Forecast in `forecast_annual.value`. The Forecast Initial window closes after January 10; no separate Initial Forecast scheduler is required. Remove the legacy Initial Forecast Excel endpoints and protected consolidation endpoint from the product API. Deprecate `forecast_annual_snapshot` and `forecast_annual_snapshot_change_log` as historical legacy tables rather than dropping them automatically.
+- **Alternatives discarded:** Keeping the January 1 scheduler and snapshot table as product source; keeping the 2026 Initial Forecast Excel import/export as a supported recovery path; physically dropping snapshot tables in the same task without a dedicated backup-backed cleanup.
+- **Reason:** The current product workflow is Annual Forecast Entry. Using it as the source avoids duplicate Initial Forecast semantics and gives Management View and Business Unit views the BU-level values they require.
+- **Consequences:** Product reads no longer use `forecast_annual_snapshot`. Annual Entry saves during the Forecast Initial window populate per-BU Initial values; later saves update Ongoing Forecast without changing Initial Forecast. A separate backlog item tracks eventual physical removal of deprecated snapshot tables.
+- **Supersedes:** `2026-05-26 — Consolidate Petyr Initial Forecast on January 1 Europe/Rome`, `2026-05-26 — Lock Petyr Initial Forecast snapshots after consolidation`, `2026-05-22 — Persist Petyr Initial Forecast in dedicated annual snapshot tables`, `2026-05-22 — Bootstrap Petyr Initial Forecast 2026 through one-shot Excel import`, and `2026-05-22 — Automatically freeze Petyr Initial Forecast from 2027 onward`.
+- **Related docs:** `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/05_forecasting_product_spec.md`, `docs/04_data_model.md`, `docs/petyr/02_petyr_data_model_target.md`, `docs/petyr/03_petyr_business_rules.md`, `apps/forecasting-app/README.md`, `BACKLOG.md`, `DEVLOG.md`.
+
+## 2026-06-26 - Define production PostgreSQL backup standard
+
+- **Status:** Accepted.
+- **Context:** Petyr Admin exposes native PostgreSQL SQL dump export/import for server migration and controlled recovery, but that browser-mediated workflow was explicitly not the final production backup policy. The shared PostgreSQL database is the platform data hub for Redash snapshots, materialized Redash tables and Petyr forecast/admin data.
+- **Decision:** Production PostgreSQL backups are a platform responsibility owned by the Platform owner and must be configured at Coolify/host or equivalent database-backup level. The v1 standard is daily backups retained for 5 days, weekly backups retained for 3 weeks, no other retention tier, encrypted offsite copy, RPO 24 hours and target RTO 8 hours. Petyr Admin SQL export/import remains for migration, manual pre-change safety exports and controlled recovery only. PITR/WAL archiving is not included in v1 and requires a later decision if RPO below 24 hours is required.
+- **Alternatives discarded:** Treating Petyr Admin downloads as production backups; retaining backups only on the same host; adding an additional retained tier; defining PITR before the business requires sub-24-hour RPO.
+- **Reason:** Host/database-level backups with encrypted offsite copies protect the shared data hub without coupling production retention and restore duties to a browser workflow. The chosen retention is intentionally compact and matches the current conservative recovery target.
+- **Consequences:** Production exposure must verify the backup mechanism, offsite copy and restore drill evidence. No app endpoint, Prisma schema, database model, Redash source, forecast calculation or access-control permission changes. A separate backlog item tracks PITR/WAL archiving if stricter recovery objectives are later required.
+- **Related docs:** `docs/01_architecture.md`, `docs/08_operational_commands.md`, `DEPLOY.md`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `apps/forecasting-app/README.md`, `BACKLOG.md`, `DEVLOG.md`.
+
 ## 2026-06-25 - Add CSM Annual Forecast Entry as a separate normal Forecast Entry tab
 
 - **Status:** Accepted.
@@ -91,7 +112,7 @@ Each decision should include:
 - **Decision:** Petyr Admin database migration uses native PostgreSQL SQL dumps generated with `pg_dump` and restored with `psql` stop-on-error behavior. The export/import endpoints are protected by Petyr `petyr:admin` plus `APP_INTERNAL_SECRET`. The dump is database-level, not a custom Petyr JSON format, and it does not call Redash or OpenRouter.
 - **Alternatives discarded:** Custom table-by-table JSON export/import through Prisma; exporting only Petyr forecast tables; making restore available without the internal secret; making this the final production backup policy.
 - **Reason:** PostgreSQL-native dumps preserve the shared data hub without duplicating schema logic in application code, while the double gate and explicit confirmation match the risk of importing destructive SQL.
-- **Consequences:** The Forecasting app runtime image must include PostgreSQL client tools. Browser-mediated admin export/import is acceptable for migration/control operations, but production retention, encryption, offsite storage and point-in-time recovery remain a backlog item.
+- **Consequences:** The Forecasting app runtime image must include PostgreSQL client tools. Browser-mediated admin export/import is acceptable for migration/control operations, but production backup compliance is handled by the later platform standard recorded on 2026-06-26.
 - **Related docs:** `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/05_forecasting_product_spec.md`, `docs/01_architecture.md`, `docs/08_operational_commands.md`, `apps/forecasting-app/README.md`, `BACKLOG.md`, `DEVLOG.md`.
 
 ## 2026-06-22 - Route Redash Ingestor through the Petyr production host

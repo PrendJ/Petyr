@@ -18,6 +18,46 @@ Each entry must include:
 
 ---
 
+## 2026-06-26
+
+- **Area:** Petyr / Forecast Entry / Scoped read warmup performance
+- **Change:** Added narrower CSM-scoped read paths for normal Monthly and Annual Forecast Entry batch loading, using `company_ownership` to resolve the selected CSM portfolio before reading only the needed campaign, forecast, status and AI cache rows. Added a short-lived in-memory read cache with in-flight promise dedupe for Forecast Entry batch reads, invalidated after Monthly or Annual saves. Added a silent `/forecasting` background preloader for users whose login display name resolves to exactly one CSM and who have `petyr:forecast:write`.
+- **Reason:** Forecast Entry still paid avoidable load cost on large portfolios because the normal batch endpoints could rebuild broad overview inputs before narrowing to the selected CSM. The preloader warms the same public batch endpoints before the user opens `/forecasting/entry`.
+- **Impact:** No public API path, response shape, permission, schema, Redash source, save contract or forecast calculation changed. If `company_ownership` is missing or unusable, the batch endpoints fall back to the existing broader read model with diagnostics. Cache is best-effort per process and expires after 60 seconds.
+- **Files/documents involved:** `apps/forecasting-app/src/services/petyrDataService.ts`, `apps/forecasting-app/src/services/forecastEntryBatchService.ts`, `apps/forecasting-app/src/services/annualForecastEntryBatchService.ts`, `apps/forecasting-app/src/services/forecastEntryReadCache.ts`, `apps/forecasting-app/src/components/petyr/PetyrForecastEntryPreloader.tsx`, `apps/forecasting-app/src/app/forecasting/page.tsx`, Forecast Entry batch API routes, `DEVLOG.md`.
+- **Validation:** Passed `npm.cmd run build` from `apps/forecasting-app`. Initial `npm run build` was blocked by PowerShell script execution policy, so validation used `npm.cmd`.
+- **Follow-up:** Compare `/petyr-admin` Performance Results for `getForecastEntryBatch`, `getAnnualForecastEntryBatch`, `queryCampaignRows`, `readForecastMonthlyRows` and `readAiForecastCacheRows` on production-sized CSM portfolios.
+
+## 2026-06-26
+
+- **Area:** Petyr / Forecast Entry / Annual entry CSM filter
+- **Change:** Restored the visible CSM selector inside Annual Forecast Entry and synchronized it with the Monthly Forecast Entry selector when both sections are loaded.
+- **Reason:** Annual Forecast Entry must let users change the CSM from the annual view itself; the monthly CSM filter is not a substitute, even though the two selectors should follow each other.
+- **Impact:** UI behavior changed only. Annual read/save APIs, portfolio-scoped read model, persistence, permissions, Year filter and audit behavior are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/ForecastEntryMonthlyBatchWorkspace.tsx`, `apps/forecasting-app/src/components/petyr/AnnualForecastEntryBatchWorkspace.tsx`, `docs/05_forecasting_product_spec.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+- **Validation:** Passed `npm.cmd run build` from `apps/forecasting-app`. Focused source scan found no remaining documentation/component text saying the Annual CSM selector belongs only to Monthly.
+- **Follow-up:** None.
+
+## 2026-06-26
+
+- **Area:** Petyr / Initial Forecast / Annual Forecast Entry
+- **Change:** Replaced the legacy Initial Forecast snapshot/scheduler path with Annual Forecast Entry as the canonical source. Added per-Business Unit Initial Forecast storage on `forecast_annual.initial_forecast`; `forecast_annual_entry.initial_forecast` remains the company/year total. Management View, Business Unit summaries and Company Detail now read Initial Forecast from Annual Entry/Annual Forecast data instead of `forecast_annual_snapshot`. Removed the legacy Initial Forecast Excel export/import endpoints, protected consolidation endpoint and related services/components from the product API.
+- **Reason:** Product clarified that Initial Forecast is entered in Annual Forecast Entry by IGSM/CSM users during the December 10-January 10 window, then remains fixed while Ongoing Forecast continues to evolve during the year.
+- **Impact:** Initial Forecast scheduler and target-year cutoff TODOs are superseded. The physical legacy snapshot tables are deprecated but not dropped in this task to avoid destructive database cleanup without a dedicated backup-backed migration. Existing Annual Entry saves during the Forecast Initial window populate per-Business Unit Initial Forecast values; later saves update Ongoing Forecast without changing Initial Forecast.
+- **Files/documents involved:** `apps/forecasting-app/prisma/schema.prisma`, `apps/forecasting-app/src/services/annualForecastEntryBatchService.ts`, `apps/forecasting-app/src/services/petyrDataService.ts`, `apps/forecasting-app/src/services/petyrDataHealthService.ts`, removed legacy Initial Forecast API/service/component files, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/05_forecasting_product_spec.md`, `docs/04_data_model.md`, `docs/petyr/02_petyr_data_model_target.md`, `docs/petyr/03_petyr_business_rules.md`, `docs/08_operational_commands.md`, `apps/forecasting-app/README.md`, `BACKLOG.md`, `DECISIONS.md`.
+- **Validation:** Passed `npm.cmd run db:generate`, `npm.cmd run test:annual-forecast-entry` and `npm.cmd run build`. Focused `rg` checks found no remaining source/test references to the removed Initial Forecast legacy services or endpoints.
+- **Follow-up:** Physically drop deprecated `forecast_annual_snapshot` tables only in a separate backup-backed database cleanup task.
+
+## 2026-06-26
+
+- **Area:** Platform / PostgreSQL / Backup and recovery
+- **Change:** Defined the production PostgreSQL backup standard for the shared Petyr/Redash data hub: Coolify/host-level backups, encrypted offsite copy, daily backups retained for 5 days, weekly backups retained for 3 weeks, no other retention tier, RPO 24 hours, target RTO 8 hours and Platform owner responsibility. Clarified that Petyr Admin SQL export/import remains for migration and controlled recovery, not production backup compliance.
+- **Reason:** The existing Petyr Admin export/import workflow existed, but retention, encryption, offsite storage, restore drill, PITR expectations and ownership were still an open platform backlog item.
+- **Impact:** Documentation and operational policy changed only. No runtime, schema, API, Redash source, forecast logic, permission or deployment configuration changed. PITR/WAL archiving remains out of v1 and is tracked as a future backlog item if RPO below 24 hours is required.
+- **Files/documents involved:** `docs/01_architecture.md`, `docs/08_operational_commands.md`, `DEPLOY.md`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `apps/forecasting-app/README.md`, `DECISIONS.md`, `BACKLOG.md`, `DEVLOG.md`.
+- **Validation:** Documentation-only task; no build required. Focused repository searches were run for backup, retention, PITR and Petyr Admin database backup references.
+- **Follow-up:** Configure the selected production host/Coolify backup mechanism and record the first restore drill evidence outside the repository.
+
 ## 2026-06-25
 
 - **Area:** Petyr / Daily AI Forecast / Advisory lock
@@ -163,7 +203,7 @@ Each entry must include:
 - **Impact:** Operators can migrate or recover the shared PostgreSQL data hub, including Redash snapshots/metadata, materialized tables and Petyr forecast/admin data. Restore can drop/recreate database objects from the dump and should be used only on a new target server, disposable environment or controlled recovery after taking a backup. No Prisma schema, Redash source, forecast calculation, OpenRouter behavior or permission key changed.
 - **Files/documents involved:** `apps/forecasting-app/Dockerfile`, `apps/forecasting-app/src/app/petyr-admin/page.tsx`, `apps/forecasting-app/src/app/api/petyr/admin/database-backup/export/route.ts`, `apps/forecasting-app/src/app/api/petyr/admin/database-backup/import/route.ts`, `apps/forecasting-app/src/components/petyr/PetyrDatabaseBackupControl.tsx`, `apps/forecasting-app/src/services/petyrDatabaseTransferService.ts`, `apps/forecasting-app/src/services/aiForecastBatchService.ts`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/05_forecasting_product_spec.md`, `apps/forecasting-app/README.md`, `docs/08_operational_commands.md`, `docs/01_architecture.md`, `DECISIONS.md`, `BACKLOG.md`, `DEVLOG.md`.
 - **Validation:** Passed `npm.cmd ci --no-audit --no-fund`, `npm.cmd run db:generate`, `npm.cmd run test:auth` (11/11), `npm.cmd run test:ai-forecast` (19/19), `npm.cmd run build`, and `docker compose config --services`. `docker compose build forecasting-app` could not run because Docker Desktop's Linux engine pipe was unavailable on the host.
-- **Follow-up:** Define production-grade PostgreSQL backup policy for retention, encryption, offsite storage, PITR and large backup handling.
+- **Follow-up:** Resolved on 2026-06-26 by the platform PostgreSQL backup standard. PITR/WAL archiving remains a separate future backlog item only if RPO below 24 hours is required.
 
 ## 2026-06-22
 - **Area:** Platform / Repository hygiene / Coolify deployment

@@ -85,34 +85,29 @@ comparison against Ongoing Forecast.
 
 Persistence:
 
-- Ongoing Forecast remains the current/latest value in `forecast_annual`;
-- Initial Forecast is stored separately in `forecast_annual_snapshot` with
-  `snapshot_type=initial`;
-- every effective snapshot import or consolidation writes
-  `forecast_annual_snapshot_change_log`.
+- Ongoing Forecast remains the current/latest value in `forecast_annual.value`;
+- Initial Forecast company/year total is stored in
+  `forecast_annual_entry.initial_forecast`;
+- Initial Forecast per company + Business Unit + year is stored in
+  `forecast_annual.initial_forecast`;
+- Annual Forecast Entry saves audit Initial Forecast changes through
+  `forecast_save_session` and `forecast_change_log`.
 
-2026 rules:
+Rules:
 
-- no historical Initial Forecast exists because it should have been defined in 2025;
-- CSMs must fill it manually through a one-shot Excel export/import bootstrap;
-- the bootstrap import must overwrite only Initial Forecast values;
-- the bootstrap import must not overwrite Ongoing Forecast;
-- the flow is extraordinary and only for 2026 bootstrap.
-
-2027 onward:
-
-- Initial Forecast must be automatically frozen on January 1 in `Europe/Rome`;
-- the frozen value is the annual forecast in force for the year that has just
-  started in `Europe/Rome`, unless the service receives a different documented
-  annual cycle/year;
-- after freezing, ongoing updates must not modify Initial Forecast.
-- once an Initial Forecast snapshot has `locked_at`, imports or consolidation
-  must leave it unchanged unless a protected admin recovery request explicitly
-  passes an override.
-
-The server-side consolidation service and protected manual endpoint exist for
-controlled operations. The real automatic scheduler and exact
-target-year/cutoff semantics remain open TODOs in `BACKLOG.md`.
+- Annual Forecast Entry is the canonical Initial Forecast workflow.
+- Forecast Initial is editable only from December 10 of year N-1 through January
+  10 of year N.
+- During that window, saved Annual Entry Business Unit values also populate
+  `forecast_annual.initial_forecast`.
+- `forecast_annual_entry.initial_forecast` is the sum of saved per-Business Unit
+  Initial Forecast values for the same company/year.
+- From January 11 onward, Forecast Initial is read-only and remains fixed.
+- Later Annual Entry saves may update Ongoing Forecast in `forecast_annual.value`
+  without changing `forecast_annual.initial_forecast`.
+- The old Initial Forecast Excel bootstrap, snapshot read path and automatic
+  scheduler/consolidation endpoint are deprecated and must not be used for
+  product behavior.
 
 ## Management View annual forecast comparison
 
@@ -128,10 +123,9 @@ Scopes:
 - Business Unit = sum annual forecasts for that Business Unit.
 - Single CSM = sum company/Business Unit annual forecasts assigned to that CSM.
 
-For 2026, Initial Forecast comes from the one-shot Excel bootstrap. From 2027
-onward, it comes from the automatic January 1 `Europe/Rome` consolidation. If
-the frozen baseline is missing, show `n/a` for Initial Forecast and keep a
-non-invasive diagnostic/admin warning.
+Initial Forecast comes from Annual Forecast Entry. If the frozen Initial values
+are missing, show `n/a` for Initial Forecast and keep a non-invasive
+diagnostic/admin warning.
 
 ## Planned future campaign status
 

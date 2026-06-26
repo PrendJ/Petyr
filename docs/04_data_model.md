@@ -103,8 +103,8 @@ Physical tables added by `apps/forecasting-app/prisma/schema.prisma`:
 forecast_monthly
 forecast_annual
 forecast_annual_entry
-forecast_annual_snapshot
-forecast_annual_snapshot_change_log
+forecast_annual_snapshot (deprecated legacy)
+forecast_annual_snapshot_change_log (deprecated legacy)
 forecast_save_session
 forecast_change_log
 company_forecast_status
@@ -170,6 +170,9 @@ Purpose:
 - store the current value source for Annual Forecast Entry Business Unit values:
   `manual` or `ai_confirmed`. AI placeholders that a CSM has not clicked or
   changed are not stored.
+- store the frozen Initial Forecast value for the same company + Business Unit
+  + year in `initial_forecast` when saved through Annual Forecast Entry during
+  the Forecast Initial window.
 
 Unique key:
 
@@ -185,7 +188,9 @@ consolidated
 ```
 
 This is the current/latest annual CSM forecast source for Ongoing Forecast in
-Management View. It must not be overwritten by Initial Forecast import/export.
+Management View. `value` is mutable Ongoing Forecast. `initial_forecast` is the
+fixed per-Business Unit Initial Forecast used by Management View, Business Unit
+views and Company Detail after the Annual Entry Initial window closes.
 
 ### forecast_annual_entry
 
@@ -212,6 +217,8 @@ Important fields:
 Rules:
 - FC Initial is editable only from December 10 of year N-1 through January 10
   of year N. Outside that window it remains visible read-only.
+- FC Initial is the company/year total derived from the saved per-Business Unit
+  Initial Forecast values in `forecast_annual.initial_forecast`.
 - FC Ongoing Confidence is required when an Annual Forecast Entry row is
   modified.
 - FC Ongoing itself is not stored in this table. It is derived as the sum of
@@ -227,10 +234,22 @@ Exceptional 2026 alignment:
 
 ### forecast_annual_snapshot
 
-Purpose:
+Deprecated legacy table.
+
+Previous purpose:
 - store frozen annual forecast baselines separately from current annual forecast rows;
-- support the one-shot 2026 Initial Forecast Excel bootstrap;
-- support future year-end Initial Forecast consolidation without mutating Ongoing Forecast.
+- support the old one-shot 2026 Initial Forecast Excel bootstrap;
+- support the old year-end Initial Forecast consolidation without mutating Ongoing Forecast.
+
+Current rule:
+- product read paths must not use this table;
+- Initial Forecast now comes from Annual Forecast Entry:
+  `forecast_annual_entry.initial_forecast` for company/year totals and
+  `forecast_annual.initial_forecast` for company + Business Unit + year values;
+- the old Excel import/export and scheduler/consolidation endpoints have been
+  removed from the product API;
+- the physical table may remain in existing databases as historical legacy data
+  until a separate backup-backed database cleanup task explicitly drops it.
 
 Initial Forecast snapshots use:
 
@@ -266,19 +285,20 @@ Important fields:
 - locked_at.
 
 Rules:
-- `forecast_annual` remains the mutable/current Ongoing Forecast source;
-- `forecast_annual_snapshot` is the frozen Initial Forecast source;
-- importing Initial Forecast must not write monthly forecasts, closed revenue,
-  AI forecasts or management objectives.
-- once `locked_at` is set, an Initial Forecast snapshot must not be overwritten
-  by later import/consolidation attempts unless a protected admin recovery
-  operation explicitly requests an override.
+- product code must not read from or write to this table for current Initial
+  Forecast behavior;
+- `forecast_annual.value` remains the mutable/current Ongoing Forecast source;
+- `forecast_annual.initial_forecast` is the current per-Business Unit Initial
+  Forecast source;
+- `forecast_annual_entry.initial_forecast` is the current company/year Initial
+  Forecast total source.
 
 ### forecast_annual_snapshot_change_log
 
-Purpose:
-- record every effective Initial Forecast snapshot creation or overwrite;
-- preserve previous value/source and new value/source for auditability.
+Deprecated legacy table for the old snapshot workflow.
+
+Product Initial Forecast audit now uses `forecast_save_session` and
+`forecast_change_log` through Annual Forecast Entry saves.
 
 Important fields:
 - snapshot_id;

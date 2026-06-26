@@ -12,7 +12,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const result = await getForecastEntryBatch({
     csmName: searchParams.get("csmName"),
-    preferredCsmName: auth.user.displayName
+    preferredCsmName: auth.user.displayName,
+    warmup: searchParams.get("warmup")
   });
 
   return NextResponse.json(result);

@@ -61,7 +61,12 @@ Implemented Petyr-owned tables:
 - consolidated_at
 
 `forecast_annual` is the current/latest annual CSM forecast source. Management
-View reads it as Ongoing Forecast.
+View reads `value` as Ongoing Forecast.
+
+`forecast_annual.initial_forecast` stores the fixed Initial Forecast value for
+the same company + Business Unit + year when Annual Forecast Entry is saved
+during the Forecast Initial window. Management View, Business Unit views and
+Company Detail read this field for Initial Forecast aggregates.
 
 ## forecast_annual_entry
 
@@ -84,10 +89,15 @@ values. Unclicked AI placeholders are not persisted and do not contribute.
 FC Initial is editable only from December 10 of the previous year through
 January 10 of the selected year. Outside that window it is read-only.
 
+`forecast_annual_entry.initial_forecast` is the company/year total derived from
+the per-Business Unit Initial Forecast values stored in
+`forecast_annual.initial_forecast`.
+
 ## forecast_annual_snapshot
 
-Frozen annual forecast snapshots live in a dedicated table so Initial Forecast
-does not mutate Ongoing Forecast.
+Deprecated legacy table. Frozen annual forecast snapshots previously lived in a
+dedicated table so Initial Forecast would not mutate Ongoing Forecast. Product
+read paths now use Annual Forecast Entry instead.
 
 - id
 - company_name
@@ -110,15 +120,19 @@ company_name + business_unit + year + snapshot_type
 
 Rules:
 
-- Initial Forecast reads from `forecast_annual_snapshot` where `snapshot_type=initial`.
-- Ongoing Forecast reads from current/latest `forecast_annual`.
-- The 2026 Excel bootstrap writes only Initial Forecast snapshot rows.
-- Future year-end consolidation writes only Initial Forecast snapshot rows.
-- Rows with `locked_at` are immutable for normal import/consolidation runs.
-  A protected admin recovery operation must pass an explicit override before a
-  locked Initial Forecast snapshot can be overwritten.
+- Product Initial Forecast reads must not use `forecast_annual_snapshot`.
+- Ongoing Forecast reads from current/latest `forecast_annual.value`.
+- Initial Forecast reads from `forecast_annual_entry.initial_forecast` for
+  company/year totals and `forecast_annual.initial_forecast` for BU aggregates.
+- The old 2026 Excel bootstrap and future year-end consolidation endpoints have
+  been removed from the product API.
+- Existing physical snapshot rows are historical legacy data only until a
+  separate backup-backed cleanup task drops them.
 
 ## forecast_annual_snapshot_change_log
+
+Deprecated legacy audit table for the old snapshot workflow. Current Initial
+Forecast audit uses Annual Forecast Entry save sessions and change logs.
 
 - id
 - snapshot_id

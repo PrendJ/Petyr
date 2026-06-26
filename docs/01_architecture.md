@@ -62,6 +62,15 @@ workflow is operationally useful for moving to a new server, but it is not the
 final production backup strategy for retention, encryption, offsite storage or
 point-in-time recovery.
 
+Production PostgreSQL backup is a platform responsibility owned by the Platform
+owner and must be configured outside the Petyr browser workflow, at Coolify/host
+or equivalent database-backup level. The accepted v1 production standard is:
+daily backups retained for 5 days, weekly backups retained for 3 weeks, no other
+retention tier, encrypted offsite copy, RPO 24 hours and target RTO 8 hours.
+Point-in-time recovery is not part of the v1 standard; add WAL archiving/PITR
+only through a later documented decision if the required RPO becomes lower than
+24 hours.
+
 ### redash-ingestor
 
 Node/Next.js or Node service responsible for:

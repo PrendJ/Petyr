@@ -42,10 +42,18 @@ Project-specific backlog items should be placed in the most specific backlog ava
 ## Define production PostgreSQL backup policy beyond Petyr Admin migration dumps
 
 - **Area:** Platform / PostgreSQL / Backup and recovery
-- **Problem/question:** Petyr Admin now exposes protected PostgreSQL SQL dump export/import for server migration and controlled recovery, but the long-term production backup policy is not defined.
-- **Impact:** Operators can move the current shared database to a new server, but retention, encryption, offsite storage, restore testing, point-in-time recovery, maximum upload/download size and responsibility ownership remain unresolved.
+- **Problem/question:** Petyr Admin exposes protected PostgreSQL SQL dump export/import for server migration and controlled recovery, but the long-term production backup policy was not defined.
+- **Impact:** Resolved by documenting a host/Coolify-level production backup standard. Operators can still use Petyr Admin SQL dumps for migration and controlled recovery, but recurring production backup compliance is owned outside the browser workflow.
+- **Status:** Resolved on 2026-06-26.
+- **Proposal / next action:** Use the documented v1 production standard: Coolify/host-level PostgreSQL backups, encrypted offsite copy, daily backups retained for 5 days, weekly backups retained for 3 weeks, no other retention tier, RPO 24 hours, target RTO 8 hours and Platform owner responsibility. Petyr Admin SQL export/import remains only for migration and controlled recovery.
+
+## Define PostgreSQL PITR/WAL archiving if RPO below 24 hours is required
+
+- **Area:** Platform / PostgreSQL / Backup and recovery
+- **Problem/question:** The accepted v1 production backup standard sets RPO at 24 hours and does not include point-in-time recovery.
+- **Impact:** Production can recover from retained daily/weekly backups, but cannot guarantee recovery to an arbitrary point between backups.
 - **Status:** Open.
-- **Proposal / next action:** Define the production backup standard for the PostgreSQL service, including schedule, storage location, encryption, retention, PITR expectations, restore drill cadence and whether large backups should move from browser-mediated admin flow to server-side object storage or host-level jobs.
+- **Proposal / next action:** If the business requires RPO below 24 hours, document and implement WAL archiving/PITR with ownership, storage, encryption, monitoring, restore drill and cost expectations before changing the production standard.
 
 ## Resolve Petyr Excel workbook dependency deprecation warnings
 
@@ -187,17 +195,17 @@ Project-specific backlog items should be placed in the most specific backlog ava
 
 - **Area:** Petyr / Management View / Annual forecast history
 - **Problem/question:** Management View needed a confirmed source for Initial Forecast.
-- **Impact:** Resolved at source-of-truth level. 2026 uses a one-shot Excel bootstrap; from 2027 onward Initial Forecast is frozen automatically on January 1 in `Europe/Rome` from the annual forecast in force for the newly started year or service-defined annual cycle.
-- **Status:** Resolved; updated on 2026-05-26 for January 1 `Europe/Rome`.
-- **Proposal / next action:** Use `forecast_annual_snapshot` for Initial Forecast and `forecast_annual` for Ongoing Forecast. Real automatic scheduler and exact target-year/cutoff semantics remain open below.
+- **Impact:** Resolved at source-of-truth level. Annual Forecast Entry is the canonical source: `forecast_annual_entry.initial_forecast` stores company/year totals and `forecast_annual.initial_forecast` stores per-Business Unit Initial Forecast values. The Forecast Initial window closes after January 10; no separate Initial Forecast scheduler is required.
+- **Status:** Resolved; updated on 2026-06-26 for Annual Forecast Entry canonical source.
+- **Proposal / next action:** Use Annual Forecast Entry for Initial Forecast and `forecast_annual.value` for Ongoing Forecast.
 
-## Define technical scheduler for Petyr automatic Initial Forecast consolidation
+## Supersede technical scheduler for Petyr automatic Initial Forecast consolidation
 
 - **Area:** Petyr / Annual forecast / Scheduling
-- **Problem/question:** From 2027 onward, Initial Forecast must be frozen automatically on January 1 in `Europe/Rome`, but the definitive technical mechanism is not documented.
-- **Impact:** The server-side consolidation service and protected manual endpoint exist, but production automation cannot safely choose between app cron, worker job, database job, external scheduler or another orchestrator without an explicit platform decision.
-- **Status:** Open TODO.
-- **Proposal / next action:** Until the scheduler exists, use the protected manual endpoint documented in `docs/08_operational_commands.md` for controlled recovery. Implement a real scheduler for `consolidateInitialAnnualForecast(year)` after deciding scheduling mechanism, operational ownership, retry behavior, idempotency, observability and exact cutoff handling.
+- **Problem/question:** This was the old question: whether Initial Forecast needed a January 1 scheduler. It is superseded by Annual Forecast Entry as the canonical workflow.
+- **Impact:** Superseded. Initial Forecast is now entered and fixed through Annual Forecast Entry; the legacy scheduler/consolidation endpoint has been removed from the product API.
+- **Status:** Superseded on 2026-06-26.
+- **Proposal / next action:** No scheduler implementation required for Initial Forecast.
 
 ## Confirm timezone for Petyr automatic Initial Forecast consolidation
 
@@ -207,37 +215,45 @@ Project-specific backlog items should be placed in the most specific backlog ava
 - **Status:** Resolved on 2026-05-26.
 - **Proposal / next action:** Use `Europe/Rome` in source-of-truth docs and future scheduler implementation.
 
-## Clarify Petyr Initial Forecast January 1 target-year cutoff
+## Supersede Petyr Initial Forecast January 1 target-year cutoff
 
 - **Area:** Petyr / Annual forecast / Scheduling
-- **Problem/question:** Product says the January 1 `Europe/Rome` consolidation saves the current annual forecast as Initial Forecast of the year just started or of the annual cycle defined by the service. The exact target-year and cutoff semantics for the production scheduler still need final confirmation.
-- **Impact:** Implementation could freeze the wrong target year/cycle if the scheduler infers the year differently from the service parameter or business expectation.
-- **Status:** Open TODO.
-- **Proposal / next action:** Confirm whether the scheduler always calls `consolidateInitialAnnualForecast(current Europe/Rome year)` on January 1, or whether it should pass an explicit service-defined cycle/year from configuration. Document the final cutoff timestamp and idempotency behavior before scheduler implementation.
+- **Problem/question:** This was the old question: how a January 1 scheduler should infer target year. It is superseded by the Annual Forecast Entry window.
+- **Impact:** Superseded. The relevant cutoff is the Annual Forecast Entry edit window: Forecast Initial is editable from December 10 of year N-1 through January 10 of year N, then read-only.
+- **Status:** Superseded on 2026-06-26.
+- **Proposal / next action:** Keep Annual Forecast Entry window tests as the source of truth.
 
 ## Confirm manual fallback trigger for automatic Initial Forecast consolidation
 
 - **Area:** Petyr / Annual forecast / Operations
 - **Problem/question:** It is not confirmed whether the automatic January 1 `Europe/Rome` consolidation requires a manual trigger fallback.
-- **Impact:** Resolved technically for the MVP: a protected manual endpoint exists and uses `APP_INTERNAL_SECRET`. Final role ownership should still be governed by the future access-control layer.
-- **Status:** Resolved on 2026-05-22 for MVP manual fallback.
-- **Proposal / next action:** Keep `/api/petyr/admin/consolidate-initial-forecast` protected with `x-app-secret`; revisit role-based operator access when Petyr Admin RBAC is implemented.
+- **Impact:** Superseded. The protected manual consolidation endpoint has been removed because Initial Forecast is no longer scheduler/consolidation owned.
+- **Status:** Superseded on 2026-06-26.
+- **Proposal / next action:** Use Annual Forecast Entry only.
 
-## Implement separate Initial Forecast 2026 Excel bootstrap
+## Supersede separate Initial Forecast 2026 Excel bootstrap
 
 - **Area:** Petyr / Admin / Initial Forecast
-- **Problem/question:** 2026 Initial Forecast must be manually compiled by CSMs through a one-shot Excel export/import flow, but that flow must stay separate from the existing monthly import.
-- **Impact:** Resolved by dedicated endpoints and admin UI. Reusing the monthly import is no longer necessary and monthly import behavior remains separate.
-- **Status:** Resolved on 2026-05-22.
-- **Proposal / next action:** Use `/api/petyr/admin/export-initial-forecast-xlsx` and `/api/petyr/admin/import-initial-forecast-xlsx` for the 2026 baseline or controlled recovery operations.
+- **Problem/question:** This was the old bootstrap path. It is superseded by Annual Forecast Entry as the supported Initial Forecast workflow.
+- **Impact:** Superseded. Annual Forecast Entry is the canonical Initial Forecast workflow; the old Initial Forecast Excel endpoints have been removed from the product API.
+- **Status:** Superseded on 2026-06-26.
+- **Proposal / next action:** Use Annual Forecast Entry for Initial Forecast entry.
 
 ## Define Petyr Initial Forecast persistence model
 
 - **Area:** Petyr / Data model / Initial Forecast
 - **Problem/question:** Product now distinguishes frozen Initial Forecast from mutable Ongoing Forecast, but the final persistence model for frozen annual baselines has not been selected.
-- **Impact:** Resolved by the dedicated `forecast_annual_snapshot` table and `forecast_annual_snapshot_change_log` audit table.
-- **Status:** Resolved on 2026-05-22.
-- **Proposal / next action:** Keep Initial Forecast reads/writes on `forecast_annual_snapshot`; keep Ongoing Forecast reads/writes on `forecast_annual`.
+- **Impact:** Resolved by Annual Forecast Entry. Company/year totals live in `forecast_annual_entry.initial_forecast`; per-Business Unit values live in `forecast_annual.initial_forecast`; Ongoing Forecast remains in `forecast_annual.value`. Legacy snapshot tables are deprecated.
+- **Status:** Resolved on 2026-06-26.
+- **Proposal / next action:** Keep product reads/writes on Annual Forecast Entry fields.
+
+## Drop deprecated Petyr Initial Forecast snapshot tables after backup-backed cleanup decision
+
+- **Area:** Petyr / Data model / Legacy cleanup
+- **Problem/question:** `forecast_annual_snapshot` and `forecast_annual_snapshot_change_log` are deprecated and no longer product read sources, but physically dropping them is destructive.
+- **Impact:** Leaving the tables in place is safe but carries schema clutter. Dropping them requires an explicit backup-backed DB cleanup task and migration review.
+- **Status:** Open.
+- **Proposal / next action:** After verifying production backups and confirming no external reports use the legacy tables, create a dedicated migration/task to drop the deprecated tables.
 
 ## Confirm deterministic tie-breaker for agreement/deal link derivation
 

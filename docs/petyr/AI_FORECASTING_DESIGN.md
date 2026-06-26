@@ -607,7 +607,8 @@ Persistence rules:
 
 - Do not write `forecast_monthly`.
 - Do not write `forecast_annual`.
-- Do not write `forecast_annual_snapshot`.
+- Do not write Initial Forecast fields such as
+  `forecast_annual_entry.initial_forecast` or `forecast_annual.initial_forecast`.
 - Do not write closed revenue tables/materialized Redash data.
 - Do not write `management_objective`.
 - Do not write `forecast_change_log` for AI generation.

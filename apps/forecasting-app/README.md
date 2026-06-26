@@ -109,7 +109,7 @@ npm run backfill:2026-ongoing-from-closed -- --dry-run
 npm run backfill:2026-ongoing-from-closed -- --apply
 ```
 
-This is an exceptional 2026 repair operation. It copies already closed Redash campaign revenue through the selected execution date into monthly `forecast_monthly` previous-month and ongoing rows with the same real value, plus annual `forecast_annual` rows used by Management View Ongoing Forecast. It must not become a recurring import, scheduler, CSM workflow or future-year workflow, and it must not update Initial Forecast snapshots, Redash materialized closed revenue, AI forecast cache or Management Objectives.
+This is an exceptional 2026 repair operation. It copies already closed Redash campaign revenue through the selected execution date into monthly `forecast_monthly` previous-month and ongoing rows with the same real value, plus annual `forecast_annual` rows used by Management View Ongoing Forecast. It must not become a recurring import, scheduler, CSM workflow or future-year workflow, and it must not update Initial Forecast fields, Redash materialized closed revenue, AI forecast cache or Management Objectives.
 
 `/petyr-admin` Data Health also shows PostgreSQL-only Redash sync status for `master_campaigns`, `master_agreements` and `company_ownership`, includes a link to the Redash Ingestor dashboard at `/redash-ingestor`, and reports latest sync status, row counts, snapshot rows, materialized rows and latest error. When `company_ownership` is unavailable but real campaign/agreement/forecast rows exist, Petyr warns that real fallback rendering is active instead of showing mock customers.
 
@@ -177,7 +177,7 @@ GET /api/petyr/forecast-entry/annual-batch?csmName=...&year=YYYY
 POST /api/petyr/forecast-entry/annual-batch/save
 ```
 
-The annual section is a separate tab inside `/forecasting/entry`. It exposes the Year filter; the visible CSM selector is scoped to Monthly Forecast Entry. It stores customer + year Forecast Initial and Confidence in
+The annual section is a separate tab inside `/forecasting/entry`. It exposes CSM and Year filters, and its CSM selector stays synchronized with Monthly Forecast Entry when both sections are loaded. It stores customer + year Forecast Initial and Confidence in
 `forecast_annual_entry`, stores annual BU values in `forecast_annual`, and
 audits effective changes through `forecast_save_session` /
 `forecast_change_log` with source `Annual Forecast Entry`. Its read endpoint uses a portfolio-scoped PostgreSQL read model for the selected CSM/year instead of loading full Company Detail for each customer. After schema changes,
@@ -225,35 +225,22 @@ The workflow uses native PostgreSQL SQL dumps so a new server can restore the
 shared PostgreSQL data hub, including Redash snapshots/metadata, materialized
 tables and Petyr-owned forecast data. Restore can drop/recreate database objects
 from the dump and is intended only for server migration or controlled recovery,
-not as the final production backup policy.
+not as the production backup policy. The production standard is documented in
+`docs/08_operational_commands.md` and is owned at platform level: host/Coolify
+backup, encrypted offsite copy, daily retention for 5 days, weekly retention for
+3 weeks, RPO 24 hours, target RTO 8 hours and no v1 PITR.
 
-Petyr Admin no longer exposes the Initial Forecast baseline workflow in the visible `/petyr-admin` workspace. The controlled endpoints remain:
+Initial Forecast is owned by the Annual Forecast Entry workflow inside normal
+`/forecasting/entry`. Forecast Initial is editable from December 10 of year N-1
+through January 10 of year N, then read-only. Annual Entry stores the company
+total in `forecast_annual_entry.initial_forecast` and the per-Business Unit
+Initial values in `forecast_annual.initial_forecast`; later Ongoing Forecast
+updates change `forecast_annual.value` without changing Initial Forecast.
 
-```txt
-GET /api/petyr/admin/export-initial-forecast-xlsx?year=2026
-POST /api/petyr/admin/import-initial-forecast-xlsx
-```
-
-This workflow is separate from monthly forecast import/export. It writes only frozen
-Initial Forecast rows in `forecast_annual_snapshot` and audit entries in
-`forecast_annual_snapshot_change_log`; it does not update `forecast_annual`,
-`forecast_monthly`, closed revenue, AI forecast cache or Management Objectives.
-
-Future Initial Forecast consolidation is available as a protected internal
-operation:
-
-```txt
-POST /api/petyr/admin/consolidate-initial-forecast
-```
-
-Send `x-app-secret: APP_INTERNAL_SECRET`. The default business timezone is
-`Europe/Rome`. Until a real scheduler exists, controlled manual recovery should
-pass an explicit `year`; an omitted `year` is inferred only on January 1 in
-`Europe/Rome`. Locked Initial Forecast snapshots are left unchanged unless the
-protected request explicitly passes `overrideLocked=true`.
-
-The real automatic scheduler for January 1 in `Europe/Rome` remains a platform
-backlog item.
+The old Initial Forecast Excel export/import endpoints and protected
+consolidation endpoint have been removed from the product API. The legacy
+`forecast_annual_snapshot` tables are deprecated historical storage and are not
+used by product read paths.
 
 For migration-managed development, create a migration instead:
 

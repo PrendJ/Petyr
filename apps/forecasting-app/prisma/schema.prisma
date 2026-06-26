@@ -30,10 +30,12 @@ enum ForecastAnnualStatus {
 }
 
 enum ForecastAnnualSnapshotType {
+  // Deprecated: Initial Forecast now comes from Annual Forecast Entry.
   initial
 }
 
 enum ForecastAnnualSnapshotSource {
+  // Deprecated: legacy Initial Forecast snapshot import/consolidation sources.
   manual_excel_2026
   year_end_consolidation
   admin
@@ -154,6 +156,7 @@ model ForecastAnnual {
   businessUnit    String               @map("business_unit")
   year            Int
   value           Decimal              @db.Decimal(14, 2)
+  initialForecast Decimal?             @map("initial_forecast") @db.Decimal(14, 2)
   aiForecastValue Decimal?             @map("ai_forecast_value") @db.Decimal(14, 2)
   valueSource     String               @default("manual") @map("value_source")
   status          ForecastAnnualStatus @default(draft)
@@ -191,6 +194,8 @@ model ForecastAnnualEntry {
   @@map("forecast_annual_entry")
 }
 
+/// Deprecated: legacy Initial Forecast snapshot storage. Product read paths now use
+/// ForecastAnnualEntry.initialForecast and ForecastAnnual.initialForecast.
 model ForecastAnnualSnapshot {
   id           String                         @id @default(cuid())
   companyName  String                         @map("company_name")
@@ -215,6 +220,7 @@ model ForecastAnnualSnapshot {
   @@map("forecast_annual_snapshot")
 }
 
+/// Deprecated: audit log for legacy Initial Forecast snapshots.
 model ForecastAnnualSnapshotChangeLog {
   id             String                       @id @default(cuid())
   snapshotId     String                       @map("snapshot_id")
