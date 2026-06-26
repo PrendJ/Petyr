@@ -20,6 +20,14 @@ Each entry must include:
 
 ## 2026-06-25
 
+- **Area:** Petyr / Daily AI Forecast / Advisory lock
+- **Change:** Cast the two Daily AI Forecast PostgreSQL advisory-lock keys to `int` in the `pg_try_advisory_xact_lock` call.
+- **Reason:** Prisma sent the numeric placeholders as `bigint`, which made PostgreSQL look for `pg_try_advisory_xact_lock(bigint, bigint)` and fail because the two-argument advisory lock signature expects integer keys.
+- **Impact:** Daily AI Forecast manual and worker runs can acquire the intended transaction-scoped advisory lock instead of failing before company processing starts. Forecast selection, deterministic values, cache persistence and scheduling are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/services/petyrNightlyDeterministicAiForecastService.ts`, `DEVLOG.md`.
+- **Validation:** Passed `npm.cmd run build`.
+- **Follow-up:** Re-run the Petyr Admin Daily AI Forecast control in the target environment and verify the result counters plus `ai_forecast_cache` rows for the daily model version.
+
 - **Area:** Petyr / Forecast Entry / Batch read performance
 - **Change:** Optimized normal Forecast Entry loading by rendering `/forecasting/entry` with only the Monthly batch data initially, lazy-loading Annual Forecast Entry only when the Annual tab is opened, and replacing per-company Monthly/Annual batch read loops with portfolio-scoped PostgreSQL read models. Added persisted server-side performance measurements for `getForecastEntryBatch` and `getAnnualForecastEntryBatch`.
 - **Reason:** Large CSM portfolios were slow because Monthly reused `getForecastEntryContext` per company and Annual reused `getCompanyDetail` per company, causing repeated broad PostgreSQL reads and loading both sections before the user selected a tab.

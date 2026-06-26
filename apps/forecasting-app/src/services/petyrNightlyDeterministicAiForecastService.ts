@@ -142,7 +142,7 @@ async function defaultRunWithAdvisoryLock<T>(operation: () => Promise<T>) {
   return prisma.$transaction(
     async (tx) => {
       const lockRows = await tx.$queryRaw<Array<{ locked: boolean }>>`
-        SELECT pg_try_advisory_xact_lock(${LOCK_NAMESPACE}, ${LOCK_KEY}) AS locked
+        SELECT pg_try_advisory_xact_lock(${LOCK_NAMESPACE}::int, ${LOCK_KEY}::int) AS locked
       `;
       const locked = lockRows[0]?.locked === true;
       if (!locked) return "lock_busy" as const;
