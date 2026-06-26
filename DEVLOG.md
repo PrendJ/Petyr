@@ -49,6 +49,16 @@ Each entry must include:
 
 ## 2026-06-26
 
+- **Area:** Platform / Docker Compose / Forecasting image reuse
+- **Change:** Updated root `docker-compose.yml` so `forecasting-db-sync`, `forecasting-app` and `petyr-ai-forecast-worker` use the same `${COOLIFY_RESOURCE_UUID:-petyr}-forecasting-app` image, with the Docker build declared only on `forecasting-app`.
+- **Reason:** Coolify was building the same Forecasting Dockerfile separately for the app, DB sync and AI worker services. The deployment log showed the build reaching the duplicated `petyr-ai-forecast-worker` Next.js build and then exiting with code 255 without an application error, consistent with avoidable duplicate heavy builds on the deployment server.
+- **Impact:** Runtime commands, environment variables, service names, dependencies, schema sync behavior and worker behavior are unchanged. Deployments now build the Forecasting image once and reuse it for DB sync and worker execution.
+- **Files/documents involved:** `docker-compose.yml`, `DEVLOG.md`.
+- **Validation:** `docker compose config --quiet` passed with placeholder required environment values. The local Docker daemon is not available, so a full Docker build could not be run here.
+- **Follow-up:** Rerun Coolify deployment and confirm the build log no longer starts a separate `petyr-ai-forecast-worker builder RUN npm run build` step.
+
+## 2026-06-26
+
 - **Area:** Petyr / Forecast Entry / Scoped read warmup performance
 - **Change:** Added narrower CSM-scoped read paths for normal Monthly and Annual Forecast Entry batch loading, using `company_ownership` to resolve the selected CSM portfolio before reading only the needed campaign, forecast, status and AI cache rows. Added a short-lived in-memory read cache with in-flight promise dedupe for Forecast Entry batch reads, invalidated after Monthly or Annual saves. Added a silent `/forecasting` background preloader for users whose login display name resolves to exactly one CSM and who have `petyr:forecast:write`.
 - **Reason:** Forecast Entry still paid avoidable load cost on large portfolios because the normal batch endpoints could rebuild broad overview inputs before narrowing to the selected CSM. The preloader warms the same public batch endpoints before the user opens `/forecasting/entry`.

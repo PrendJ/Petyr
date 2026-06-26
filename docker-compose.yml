@@ -32,9 +32,7 @@ services:
         condition: service_completed_successfully
 
   forecasting-db-sync:
-    build:
-      context: ./apps/forecasting-app
-      dockerfile: Dockerfile
+    image: ${COOLIFY_RESOURCE_UUID:-petyr}-forecasting-app
     restart: "no"
     command: npm run db:sync
     environment:
@@ -158,6 +156,7 @@ services:
         condition: service_completed_successfully
 
   forecasting-app:
+    image: ${COOLIFY_RESOURCE_UUID:-petyr}-forecasting-app
     build:
       context: ./apps/forecasting-app
       dockerfile: Dockerfile
@@ -186,9 +185,7 @@ services:
         condition: service_completed_successfully
 
   petyr-ai-forecast-worker:
-    build:
-      context: ./apps/forecasting-app
-      dockerfile: Dockerfile
+    image: ${COOLIFY_RESOURCE_UUID:-petyr}-forecasting-app
     restart: unless-stopped
     command: npm run worker:ai-forecast:loop
     environment:
