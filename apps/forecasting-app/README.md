@@ -20,6 +20,8 @@ This base app includes:
 - health API;
 - first DB preview API.
 
+`/forecasting` renders a lightweight shell immediately after Petyr read permission checks, then loads the full approved rendering data from `GET /api/petyr/forecasting/rendering-data` in the browser. While the refresh is running, users see a compact bottom-left loader (`Aggiornamento dati in corso...`). Forecasting data remains PostgreSQL-backed; this endpoint does not introduce Redash browser calls or schema changes.
+
 ## Important rule
 
 Petyr must not call Redash directly.

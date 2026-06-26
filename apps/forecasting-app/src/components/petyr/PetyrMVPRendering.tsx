@@ -294,7 +294,7 @@ function BranchView() {
                 </div>
               )}
             </CardContent>
-          </Card>
+      </Card>
         );
       })}
     </div>
@@ -342,7 +342,7 @@ function BusinessUnitView() {
                 </div>
               )}
             </CardContent>
-          </Card>
+      </Card>
         );
       })}
     </div>
@@ -389,7 +389,7 @@ function SingleCSMView() {
                 </div>
               )}
             </CardContent>
-          </Card>
+      </Card>
         );
       })}
     </div>
@@ -517,7 +517,7 @@ function BusinessUnitRevenueForecastChart() {
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="text-sm font-semibold text-slate-900">{item.group}</div>
               <div className="text-xs text-slate-500">values in €</div>
-            </div>
+          </div>
             <div className="rounded-xl bg-slate-50 p-3">
               <div className="flex h-[220px] gap-3">
                 <div className="flex w-14 flex-col justify-between border-r border-slate-200 pr-2 text-right text-[10px] text-slate-500">
@@ -563,9 +563,9 @@ function BusinessUnitRevenueForecastChart() {
                   })}
                 </div>
               </div>
-            </div>
+          </div>
             <div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
-              <div className="grid grid-cols-[0.8fr_1fr_1fr_1fr] bg-slate-50 px-3 py-2 text-[11px] font-medium text-slate-500">
+              <div className="grid grid-cols-[0.8fr_1fr_1fr_1fr] bg-slate-50 px-3 py-2 text-[12.5px] font-medium text-slate-500">
                 <div>Year</div>
                 <div className="text-right">Closed revenue</div>
                 <div className="text-right">Initial Forecast</div>
@@ -577,7 +577,7 @@ function BusinessUnitRevenueForecastChart() {
                 const previousMonthForecastValue = item[year.previousMonthForecastKey as keyof RevenueSeriesRow] as number | undefined;
 
                 return (
-                  <div key={`${item.group}-${year.label}-values`} className="grid grid-cols-[0.8fr_1fr_1fr_1fr] border-t border-slate-100 px-3 py-2 text-[11px] text-slate-600">
+                  <div key={`${item.group}-${year.label}-values`} className="grid grid-cols-[0.8fr_1fr_1fr_1fr] border-t border-slate-100 px-3 py-2 text-[12.5px] text-slate-600">
                     <div className="font-medium text-slate-700">{year.label}</div>
                     <div className="text-right">{formatK(actualValue)}</div>
                     <div className="text-right">{initialForecastValue !== null && initialForecastValue !== undefined ? formatK(initialForecastValue) : 'n/a'}</div>
@@ -585,7 +585,7 @@ function BusinessUnitRevenueForecastChart() {
                   </div>
                 );
               })}
-            </div>
+          </div>
           </div>
         ))}
       </div>
@@ -629,13 +629,13 @@ function ManagementView({
 
       {managementMode === 'monthly' ? (
         <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardHeader>
-            <CardTitle>Monthly Aggregate</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-8">
+        <CardHeader>
+          <CardTitle>Monthly Aggregate</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-8">
             <BranchView />
-          </CardContent>
-        </Card>
+        </CardContent>
+      </Card>
       ) : (
         <YearlyBranchView />
       )}
@@ -658,73 +658,71 @@ function ManagementView({
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardHeader>
-            <CardTitle>Current year trend</CardTitle>
-            <CardDescription>Data source: CSM-entered forecast, AI forecast cache when available, closed revenue from Redash/campaign revenue.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="h-[340px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={monthlyManagement}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis tickFormatter={formatK} />
-                  <Tooltip formatter={formatTooltipValue} />
-                  <Legend />
-                  <Line type="monotone" dataKey="forecastAI" name="AI Forecast" stroke={chartColors.forecastAI} strokeWidth={3} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="forecastMese" name="Previous-month forecast" stroke={chartColors.forecastMese} strokeWidth={3} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="real" name="Closed revenue" stroke={chartColors.real} strokeWidth={3} dot={{ r: 3 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-            <TrendInsightCard
-              title="Trend reading unavailable"
-              body="Insight unavailable: this golden master view does not generate a narrative trend from chart data yet."
-              action="Review the source-backed chart or the dedicated detail routes before taking action."
-            />
-          </CardContent>
-        </Card>
+      <Card className="rounded-2xl border-slate-200 shadow-sm">
+        <CardHeader>
+          <CardTitle>Current year trend</CardTitle>
+          <CardDescription>Data source: CSM-entered forecast, AI forecast cache when available, closed revenue from Redash/campaign revenue.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="h-[340px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={monthlyManagement}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis tickFormatter={formatK} />
+                <Tooltip formatter={formatTooltipValue} />
+                <Legend />
+                <Line type="monotone" dataKey="forecastAI" name="AI Forecast" stroke={chartColors.forecastAI} strokeWidth={3} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="forecastMese" name="Previous-month forecast" stroke={chartColors.forecastMese} strokeWidth={3} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="real" name="Closed revenue" stroke={chartColors.real} strokeWidth={3} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <TrendInsightCard
+            title="Trend reading unavailable"
+            body="Insight unavailable: this golden master view does not generate a narrative trend from chart data yet."
+            action="Review the source-backed chart or the dedicated detail routes before taking action."
+          />
+        </CardContent>
+      </Card>
 
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardHeader>
-            <CardTitle>Revenue per Business Unit</CardTitle>
-            <CardDescription>Data source: historical campaign revenue by Business Unit, compared with the current year and previous years.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <BusinessUnitRevenueForecastChart />
-            <TrendInsightCard
-              title="Business Unit insight unavailable"
-              body="Not enough source-backed narrative data is available in this rendering to state a Business Unit opportunity or risk."
-              action="Use the Business Unit chart and dedicated Company Detail route for evidence-backed review."
-            />
-          </CardContent>
-        </Card>
-      </div>
+      <Card className="rounded-2xl border-slate-200 shadow-sm">
+        <CardHeader>
+          <CardTitle>Revenue per Business Unit</CardTitle>
+          <CardDescription>Data source: historical campaign revenue by Business Unit, compared with the current year and previous years.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <BusinessUnitRevenueForecastChart />
+          <TrendInsightCard
+            title="Business Unit insight unavailable"
+            body="Not enough source-backed narrative data is available in this rendering to state a Business Unit opportunity or risk."
+            action="Use the Business Unit chart and dedicated Company Detail route for evidence-backed review."
+          />
+        </CardContent>
+      </Card>
 
       {canViewAdminTools ? (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <Card className="rounded-2xl border-slate-200 shadow-sm">
             <CardHeader>
-              <CardTitle>Top 4 positive trends</CardTitle>
+      <CardTitle>Top 4 positive trends</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {positiveTrends.map((item) => (
                 <div key={item} className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">{item}</div>
               ))}
             </CardContent>
-          </Card>
+      </Card>
           <Card className="rounded-2xl border-slate-200 shadow-sm">
             <CardHeader>
-              <CardTitle>Top 4 negative trends</CardTitle>
+      <CardTitle>Top 4 negative trends</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {negativeTrends.map((item) => (
                 <div key={item} className="rounded-xl bg-rose-50 p-3 text-sm text-rose-900">{item}</div>
               ))}
             </CardContent>
-          </Card>
+      </Card>
         </div>
       ) : null}
 
@@ -824,7 +822,7 @@ function CSMMonthCard({
               <div className="mt-2 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500">
                 AI Forecast: <span className="font-semibold text-slate-700">{euro(unitData?.aiForecast ?? null)}</span>
               </div>
-            </div>
+          </div>
           );
         })}
       </div>
@@ -953,7 +951,7 @@ function CSMView() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[1.1fr_1fr_1fr]">
         <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="space-y-3 p-5">
+        <CardContent className="space-y-3 p-5">
             <div className="text-sm text-slate-500">CSM filter</div>
             <NativeSelect
               value={selectedCSM}
@@ -971,47 +969,47 @@ function CSMView() {
             </NativeSelect>
             <div className="text-xs text-slate-500">
               Client View always shows the current month and the next month. You can add one extra month from the dedicated selector.
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CardContent>
+      </Card>
 
         <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5">
+        <CardContent className="p-5">
             <div className="text-sm text-slate-500">Closed revenue YTD</div>
             <div className="mt-2 text-2xl font-semibold">{euro(csmSummary.workedYtd)}</div>
             <div className="mt-1 text-xs text-slate-500">Sum of closed revenue for closed months on filtered companies</div>
-          </CardContent>
-        </Card>
+        </CardContent>
+      </Card>
 
         <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="p-5">
+        <CardContent className="p-5">
             <div className="text-sm text-slate-500">Planned through year end</div>
             <div className="mt-2 text-2xl font-semibold">{euroOrUnavailable(csmSummary.plannedFuture)}</div>
             <div className="mt-1 text-xs text-slate-500">Redash future planned campaign revenue when management aggregates are available</div>
-          </CardContent>
-        </Card>
+        </CardContent>
+      </Card>
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_1.2fr]">
         <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardHeader>
-            <CardTitle>AI notes unavailable</CardTitle>
-            <CardDescription>No AI cache-backed notes are generated in this golden master preview.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
+        <CardHeader>
+          <CardTitle>AI notes unavailable</CardTitle>
+          <CardDescription>No AI cache-backed notes are generated in this golden master preview.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
             {aiNotes.map((note) => (
               <div key={note} className="rounded-xl bg-slate-50 p-3 text-sm">{note}</div>
             ))}
-          </CardContent>
-        </Card>
+        </CardContent>
+      </Card>
 
         <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardHeader>
-            <CardTitle>Relevant insights</CardTitle>
-            <CardDescription>Click a card to see the companies affected by the insight.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <CardHeader>
+          <CardTitle>Relevant insights</CardTitle>
+          <CardDescription>Click a card to see the companies affected by the insight.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {actionItems.map((action) => (
                 <button
                   key={action.id}
@@ -1031,7 +1029,7 @@ function CSMView() {
                   </div>
                 </button>
               ))}
-            </div>
+          </div>
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="text-sm font-semibold text-slate-900">Affected companies · {selectedAction?.title ?? 'Relevant insights'}</div>
@@ -1074,20 +1072,20 @@ function CSMView() {
                     : `Show all ${selectedActionCompanies.length}`}
                 </Button>
               ) : null}
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CardContent>
+      </Card>
       </div>
 
       <Card className="rounded-2xl border-slate-200 shadow-sm">
         <CardHeader>
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
-              <CardTitle>Client View</CardTitle>
-              <CardDescription>
+      <CardTitle>Client View</CardTitle>
+      <CardDescription>
                 Each company shows the current month, next month, and one optional extra month. Forecast values are split by Business Unit in a read-only view; edits happen in Forecast Entry.
               </CardDescription>
-            </div>
+          </div>
             <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:w-[560px]">
               <div>
                 <div className="mb-2 text-xs font-medium text-slate-500">Company filter</div>
@@ -1107,14 +1105,14 @@ function CSMView() {
                   ))}
                 </NativeSelect>
               </div>
-            </div>
+          </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {clientViewRows.length > 0 ? clientViewRows.map((row) => {
             const monthly = getCustomerMonthly(row);
             return (
-              <Card key={row.company} className="rounded-2xl border-slate-200 shadow-sm">
+      <Card key={row.company} className="rounded-2xl border-slate-200 shadow-sm">
                 <CardContent className="space-y-4 p-4">
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                     <div>
@@ -1145,7 +1143,7 @@ function CSMView() {
           }) : (
             <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
               No companies match the selected Client View filters.
-            </div>
+          </div>
           )}
         </CardContent>
       </Card>
@@ -1465,8 +1463,8 @@ function CompanyForecastEditor({
       <CardHeader>
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <CardTitle>Review forecast and open Forecast Entry</CardTitle>
-            <CardDescription>
+          <CardTitle>Review forecast and open Forecast Entry</CardTitle>
+          <CardDescription>
               Select the month and review forecast values by Business Unit. Monthly edits are saved only in Forecast Entry.
             </CardDescription>
           </div>
@@ -1486,7 +1484,7 @@ function CompanyForecastEditor({
             <div>
               <div className="text-sm font-semibold text-slate-900">{selectedMetric.month}</div>
               <div className="mt-1 text-sm text-slate-600">{mode.description}</div>
-            </div>
+          </div>
             <Badge variant={mode.disabled ? 'outline' : 'secondary'}>{mode.label}</Badge>
           </div>
         </div>
@@ -1529,7 +1527,7 @@ function CompanyForecastEditor({
               placeholder="Add context for this forecast update..."
               disabled
               className="min-h-[120px] rounded-xl"
-            />
+          />
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="mb-2 text-sm font-medium text-slate-700">Company status</div>
@@ -1538,7 +1536,7 @@ function CompanyForecastEditor({
               onChange={(value) => onCompanyActiveChange?.(value)}
               label={companyActive ? 'Company active' : 'Company inactive'}
               disabled
-            />
+          />
             <div className="mt-2 text-xs text-slate-500">Company status is saved with the forecast update in Forecast Entry.</div>
           </div>
         </div>
@@ -1649,7 +1647,7 @@ function ForecastCompanyNavigator({
             </Button>
             <div className="flex-1 whitespace-nowrap rounded-xl bg-white px-3 py-2 text-center text-sm font-semibold text-slate-900 shadow-sm">
               {sortedCompanies.length ? selectedIndex + 1 : 0} / {sortedCompanies.length}
-            </div>
+          </div>
             <Button variant="outline" className="min-w-[132px] rounded-xl" disabled={selectedIndex >= sortedCompanies.length - 1} onClick={() => selectCompanyByIndex(selectedIndex + 1)}>
               Next →
             </Button>
@@ -1688,8 +1686,8 @@ function AnnualForecastEntry({
       <CardHeader>
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <CardTitle>Annual forecast</CardTitle>
-            <CardDescription>
+          <CardTitle>Annual forecast</CardTitle>
+          <CardDescription>
               Review past annual forecasts, the current-year forecast and next-year forecast. Final consolidation happens between December 15 and December 30.
             </CardDescription>
           </div>
@@ -1705,7 +1703,7 @@ function AnnualForecastEntry({
                   <option key={csm} value={csm}>{csm}</option>
                 ))}
               </NativeSelect>
-            </div>
+          </div>
             <div>
               <div className="mb-2 text-xs font-medium text-slate-500">Year</div>
               <NativeSelect value={selectedYear} onChange={setSelectedYear} label="Annual forecast year">
@@ -1713,7 +1711,7 @@ function AnnualForecastEntry({
                   <option key={item} value={String(item)}>{item}</option>
                 ))}
               </NativeSelect>
-            </div>
+          </div>
           </div>
         </div>
       </CardHeader>
@@ -1830,7 +1828,7 @@ function ForecastEntryView() {
               setNote={setNote}
               companyActive={activeMap[safeCompany] !== false}
               onCompanyActiveChange={(value) => handleActiveChange(safeCompany, value)}
-            />
+          />
           </div>
         </TabsContent>
         <TabsContent value="annual">
@@ -1894,11 +1892,11 @@ function CompanyView() {
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardHeader>
-            <CardTitle>Month-by-month trend</CardTitle>
-            <CardDescription>Previous-month forecast, ongoing forecast, AI forecast and closed revenue over time.</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[340px]">
+        <CardHeader>
+          <CardTitle>Month-by-month trend</CardTitle>
+          <CardDescription>Previous-month forecast, ongoing forecast, AI forecast and closed revenue over time.</CardDescription>
+        </CardHeader>
+        <CardContent className="h-[340px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={profile?.monthly || []}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -1912,35 +1910,35 @@ function CompanyView() {
                 <Line type="monotone" dataKey="real" name="Closed revenue" stroke={chartColors.real} strokeWidth={3} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        </CardContent>
+      </Card>
 
         <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardHeader>
-            <CardTitle>Revenue per Business Unit</CardTitle>
-            <CardDescription>Preview only: company-level historical Business Unit rows are not loaded in this golden master tab.</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[340px]">
+        <CardHeader>
+          <CardTitle>Revenue per Business Unit</CardTitle>
+          <CardDescription>Preview only: company-level historical Business Unit rows are not loaded in this golden master tab.</CardDescription>
+        </CardHeader>
+        <CardContent className="h-[340px]">
             {profile?.budgetGroups ? (
-              <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={profile.budgetGroups}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="group" />
-                  <YAxis />
-                  <Tooltip formatter={formatTooltipValue} />
-                  <Legend />
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="group" />
+                <YAxis />
+                <Tooltip formatter={formatTooltipValue} />
+                <Legend />
                   <Bar dataKey="y2024" name="2024" fill="#94a3b8" radius={[8, 8, 0, 0]} />
                   <Bar dataKey="y2025" name="2025" fill="#38bdf8" radius={[8, 8, 0, 0]} />
                   <Bar dataKey="y2026" name="2026" fill="#22c55e" radius={[8, 8, 0, 0]} />
                 </BarChart>
-              </ResponsiveContainer>
+            </ResponsiveContainer>
             ) : (
               <div className="flex h-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-500">
                 Company-level Business Unit history unavailable in this preview.
               </div>
             )}
-          </CardContent>
-        </Card>
+        </CardContent>
+      </Card>
       </div>
 
       <CompanyAlertActions companyName={safeCompany} profile={profile} />

@@ -59,6 +59,8 @@ grouped and counted in the menu, and the menu must link to `/petyr-admin` Data
 Health. The floating diagnostics menu and its operator links are visible only to
 users with `petyr:admin`.
 
+`/forecasting` may render a lightweight shell immediately after page permission checks and then refresh the full PostgreSQL-backed rendering data through protected API route `GET /api/petyr/forecasting/rendering-data`. During that background refresh, Petyr must show a minimal fixed bottom-left loading state so users know data is updating. The shell is only a temporary rendering state: final Management, CSM and Company Detail data must still come from PostgreSQL-backed Petyr services, diagnostics must remain visible to admins, and Forecasting must not call Redash directly.
+
 The Petyr workspace shell must be shared across Management View, CSM Overview, Company Detail and Forecast Entry: one descriptive header card, one section navigator and route-aware links. The header card title and supporting copy must describe what the active view offers, so users can understand the page immediately. The top-level workspace switches Management/CSM through `?view=management|csm`; Company Detail and Forecast Entry use dedicated routes with query parameters when context is available.
 
 Petyr must provide branded fallback pages for browser-visible errors. Unknown

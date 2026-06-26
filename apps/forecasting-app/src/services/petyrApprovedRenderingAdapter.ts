@@ -442,6 +442,31 @@ function buildTrendNotes(input: {
   };
 }
 
+export function getPetyrApprovedRenderingShellData(year = getPetyrDefaultYear()): PetyrApprovedRenderingData {
+  return {
+    source: "postgresql",
+    year,
+    monthlyManagement: MONTH_LABELS.map((month) => ({
+      month,
+      forecastMese: 0,
+      forecastOngoing: 0,
+      forecastAI: 0,
+      real: 0
+    })),
+    budgetGroupSeries: [],
+    branchRows: [],
+    businessUnitRows: [],
+    managementRows: [],
+    csmCustomersBase: [],
+    companyProfiles: {},
+    urgentActions: [],
+    positiveTrends: ["Petyr data is loading."],
+    negativeTrends: ["Updated PostgreSQL-backed metrics will appear shortly."],
+    forecastChangeLog: [],
+    diagnostics: [toDiagnostic("Petyr rendered the Forecasting workspace shell while PostgreSQL-backed data refreshes in the background.", "info")]
+  };
+}
+
 export async function getPetyrApprovedRenderingData(year = getPetyrDefaultYear()): Promise<PetyrApprovedRenderingData> {
   const finishPerformance = startPetyrPerformanceTimer("getPetyrApprovedRenderingData", { year });
 

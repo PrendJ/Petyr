@@ -1,9 +1,7 @@
-import PetyrMVPRendering from "@/components/petyr/PetyrMVPRendering";
-import { PetyrForecastEntryPreloader } from "@/components/petyr/PetyrForecastEntryPreloader";
+import { PetyrForecastingDataHydrator } from "@/components/petyr/PetyrForecastingDataHydrator";
 import { requirePetyrPagePermission } from "@/lib/petyr/auth";
 import { hasPetyrPermission, PETYR_PERMISSIONS } from "@/lib/petyr/authCore";
-import { resolvePreferredCsmName } from "@/lib/petyr/csmIdentity";
-import { getPetyrApprovedRenderingData } from "@/services/petyrApprovedRenderingAdapter";
+import { getPetyrApprovedRenderingShellData } from "@/services/petyrApprovedRenderingAdapter";
 
 export const dynamic = "force-dynamic";
 
@@ -25,25 +23,19 @@ export default async function ForecastingPage({ searchParams }: ForecastingPageP
   const identity = await requirePetyrPagePermission(PETYR_PERMISSIONS.read);
   const resolvedSearchParams = (await searchParams) ?? {};
   const activeView = parseForecastingView(firstParam(resolvedSearchParams.view)?.trim());
-  const renderingData = await getPetyrApprovedRenderingData();
-  const preferredCsmName = resolvePreferredCsmName(
-    identity.user.displayName,
-    renderingData.csmCustomersBase.map((company) => company.csm)
-  );
+  const initialData = getPetyrApprovedRenderingShellData();
   const canViewAdminTools = hasPetyrPermission(identity, PETYR_PERMISSIONS.admin);
   const canManageObjectives = hasPetyrPermission(identity, PETYR_PERMISSIONS.managementWrite);
   const canWriteForecast = hasPetyrPermission(identity, PETYR_PERMISSIONS.forecastWrite);
 
   return (
-    <>
-      <PetyrMVPRendering
-        data={renderingData}
-        activeView={activeView}
-        preferredCsmName={preferredCsmName}
-        canViewAdminTools={canViewAdminTools}
-        canManageObjectives={canManageObjectives}
-      />
-      <PetyrForecastEntryPreloader csmName={preferredCsmName} enabled={canWriteForecast} />
-    </>
+    <PetyrForecastingDataHydrator
+      initialData={initialData}
+      activeView={activeView}
+      userDisplayName={identity.user.displayName}
+      canViewAdminTools={canViewAdminTools}
+      canManageObjectives={canManageObjectives}
+      canWriteForecast={canWriteForecast}
+    />
   );
 }

@@ -20,6 +20,27 @@ Each entry must include:
 
 ## 2026-06-26
 
+- **Area:** Petyr / Forecasting / Progressive initial render
+- **Change:** Changed `/forecasting` so the server render only performs Petyr read permission checks and returns a lightweight approved-rendering shell. The full PostgreSQL-backed rendering data now loads after first paint through protected route `GET /api/petyr/forecasting/rendering-data`, with a compact bottom-left loader showing `Aggiornamento dati in corso...` while the refresh is running and a retry action on failure. Forecast Entry preloading now starts only after the real Forecasting data has loaded.
+- **Reason:** Large Petyr portfolios could make `petyr.draftapps.it/forecasting` feel stuck because the page waited for Management, CSM, Business Unit and trend data before rendering any UI.
+- **Impact:** First paint is no longer blocked by the heavy approved-rendering data read. Data sources, permissions, Redash isolation, Forecast Entry save behavior, calculations, schema and public Forecast Entry API contracts are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/app/forecasting/page.tsx`, `apps/forecasting-app/src/app/api/petyr/forecasting/rendering-data/route.ts`, `apps/forecasting-app/src/components/petyr/PetyrForecastingDataHydrator.tsx`, `apps/forecasting-app/src/services/petyrApprovedRenderingAdapter.ts`, `apps/forecasting-app/README.md`, `docs/05_forecasting_product_spec.md`, `DEVLOG.md`.
+- **Validation:** Static source checks passed: `/forecasting/page.tsx` no longer calls `getPetyrApprovedRenderingData()`, and the new hydrator/API/helper/documentation references are present. `npm run build` could not run because `npm` is not available in this shell.
+- **Follow-up:** Verify browser timing on `petyr.draftapps.it/forecasting` and compare user-visible first paint against backend `getPetyrApprovedRenderingData` duration.
+
+## 2026-06-26
+
+- **Area:** Petyr / Management View / Layout
+- **Change:** Made `Current year trend` full-width and placed it above a full-width `Revenue per Business Unit` section. Increased the small value-table typography inside `Revenue per Business Unit` from 11px to 12.5px.
+- **Reason:** Product requested a wider Management View reading surface and slightly larger Business Unit table text.
+- **Impact:** UI layout and typography changed only. No data source, forecast calculation, API contract, permission, schema, Redash integration or persistence behavior changed.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/PetyrMVPRendering.tsx`, `DEVLOG.md`.
+- **Validation:** `npm.cmd run build` could not run because `npm.cmd` is not available in PowerShell PATH in this environment. Focused source readback confirmed the Management View card order/width change and the scoped `Revenue per Business Unit` table typography update.
+- **Follow-up:** None.
+
+
+## 2026-06-26
+
 - **Area:** Petyr / Forecast Entry / Scoped read warmup performance
 - **Change:** Added narrower CSM-scoped read paths for normal Monthly and Annual Forecast Entry batch loading, using `company_ownership` to resolve the selected CSM portfolio before reading only the needed campaign, forecast, status and AI cache rows. Added a short-lived in-memory read cache with in-flight promise dedupe for Forecast Entry batch reads, invalidated after Monthly or Annual saves. Added a silent `/forecasting` background preloader for users whose login display name resolves to exactly one CSM and who have `petyr:forecast:write`.
 - **Reason:** Forecast Entry still paid avoidable load cost on large portfolios because the normal batch endpoints could rebuild broad overview inputs before narrowing to the selected CSM. The preloader warms the same public batch endpoints before the user opens `/forecasting/entry`.
