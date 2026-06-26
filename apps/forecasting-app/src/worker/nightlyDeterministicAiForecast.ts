@@ -29,9 +29,9 @@ function formatLocalDateTime(date: Date) {
   return `${year}-${month}-${day} ${hour}:${minute}`;
 }
 
-async function runOnce() {
+async function runOnce(runSource: "manual" | "scheduled") {
   log("info", "Nightly deterministic AI Forecast started");
-  const result = await runPetyrNightlyDeterministicAiForecast();
+  const result = await runPetyrNightlyDeterministicAiForecast({ runSource });
 
   log(result.failedCompanies > 0 ? "warn" : "info", "Nightly deterministic AI Forecast finished", {
     skippedByLock: result.skippedByLock,
@@ -65,7 +65,7 @@ async function runLoop() {
     });
 
     await sleep(sleepMs);
-    await runOnce();
+    await runOnce("scheduled");
   }
 }
 
@@ -76,7 +76,7 @@ async function main() {
     if (mode === "loop") {
       await runLoop();
     } else {
-      await runOnce();
+      await runOnce("manual");
     }
   } catch (error) {
     log("error", "Petyr deterministic AI Forecast worker crashed", {

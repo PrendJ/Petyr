@@ -51,6 +51,7 @@ export type PetyrPerformanceResults = {
   checks: PetyrPerformanceResultRow[];
   operationStats: PetyrPerformanceOperationStats[];
   recentHistory: PetyrPerformanceResultRow[];
+  dailyAiForecastRuns: PetyrPerformanceResultRow[];
   warnings: string[];
 };
 
@@ -206,6 +207,7 @@ export async function getPetyrPerformanceResults(): Promise<PetyrPerformanceResu
       checks: operations.map(emptyRow),
       operationStats: [],
       recentHistory: [],
+      dailyAiForecastRuns: [],
       warnings: [
         "petyr_performance_measurement is missing. Apply the forecasting app Prisma schema before Petyr Admin can show persisted performance results."
       ]
@@ -234,6 +236,7 @@ export async function getPetyrPerformanceResults(): Promise<PetyrPerformanceResu
     checks,
     operationStats,
     recentHistory: history.slice(0, 40),
+    dailyAiForecastRuns: history.filter((row) => row.operation === "Daily AI Forecast run").slice(0, 20),
     warnings: []
   };
 }

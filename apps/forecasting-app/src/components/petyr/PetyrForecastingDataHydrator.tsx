@@ -89,7 +89,7 @@ export function PetyrForecastingDataHydrator({
           {hasError ? <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" aria-hidden="true" /> : null}
           <span>{isLoading ? "Aggiornamento dati in corso..." : "Aggiornamento dati non riuscito."}</span>
           {hasError ? (
-            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setAttempt((value) => value + 1)}>
+            <Button variant="outline" className="h-7 px-2 text-xs" onClick={() => setAttempt((value) => value + 1)}>
               Riprova
             </Button>
           ) : null}

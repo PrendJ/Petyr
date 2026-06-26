@@ -432,6 +432,85 @@ function PerformanceTestResultsSection({ state }: { state: LoadState<PetyrPerfor
   );
 }
 
+function metadataNumber(metadata: Record<string, string | number | boolean | null>, key: string) {
+  const value = metadata[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function metadataText(metadata: Record<string, string | number | boolean | null>, key: string) {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function DailyAiForecastMonitoringSection({ state }: { state: LoadState<PetyrPerformanceResults> }) {
+  const runs = state.data?.dailyAiForecastRuns ?? [];
+  const latest = runs[0] ?? null;
+
+  if (!state.data) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        Daily AI Forecast monitoring is unavailable: {state.error || "performance data could not be loaded"}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatTile label="Last run" value={formatDateTime(latest?.measuredAt)} />
+        <StatTile label="Last duration" value={formatDuration(latest?.durationMs)} />
+        <StatTile label="Last updated rows" value={formatNumber(metadataNumber(latest?.metadata ?? {}, "savedRows"))} />
+        <StatTile label="Last source" value={metadataText(latest?.metadata ?? {}, "runSource") ?? "n/a"} />
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <table className="w-full min-w-[1040px] text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-3 py-2 font-medium">Measured</th>
+              <th className="px-3 py-2 font-medium">Source</th>
+              <th className="px-3 py-2 font-medium">Status</th>
+              <th className="px-3 py-2 font-medium">Duration</th>
+              <th className="px-3 py-2 font-medium text-right">Selected</th>
+              <th className="px-3 py-2 font-medium text-right">Processed</th>
+              <th className="px-3 py-2 font-medium text-right">Failed</th>
+              <th className="px-3 py-2 font-medium text-right">Saved rows</th>
+              <th className="px-3 py-2 font-medium text-right">Skipped rows</th>
+              <th className="px-3 py-2 font-medium">Model version</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200 bg-white text-slate-700">
+            {runs.length ? (
+              runs.map((run) => (
+                <tr key={run.id ?? `${run.operation}-${run.measuredAt}`}>
+                  <td className="px-3 py-2">{formatDateTime(run.measuredAt)}</td>
+                  <td className="px-3 py-2">{metadataText(run.metadata, "runSource") ?? "n/a"}</td>
+                  <td className="px-3 py-2">
+                    <Badge className={syncStatusBadgeClass(run.status)}>{run.status}</Badge>
+                  </td>
+                  <td className="px-3 py-2">{formatDuration(run.durationMs)}</td>
+                  <td className="px-3 py-2 text-right">{formatNumber(metadataNumber(run.metadata, "selectedCompanies"))}</td>
+                  <td className="px-3 py-2 text-right">{formatNumber(metadataNumber(run.metadata, "processedCompanies"))}</td>
+                  <td className="px-3 py-2 text-right">{formatNumber(metadataNumber(run.metadata, "failedCompanies"))}</td>
+                  <td className="px-3 py-2 text-right">{formatNumber(metadataNumber(run.metadata, "savedRows"))}</td>
+                  <td className="px-3 py-2 text-right">{formatNumber(metadataNumber(run.metadata, "skippedRows"))}</td>
+                  <td className="px-3 py-2 text-xs text-slate-500">{metadataText(run.metadata, "modelVersion") ?? "n/a"}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td className="px-3 py-4 text-slate-600" colSpan={10}>
+                  No Daily AI Forecast run has been measured yet. Run it manually or wait for the scheduled worker.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function DataHealthSection({ state }: { state: LoadState<PetyrDataHealthResult> }) {
   const data = state.data;
 
@@ -769,9 +848,10 @@ export default async function PetyrAdminPage() {
         </SectionCard>
 
         <SectionCard
-          description="Run the deterministic Daily AI Forecast worker now for all active companies."
+          description="Monitor deterministic Daily AI Forecast runs and run the same worker now for all active companies."
           title="Daily AI Forecast"
         >
+          <DailyAiForecastMonitoringSection state={performanceResults} />
           <PetyrDailyAiForecastRunControl />
         </SectionCard>
 

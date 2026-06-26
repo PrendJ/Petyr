@@ -20,6 +20,14 @@ Each entry must include:
 
 ## 2026-06-26
 
+- **Area:** Petyr / Admin / Daily AI Forecast monitoring
+- **Change:** Added persisted Daily AI Forecast run measurements under operation `Daily AI Forecast run`, including duration, manual/scheduled source, selected/processed/failed company counts, saved/skipped cache rows, model version, run date and advisory-lock skip state. Petyr Admin now shows a dedicated Daily AI Forecast monitoring table and the manual-run control handles non-JSON HTML responses without throwing `Unexpected token '<'`.
+- **Reason:** Operators need to see whether each Daily AI Forecast run executed, how long it took, how many companies/rows it affected and whether it was manual or scheduled. The previous client assumed every response was JSON, so auth/proxy/error HTML produced an unhelpful parse error.
+- **Impact:** Forecast calculations, schedule defaults, AI cache persistence, Redash data flow and CSM-owned forecast tables are unchanged. The change only improves admin observability and error reporting.
+- **Files/documents involved:** `apps/forecasting-app/src/lib/petyr/performance.ts`, `apps/forecasting-app/src/services/petyrNightlyDeterministicAiForecastService.ts`, `apps/forecasting-app/src/worker/nightlyDeterministicAiForecast.ts`, `apps/forecasting-app/src/app/api/petyr/admin/daily-ai-forecast/run/route.ts`, `apps/forecasting-app/src/components/petyr/PetyrDailyAiForecastRunControl.tsx`, `apps/forecasting-app/src/services/petyrPerformanceResultsService.ts`, `apps/forecasting-app/src/app/petyr-admin/page.tsx`, `apps/forecasting-app/README.md`, `docs/05_forecasting_product_spec.md`, `DEVLOG.md`.
+- **Validation:** Passed `npm.cmd run build`. Initial build also exposed an unrelated `Button size` type mismatch in the progressive Forecasting hydrator; removed the unsupported prop while preserving the existing button classes.
+- **Follow-up:** Re-run the manual Daily AI Forecast control and verify the new monitoring row appears in Petyr Admin after refresh.
+
 - **Area:** Petyr / Forecasting / Progressive initial render
 - **Change:** Changed `/forecasting` so the server render only performs Petyr read permission checks and returns a lightweight approved-rendering shell. The full PostgreSQL-backed rendering data now loads after first paint through protected route `GET /api/petyr/forecasting/rendering-data`, with a compact bottom-left loader showing `Aggiornamento dati in corso...` while the refresh is running and a retry action on failure. Forecast Entry preloading now starts only after the real Forecasting data has loaded.
 - **Reason:** Large Petyr portfolios could make `petyr.draftapps.it/forecasting` feel stuck because the page waited for Management, CSM, Business Unit and trend data before rendering any UI.

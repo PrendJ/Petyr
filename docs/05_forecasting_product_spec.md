@@ -628,6 +628,11 @@ including average, median and p95 duration per operation. Measurements are writt
 duration, row count, timestamp and scalar metadata only. The endpoint must not
 return raw Redash payloads, uploaded workbook contents, customer rows, secrets or
 browser DevTools timing values.
+Daily deterministic AI Forecast runs are measured as operation
+`Daily AI Forecast run`, with sanitized metadata for manual vs scheduled source,
+selected/processed/failed company counts, saved/skipped AI cache rows, model
+version, run date and advisory-lock skip state. Petyr Admin may show these as a
+dedicated run history without exposing secrets or raw customer payloads.
 
 The recommended monthly forecast Excel export endpoint is:
 

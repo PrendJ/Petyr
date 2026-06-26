@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { getPetyrTimezone } from "@/lib/petyr/config";
+import { logPetyrPerformance } from "@/lib/petyr/performance";
 import { getForecastEntryCompanies } from "@/services/petyrDataService";
 import {
   savePetyrDeterministicAiForecastForCompany,
@@ -57,6 +58,7 @@ export type PetyrNightlyDeterministicAiForecastDependencies = {
   sleep?: (ms: number) => Promise<void>;
   runWithLock?: <T>(operation: () => Promise<T>) => Promise<T | "lock_busy">;
   now?: () => Date;
+  runSource?: "manual" | "scheduled";
 };
 
 function asString(value: unknown) {
@@ -173,6 +175,7 @@ function summarizeCompanyResult(input: {
 export async function runPetyrNightlyDeterministicAiForecast(
   dependencies: PetyrNightlyDeterministicAiForecastDependencies = {}
 ): Promise<PetyrNightlyDeterministicAiForecastResult> {
+  const startedAt = Date.now();
   const now = dependencies.now?.() ?? new Date();
   const timezone = getPetyrTimezone();
   const year = getPetyrCurrentYearInTimezone(now, timezone);
@@ -183,6 +186,7 @@ export async function runPetyrNightlyDeterministicAiForecast(
   const saveCompany = dependencies.saveCompany ?? savePetyrDeterministicAiForecastForCompany;
   const sleep = dependencies.sleep ?? defaultSleep;
   const runWithLock = dependencies.runWithLock ?? defaultRunWithAdvisoryLock;
+  const runSource = dependencies.runSource ?? "scheduled";
 
   const operation = async (): Promise<Omit<PetyrNightlyDeterministicAiForecastResult, "skippedByLock">> => {
     const diagnostics: string[] = [];
@@ -233,30 +237,86 @@ export async function runPetyrNightlyDeterministicAiForecast(
     };
   };
 
-  const result = await runWithLock(operation);
+  try {
+    const result = await runWithLock(operation);
 
-  if (result === "lock_busy") {
-    return {
-      ok: true,
-      skippedByLock: true,
+    if (result === "lock_busy") {
+      const lockedResult: PetyrNightlyDeterministicAiForecastResult = {
+        ok: true,
+        skippedByLock: true,
+        year,
+        runDate,
+        timezone,
+        modelVersion,
+        delayMs,
+        selectedCompanies: 0,
+        processedCompanies: 0,
+        skippedCompanies: 0,
+        failedCompanies: 0,
+        savedRows: 0,
+        skippedRows: 0,
+        companies: [],
+        diagnostics: ["Nightly deterministic AI Forecast skipped because another worker holds the PostgreSQL advisory lock."]
+      };
+
+      logPetyrPerformance("Daily AI Forecast run", {
+        status: "skipped",
+        durationMs: Date.now() - startedAt,
+        rowCount: 0,
+        runSource,
+        year,
+        runDate,
+        modelVersion,
+        selectedCompanies: 0,
+        processedCompanies: 0,
+        failedCompanies: 0,
+        savedRows: 0,
+        skippedRows: 0,
+        skippedByLock: true
+      });
+
+      return lockedResult;
+    }
+
+    const finalResult = {
+      ...result,
+      skippedByLock: false
+    };
+
+    logPetyrPerformance("Daily AI Forecast run", {
+      status: finalResult.failedCompanies > 0 ? "failed" : "success",
+      durationMs: Date.now() - startedAt,
+      rowCount: finalResult.savedRows,
+      runSource,
+      year: finalResult.year,
+      runDate: finalResult.runDate,
+      modelVersion: finalResult.modelVersion,
+      selectedCompanies: finalResult.selectedCompanies,
+      processedCompanies: finalResult.processedCompanies,
+      failedCompanies: finalResult.failedCompanies,
+      savedRows: finalResult.savedRows,
+      skippedRows: finalResult.skippedRows,
+      skippedByLock: finalResult.skippedByLock
+    });
+
+    return finalResult;
+  } catch (error) {
+    logPetyrPerformance("Daily AI Forecast run", {
+      status: "failed",
+      durationMs: Date.now() - startedAt,
+      rowCount: 0,
+      runSource,
       year,
       runDate,
-      timezone,
       modelVersion,
-      delayMs,
       selectedCompanies: 0,
       processedCompanies: 0,
-      skippedCompanies: 0,
       failedCompanies: 0,
       savedRows: 0,
       skippedRows: 0,
-      companies: [],
-      diagnostics: ["Nightly deterministic AI Forecast skipped because another worker holds the PostgreSQL advisory lock."]
-    };
-  }
+      skippedByLock: false
+    });
 
-  return {
-    ...result,
-    skippedByLock: false
-  };
+    throw error;
+  }
 }

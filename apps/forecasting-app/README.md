@@ -147,6 +147,10 @@ to `ai_forecast_cache` with daily append-only model versions such as
 `petyr_deterministic_preview_v1@YYYY-MM-DD`. It does not call OpenRouter or
 Forecast Intelligence, and it does not write CSM forecast, annual forecast,
 management objective, Initial Forecast, closed revenue or Redash tables.
+Petyr Admin records each manual or scheduled Daily AI Forecast run in
+`petyr_performance_measurement` under operation `Daily AI Forecast run`, showing
+duration, run source, selected/processed/failed company counts, saved/skipped
+rows and the daily model version.
 
 Management Objectives use:
 

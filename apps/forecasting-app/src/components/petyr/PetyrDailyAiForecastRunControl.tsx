@@ -62,6 +62,27 @@ type DailyRunError = {
 
 const endpoint = "/api/petyr/admin/daily-ai-forecast/run";
 
+async function parseDailyRunResponse(response: Response): Promise<DailyRunResult | DailyRunError> {
+  const contentType = response.headers.get("content-type") ?? "";
+  const text = await response.text();
+
+  if (contentType.includes("application/json")) {
+    try {
+      return JSON.parse(text) as DailyRunResult | DailyRunError;
+    } catch (error) {
+      return {
+        error: "Unable to parse Daily AI Forecast response as JSON.",
+        detail: error instanceof Error ? error.message : "Invalid JSON response."
+      };
+    }
+  }
+
+  return {
+    error: "Daily AI Forecast endpoint returned a non-JSON response.",
+    detail: text.trim().slice(0, 240) || `HTTP ${response.status}`
+  };
+}
+
 function StatBox({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
@@ -170,11 +191,12 @@ export default function PetyrDailyAiForecastRunControl() {
           confirmed: true
         })
       });
-      const payload = (await response.json()) as DailyRunResult | DailyRunError;
+      const payload = await parseDailyRunResponse(response);
 
       if (!response.ok || !("ok" in payload)) {
         const errorPayload = payload as DailyRunError;
         setErrorDetails(errorPayload);
+        setResult(null);
         setMessage(errorPayload.detail || errorPayload.error || "Unable to run Daily AI Forecast.");
         return;
       }

@@ -177,7 +177,7 @@ export async function POST(request: Request) {
     }
 
     const preflightDiagnostics = await getDailyAiForecastPreflightDiagnostics();
-    const result = await runPetyrNightlyDeterministicAiForecast();
+    const result = await runPetyrNightlyDeterministicAiForecast({ runSource: "manual" });
 
     return NextResponse.json(
       {
