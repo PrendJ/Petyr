@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePetyrApiPermission } from "@/lib/petyr/auth";
-import { PETYR_PERMISSIONS } from "@/lib/petyr/authCore";
+import { hasPetyrPermission, PETYR_PERMISSIONS } from "@/lib/petyr/authCore";
 import { resolvePreferredCsmName } from "@/lib/petyr/csmIdentity";
 import {
   getPetyrApprovedRenderingDataForView,
@@ -26,6 +26,15 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const view = parseView(searchParams.get("view"));
+  const needsCsmOverviewAccess = view === "csm" || view === "csm-scoped" || view === "all";
+
+  if (needsCsmOverviewAccess && !hasPetyrPermission(auth, PETYR_PERMISSIONS.admin)) {
+    return NextResponse.json(
+      { error: "CSM Overview is temporarily available only to Petyr admins while it is in development." },
+      { status: 403 }
+    );
+  }
+
   let scopedCsmName: string | null = null;
 
   if (view === "csm-scoped") {

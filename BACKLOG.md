@@ -23,6 +23,14 @@ Project-specific backlog items should be placed in the most specific backlog ava
 
 ---
 
+## Redesign company-level intelligence outside Company Detail
+
+- **Area:** Petyr / Forecasting / Intelligence UX
+- **Problem/question:** The existing Intelligence section inside Company Detail has been removed by product direction. The future company-level intelligence experience, location, permissions, interaction model, persistence rules and relationship to Forecast Entry Intelligence are not yet documented.
+- **Impact:** Company Detail no longer exposes consultative Intelligence. Implementing a replacement without a documented decision could reintroduce unclear UX, duplicate Forecast Entry behavior or unsafe OpenRouter/data-minimization assumptions.
+- **Status:** Open.
+- **Proposal / next action:** Define the future Intelligence surface in Petyr product documentation before implementation, including where it lives, who can run it, whether it reads persisted sentinel rows, what data is sent to OpenRouter and how it differs from Forecast Entry Monthly Intelligence.
+
 ## Optimize Petyr Forecast Entry batch read for production-sized portfolios
 
 - **Area:** Petyr / Forecasting App / Forecast Entry performance

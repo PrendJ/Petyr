@@ -20,6 +20,34 @@ Each entry must include:
 
 ## 2026-06-29
 
+- **Area:** Petyr / Admin / Forecast Initial window
+- **Change:** Added a Petyr Admin Forecast Initial window control that unlocks or locks selected Annual Forecast Entry target years through `GET/PUT /api/petyr/admin/initial-forecast-window`, stored in `app_setting` as `petyr_initial_forecast_window_overrides_v1`. Annual Forecast Entry read/save now treats an admin-unlocked year as Forecast Initial editable outside the default December 10-January 10 window while preserving the normal locked behavior for other years.
+- **Reason:** Product needs admins to let CSM/IGSM users enter Initial Forecast at any time of year, for example in August, without reviving legacy Initial Forecast import or scheduler workflows.
+- **Impact:** Admins can reopen Forecast Initial per target year; users with `petyr:forecast:write` then edit through the normal Annual Forecast Entry table. Locking a year restores the default window and does not mutate saved Initial Forecast values. No Prisma schema, Redash source, closed revenue, management objective, AI forecast or monthly forecast behavior changed.
+- **Files/documents involved:** `apps/forecasting-app/src/lib/petyr/annualForecastEntryRules.ts`, `apps/forecasting-app/src/services/annualForecastEntryBatchService.ts`, `apps/forecasting-app/src/services/petyrInitialForecastWindowOverrideService.ts`, `apps/forecasting-app/src/app/api/petyr/admin/initial-forecast-window/route.ts`, `apps/forecasting-app/src/components/petyr/PetyrInitialForecastWindowControl.tsx`, `apps/forecasting-app/src/app/petyr-admin/page.tsx`, `apps/forecasting-app/tests/annualForecastEntryRules.test.ts`, `apps/forecasting-app/README.md`, `docs/05_forecasting_product_spec.md`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/petyr/02_petyr_data_model_target.md`, `docs/petyr/03_petyr_business_rules.md`, `DECISIONS.md`, `DEVLOG.md`.
+- **Validation:** Passed `npm.cmd run build` from `apps/forecasting-app`.
+- **Follow-up:** Admins should lock a target year again after the exceptional Forecast Initial entry period is complete.
+
+- **Area:** Petyr / Forecasting / Company Detail Intelligence
+- **Change:** Removed the Forecast Intelligence section from Company Detail, including the page-level persisted sentinel-row read and `Generate Intelligence` rendering. Forecast Entry Monthly keeps its CSM-facing consultative Intelligence flow. Updated Petyr source-of-truth docs to state that Company Detail must not expose Intelligence and added a backlog item for the future redesign outside Company Detail.
+- **Reason:** Product requested the Intelligence section inside Company Detail to be removed entirely because it will be reconsidered elsewhere with different modalities.
+- **Impact:** Company Detail is read-only as before but no longer shows or regenerates Forecast Intelligence guidance and no longer reads persisted Forecast Intelligence sentinel rows on page load. Numeric AI Forecast cache evidence remains read-only. No schema, Redash source, forecast calculation, save contract or permission model changed.
+- **Files/documents involved:** `apps/forecasting-app/src/app/forecasting/company/[companyName]/page.tsx`, `apps/forecasting-app/README.md`, `docs/05_forecasting_product_spec.md`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/petyr/03_petyr_business_rules.md`, `docs/petyr/FORECAST_INTELLIGENCE_LAYER.md`, `docs/petyr/AI_FORECASTING_DESIGN.md`, `DECISIONS.md`, `BACKLOG.md`, `DEVLOG.md`.
+- **Validation:** Passed `npm.cmd run test:annual-forecast-entry` and `npm.cmd run build` from `apps/forecasting-app`.
+- **Follow-up:** Define the future company-level intelligence surface before rebuilding it.
+
+## 2026-06-29
+
+- **Area:** Petyr / Forecasting / CSM Overview access
+- **Change:** Restricted the `/forecasting` CSM Overview section to Petyr admins while it is in development. Non-admin users are kept on Management when `?view=csm` is requested, no longer see the CSM Overview navigator item, do not run the scoped CSM Overview preload, and receive a 403 from rendering-data requests for `view=csm`, `view=csm-scoped` or `view=all`.
+- **Reason:** Product requested CSM Overview to be accessible and visible only to admins during development.
+- **Impact:** Management, Company Detail and Forecast Entry remain available according to their existing permissions. No data source, forecast calculation, schema, Redash integration or save contract changed.
+- **Files/documents involved:** `apps/forecasting-app/src/app/forecasting/page.tsx`, `apps/forecasting-app/src/components/petyr/PetyrForecastingDataHydrator.tsx`, `apps/forecasting-app/src/components/petyr/PetyrMVPRendering.tsx`, `apps/forecasting-app/src/components/petyr/PetyrLayoutPrimitives.tsx`, `apps/forecasting-app/src/app/api/petyr/forecasting/rendering-data/route.ts`, `apps/forecasting-app/README.md`, `docs/05_forecasting_product_spec.md`, `DEVLOG.md`.
+- **Validation:** Passed `npm.cmd run build` from `apps/forecasting-app`.
+- **Follow-up:** Reopen CSM Overview to non-admin users only after a documented product decision marks the section ready.
+
+## 2026-06-29
+
 - **Area:** Petyr / Forecasting / AI cache read resilience
 - **Change:** Changed Petyr numeric AI Forecast cache reads to use a narrow latest-row PostgreSQL projection that excludes `explanation`, `request_payload_summary`, `validated_output` and `error_message`, caps returned rows, and degrades to `aiRows=[]` with a warning when the numeric cache read fails. Company Detail now reuses the already loaded company detail to build rule-based alerts, uses a lightweight ownership/status-based navigation read instead of the full company overview, and adds chart minimum dimensions to avoid Recharts negative-size warnings during sparse/loading states.
 - **Reason:** Production Management, CSM Overview and Company Detail were blocked or very slow because broad `prisma.aiForecastCache.findMany()` attempted to hydrate large JSON/text cache payloads and failed with `Failed to convert rust String into napi string`. Company Detail also duplicated its heaviest read and used the full company overview just to populate navigation.

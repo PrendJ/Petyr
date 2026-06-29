@@ -22,9 +22,10 @@ function parseForecastingView(value: string | undefined): "management" | "csm" {
 export default async function ForecastingPage({ searchParams }: ForecastingPageProps) {
   const identity = await requirePetyrPagePermission(PETYR_PERMISSIONS.read);
   const resolvedSearchParams = (await searchParams) ?? {};
-  const activeView = parseForecastingView(firstParam(resolvedSearchParams.view)?.trim());
+  const requestedView = parseForecastingView(firstParam(resolvedSearchParams.view)?.trim());
   const initialData = getPetyrApprovedRenderingShellData();
   const canViewAdminTools = hasPetyrPermission(identity, PETYR_PERMISSIONS.admin);
+  const activeView = canViewAdminTools ? requestedView : "management";
   const canManageObjectives = hasPetyrPermission(identity, PETYR_PERMISSIONS.managementWrite);
   const canWriteForecast = hasPetyrPermission(identity, PETYR_PERMISSIONS.forecastWrite);
 

@@ -20,7 +20,7 @@ This base app includes:
 - health API;
 - first DB preview API.
 
-`/forecasting` renders a lightweight shell immediately after Petyr read permission checks, then loads Management first from `GET /api/petyr/forecasting/rendering-data?view=management` in the browser. After Management is usable, the client starts scoped CSM Overview preload through `view=csm-scoped` for the authenticated/preferred CSM and starts Forecast Entry Monthly and Annual warmup for users with `petyr:forecast:write`. It does not immediately hydrate `view=all` after Management. While the Management refresh is running, users see a compact bottom-left loader (`Aggiornamento dati in corso...`). Forecasting data remains PostgreSQL-backed; these endpoint variants do not introduce Redash browser calls or schema changes. Company Detail is intentionally on-demand and reads only the selected company/year. Numeric AI Forecast cache reads use a narrow latest-row projection and exclude `explanation`, `request_payload_summary`, `validated_output` and `error_message`; if that read fails, Management, CSM Overview and Company Detail continue rendering with `aiRows=[]` plus a warning.
+`/forecasting` renders a lightweight shell immediately after Petyr read permission checks, then loads Management first from `GET /api/petyr/forecasting/rendering-data?view=management` in the browser. CSM Overview is currently in development and is visible/accessible only to users with `petyr:admin`; non-admin users are kept on Management and do not see the CSM Overview navigator item or preload its data. For admins, after Management is usable, the client starts scoped CSM Overview preload through `view=csm-scoped` for the authenticated/preferred CSM and starts Forecast Entry Monthly and Annual warmup for users with `petyr:forecast:write`. It does not immediately hydrate `view=all` after Management. While the Management refresh is running, users see a compact bottom-left loader (`Aggiornamento dati in corso...`). Forecasting data remains PostgreSQL-backed; these endpoint variants do not introduce Redash browser calls or schema changes. Company Detail is intentionally on-demand and reads only the selected company/year. Numeric AI Forecast cache reads use a narrow latest-row projection and exclude `explanation`, `request_payload_summary`, `validated_output` and `error_message`; if that read fails, Management, CSM Overview and Company Detail continue rendering with `aiRows=[]` plus a warning.
 
 ## Important rule
 
@@ -51,11 +51,13 @@ OPENROUTER_DEFAULT_MODEL=openai/gpt-4.1-mini
 
 `OPENROUTER_API_KEY` is used server-side by `/api/petyr/admin/openrouter-models` and must not be hardcoded or exposed to the browser.
 `OPENROUTER_DEFAULT_MODEL` is the `/petyr-admin` fallback when no model setting has been saved.
-Forecast Entry Monthly forecast and Company Detail expose a CSM-facing
-`Generate Intelligence` control to users with `petyr:forecast:write`. It calls
-OpenRouter only server-side through the dry-run Forecast Intelligence path,
-renders validated consultative JSON and does not expose apply controls, prompt
-payloads or OpenRouter I/O diagnostics.
+Forecast Entry Monthly forecast exposes a CSM-facing `Generate Intelligence`
+control to users with `petyr:forecast:write`. It calls OpenRouter only
+server-side through the dry-run Forecast Intelligence path, renders validated
+consultative JSON and does not expose apply controls, prompt payloads or
+OpenRouter I/O diagnostics. Company Detail no longer exposes an Intelligence
+section; any future company-level intelligence experience must be redesigned in
+separate documented scope.
 Management Objectives are controlled through Petyr Access Layer permission
 `petyr:management:write`. The old temporary hardcoded password gate has been
 removed; Forecast Entry no longer embeds the objective editor.
@@ -238,10 +240,25 @@ backup, encrypted offsite copy, daily retention for 5 days, weekly retention for
 
 Initial Forecast is owned by the Annual Forecast Entry workflow inside normal
 `/forecasting/entry`. Forecast Initial is editable from December 10 of year N-1
-through January 10 of year N, then read-only. Annual Entry stores the company
-total in `forecast_annual_entry.initial_forecast` and the per-Business Unit
-Initial values in `forecast_annual.initial_forecast`; later Ongoing Forecast
-updates change `forecast_annual.value` without changing Initial Forecast.
+through January 10 of year N, then read-only unless Petyr Admin unlocks the
+selected target year. When unlocked, normal users with `petyr:forecast:write`
+can enter or edit Forecast Initial from Annual Forecast Entry at any time of the
+year. Annual Entry stores the company total in
+`forecast_annual_entry.initial_forecast` and the per-Business Unit Initial
+values in `forecast_annual.initial_forecast`; later Ongoing Forecast updates
+change `forecast_annual.value` without changing Initial Forecast when the year
+is locked.
+
+Petyr Admin Forecast Initial window override uses:
+
+```txt
+GET /api/petyr/admin/initial-forecast-window
+PUT /api/petyr/admin/initial-forecast-window
+```
+
+Both endpoints require `petyr:admin`. The override is stored in `app_setting`
+under `petyr_initial_forecast_window_overrides_v1`; PUT accepts
+`{ "year": YYYY, "unlocked": true|false }`.
 
 The old Initial Forecast Excel export/import endpoints and protected
 consolidation endpoint have been removed from the product API. The legacy

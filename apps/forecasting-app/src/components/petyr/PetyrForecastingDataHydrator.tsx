@@ -67,6 +67,8 @@ export function PetyrForecastingDataHydrator({
         setLoadState("ready");
         setBackgroundPreloadEnabled(true);
 
+        if (!canViewAdminTools) return;
+
         scopedCsmHandle = setTimeout(() => {
           void (async () => {
             try {
@@ -98,7 +100,7 @@ export function PetyrForecastingDataHydrator({
       controller.abort();
       if (scopedCsmHandle) clearTimeout(scopedCsmHandle);
     };
-  }, [activeView, attempt]);
+  }, [activeView, attempt, canViewAdminTools]);
 
   const preferredCsmName = useMemo(() => preferredCsm(data, userDisplayName), [data, userDisplayName]);
   const isLoading = loadState === "loading";
@@ -112,6 +114,7 @@ export function PetyrForecastingDataHydrator({
         activeView={activeView}
         preferredCsmName={preferredCsmName}
         canViewAdminTools={canViewAdminTools}
+        canViewCsmOverview={canViewAdminTools}
         canManageObjectives={canManageObjectives}
       />
       <PetyrForecastEntryPreloader csmName={preferredCsmName} enabled={canWriteForecast && backgroundPreloadEnabled} />

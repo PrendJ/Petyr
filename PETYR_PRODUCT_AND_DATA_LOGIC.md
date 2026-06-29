@@ -395,12 +395,17 @@ Initial Forecast is now owned by the normal Annual Forecast Entry workflow:
 - IGSM/CSM users enter Annual Entry values during the Forecast Initial window;
 - Forecast Initial is editable from December 10 of year N-1 through January 10
   of year N;
+- Petyr Admin may unlock the Forecast Initial window for a selected target year
+  at any time; when a year is admin-unlocked, users with
+  `petyr:forecast:write` may enter or edit Forecast Initial for that target year
+  from normal Annual Forecast Entry until an admin locks the year again;
 - during that window, saved Business Unit annual values also populate
   `forecast_annual.initial_forecast` for the same company, Business Unit and
   year;
 - the company/year total in `forecast_annual_entry.initial_forecast` is the sum
   of those saved Business Unit Initial values;
-- from January 11 onward, Forecast Initial is read-only and remains fixed;
+- from January 11 onward, Forecast Initial is read-only and remains fixed unless
+  the selected target year is admin-unlocked;
 - later Annual Entry changes update Ongoing Forecast in `forecast_annual.value`
   without changing `forecast_annual.initial_forecast`;
 - the old Initial Forecast Excel bootstrap, snapshot table read path and
@@ -439,7 +444,8 @@ Annual values:
 
 - FC Initial is stored by customer + year in `forecast_annual_entry`;
 - FC Initial is editable only from December 10 of year N-1 through January 10 of
-  year N, then read-only;
+  year N, or while Petyr Admin has unlocked that selected target year, then
+  read-only;
 - FC Ongoing Confidence is stored by customer + year and accepts only `01 High`,
   `02 Mid` and `03 Low`;
 - confidence is required when a row is modified;
@@ -761,10 +767,11 @@ Management View forecast comparison is annual and must show two distinct labels:
 - `Initial Forecast` = frozen annual baseline for the selected year and scope;
 - `Ongoing Forecast` = current/latest annual forecast for the selected year and scope.
 
-For 2026, Initial Forecast comes from the extraordinary one-shot Excel bootstrap.
-From 2027 onward, Initial Forecast comes from the automatic January 1
-`Europe/Rome` consolidation for the year that has just started, unless the
-service receives a different documented annual cycle/year.
+Initial Forecast comes from Annual Forecast Entry. The default Forecast Initial
+entry window remains December 10 of year N-1 through January 10 of year N.
+Petyr Admin can temporarily unlock a selected target year outside that window;
+when unlocked, CSM/IGSM users with `petyr:forecast:write` enter the values
+through the same Annual Forecast Entry workflow.
 
 If the frozen baseline is not available, show `n/a` for `Initial Forecast` and
 surface a non-invasive diagnostic instead of inventing a baseline.
@@ -977,7 +984,7 @@ It must show:
 - company active status;
 - AI forecast cache as read-only evidence.
 
-Company Detail must show change history but must not be the main monthly forecast editing area. It must not expose the AI Forecast apply action or numeric AI Forecast row generation; those actions belong only in Forecast Entry's admin-visible support tool. Company Detail may expose CSM-facing Forecast Intelligence generation for users with `petyr:forecast:write`; that action is consultative only, may call OpenRouter through the existing Forecast Intelligence path, may save/reuse only the sentinel intelligence cache row and must not modify forecast values. On page load, Company Detail should render the latest successful Forecast Intelligence sentinel row for the selected company and year when one exists, including a visible last-generated timestamp. Manual regeneration must force a fresh OpenRouter-backed Intelligence attempt; a successful attempt replaces the visible guidance, while a failed attempt shows the error without clearing the previous successful guidance. Admin-only Data diagnostics must be available from the floating bottom-right menu instead of a support card in the body.
+Company Detail must show change history but must not be the main monthly forecast editing area. It must not expose the AI Forecast apply action, numeric AI Forecast row generation or CSM-facing Forecast Intelligence generation; those actions belong outside Company Detail. Company Detail must not load or render the latest successful Forecast Intelligence sentinel row for the selected company and year. Any future company-level intelligence experience must be redesigned in separate documented scope. Admin-only Data diagnostics must be available from the floating bottom-right menu instead of a support card in the body.
 
 Campaign detail should show:
 
@@ -1216,7 +1223,7 @@ Rules:
 - Petyr keeps the deterministic target set plus local metrics, planned value, residual allocation, BU attribution and trend signal as server-owned evidence; output with missing required fields, unexpected fields, missing numeric evidence, invented numbers, visible rounding-scenario references or prescriptive operational instructions is invalid;
 - AI Forecast output is saved only in `ai_forecast_cache`;
 - the manual AI Forecast apply UI is exposed only in Forecast Entry's admin-visible support tool;
-- CSM-facing Forecast Intelligence generation is allowed in Forecast Entry Monthly forecast and Company Detail for users with `petyr:forecast:write`, but it is consultative-only and may save/reuse only the sentinel intelligence cache row;
+- CSM-facing Forecast Intelligence generation is allowed in Forecast Entry Monthly forecast for users with `petyr:forecast:write`, but it is consultative-only and may save/reuse only the sentinel intelligence cache row;
 - Company Detail may show numeric `ai_forecast_cache` rows as read-only evidence but must not generate or apply numeric AI Forecast rows;
 - AI Forecast must not modify CSM forecast, closed revenue, management objective, Initial Forecast or annual forecast data.
 
@@ -1468,12 +1475,33 @@ It is used for these visible sections, in display order:
 
 - data health diagnostics;
 - performance test results for sanitized server-side operation measurements;
-- OpenRouter model settings;
+- operator link to the Redash Ingestor dashboard at `/redash-ingestor`;
 - PostgreSQL database backup export/import for server migration and controlled recovery;
+- Forecast Initial window unlock by target year;
+- deterministic Daily AI Forecast monitoring and manual run;
+- AI preview backtest;
+- AI Forecast baseline weights;
+- OpenRouter model settings;
 - Excel monthly forecast import/export as the recommended admin workflow;
 - one-time 2026 closed revenue alignment.
 
-The visible admin area must not show Initial Forecast baseline, legacy CSV forecast import/export or Redash mapping diagnostics sections. Existing compatibility endpoints/services may remain for controlled operations unless a later task explicitly removes backend/API support.
+The visible admin area must not show legacy Initial Forecast baseline/import
+workflows, legacy CSV forecast import/export or Redash mapping diagnostics
+sections. Existing compatibility endpoints/services may remain for controlled
+operations unless a later task explicitly removes backend/API support.
+
+Forecast Initial window admin workflow rules:
+
+- endpoint: `GET /api/petyr/admin/initial-forecast-window`;
+- endpoint: `PUT /api/petyr/admin/initial-forecast-window`;
+- both endpoints require `petyr:admin`;
+- the override is stored in `app_setting` with key
+  `petyr_initial_forecast_window_overrides_v1`;
+- the admin may unlock or lock one selected Annual Forecast Entry target year;
+- unlocked years allow normal users with `petyr:forecast:write` to enter or
+  edit Forecast Initial through Annual Forecast Entry;
+- locking a year again restores the default December 10-January 10 window and
+  must not modify existing Initial Forecast values.
 
 Database backup workflow rules:
 

@@ -219,12 +219,13 @@ Forecast Entry's admin-visible AI Forecast support tool exposes:
 - `Generate AI forecast`;
 - `Apply AI forecast`.
 
-Forecast Entry Monthly forecast and Company Detail may also expose a CSM-facing
-`Generate Intelligence` action to users with `petyr:forecast:write`. This action
-must call only the dry-run Forecast Intelligence path, render validated
-consultative JSON and hide apply controls, OpenRouter I/O, raw prompt payloads
-and prompt/debug JSON. Company Detail remains read-only for forecast data and
-must not generate or apply numeric AI Forecast rows.
+Forecast Entry Monthly forecast may also expose a CSM-facing `Generate
+Intelligence` action to users with `petyr:forecast:write`. This action must call
+only the dry-run Forecast Intelligence path, render validated consultative JSON
+and hide apply controls, OpenRouter I/O, raw prompt payloads and prompt/debug
+JSON. Company Detail remains read-only for forecast data and must not expose
+Forecast Intelligence generation, render persisted Forecast Intelligence
+sentinel rows or generate/apply numeric AI Forecast rows.
 
 The UI must render deterministic numeric rows separately from Forecast
 Intelligence analysis. Forecast Intelligence sections must show only stakeholder

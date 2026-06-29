@@ -11,6 +11,10 @@ export type PetyrAnnualForecastPercentages = {
   uncoveredPct: number | null;
 };
 
+export type AnnualForecastInitialModeOverride = {
+  adminUnlocked?: boolean;
+};
+
 function startOfLocalDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
@@ -40,17 +44,31 @@ export function isValidAnnualForecastEntryYear(year: number, currentDate = new D
   return Number.isInteger(year) && getAnnualForecastEntryYearOptions(currentDate).includes(year);
 }
 
-export function getAnnualForecastEntryInitialMode(year: number, currentDate = new Date()) {
+export function getAnnualForecastEntryInitialMode(
+  year: number,
+  currentDate = new Date(),
+  override: AnnualForecastInitialModeOverride = {}
+) {
   const current = startOfLocalDay(currentDate).getTime();
   const start = new Date(year - 1, 11, 10).getTime();
   const end = new Date(year, 0, 10).getTime();
-  const editable = Number.isInteger(year) && year >= PETYR_ANNUAL_FORECAST_START_YEAR && current >= start && current <= end;
+  const validYear = Number.isInteger(year) && year >= PETYR_ANNUAL_FORECAST_START_YEAR;
+  const inDefaultWindow = validYear && current >= start && current <= end;
+  const adminUnlocked = validYear && override.adminUnlocked === true;
+  const editable = inDefaultWindow || adminUnlocked;
 
   return {
     editable,
-    label: editable ? "Forecast Initial editable" : "Forecast Initial read-only",
-    reason: editable
-      ? `Forecast Initial for ${year} can be edited from December 10 ${year - 1} through January 10 ${year}.`
+    adminUnlocked,
+    label: editable
+      ? adminUnlocked
+        ? "Forecast Initial admin-unlocked"
+        : "Forecast Initial editable"
+      : "Forecast Initial read-only",
+    reason: adminUnlocked
+      ? `Forecast Initial for ${year} is open because Petyr Admin unlocked this target year.`
+      : editable
+        ? `Forecast Initial for ${year} can be edited from December 10 ${year - 1} through January 10 ${year}.`
       : `Forecast Initial for ${year} is editable only from December 10 ${year - 1} through January 10 ${year}.`
   };
 }

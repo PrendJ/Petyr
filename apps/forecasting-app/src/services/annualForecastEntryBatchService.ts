@@ -25,6 +25,10 @@ import {
   type PetyrDataServiceResult
 } from "@/services/petyrDataService";
 import { getForecastEntryCachedRead, invalidateForecastEntryReadCache } from "@/services/forecastEntryReadCache";
+import {
+  getPetyrInitialForecastWindowOverridesWithDiagnostics,
+  isInitialForecastYearAdminUnlocked
+} from "@/services/petyrInitialForecastWindowOverrideService";
 
 const SAVE_SOURCE = "Annual Forecast Entry";
 const SAVE_USER_FALLBACK = "petyr-annual-forecast-entry";
@@ -148,10 +152,11 @@ function normalizeKey(value: string) {
   return value.trim().toLowerCase();
 }
 
-function annualCacheKey(input: AnnualForecastEntryBatchQuery, selectedYear: number) {
+function annualCacheKey(input: AnnualForecastEntryBatchQuery, selectedYear: number, initialWindowOverrideToken: string) {
   return [
     "annual",
     selectedYear,
+    initialWindowOverrideToken,
     normalizeKey(asString(input.csmName)),
     normalizeKey(asString(input.preferredCsmName))
   ].join(":");
@@ -443,14 +448,19 @@ export async function getAnnualForecastEntryBatch(
 ): Promise<AnnualForecastEntryBatchDataResult> {
   const today = new Date();
   const selectedYear = parseYear(input.year, today);
+  const initialWindowOverrides = await getPetyrInitialForecastWindowOverridesWithDiagnostics();
+  const initialWindowOverrideToken = [
+    initialWindowOverrides.overrides.updatedAt ?? "default",
+    initialWindowOverrides.overrides.unlockedYears.join(",")
+  ].join("|");
   const finishPerformance = startPetyrPerformanceTimer("getAnnualForecastEntryBatch", {
     year: selectedYear,
     warmup: asString(input.warmup) === "1" || input.warmup === true
   });
 
   try {
-    const cached = await getForecastEntryCachedRead(annualCacheKey(input, selectedYear), async () => {
-      const diagnostics: string[] = [];
+    const cached = await getForecastEntryCachedRead(annualCacheKey(input, selectedYear, initialWindowOverrideToken), async () => {
+      const diagnostics: string[] = [...initialWindowOverrides.diagnostics];
       const scopedPortfolio = await getAnnualForecastEntryScopedPortfolio({
         csmName: input.csmName,
         preferredCsmName: input.preferredCsmName,
@@ -557,7 +567,9 @@ export async function getAnnualForecastEntryBatch(
             selectedYear,
             defaultYear: getAnnualForecastEntryDefaultYear(today),
             yearOptions: getAnnualForecastEntryYearOptions(today),
-            initialMode: getAnnualForecastEntryInitialMode(selectedYear, today),
+            initialMode: getAnnualForecastEntryInitialMode(selectedYear, today, {
+              adminUnlocked: isInitialForecastYearAdminUnlocked(initialWindowOverrides.overrides, selectedYear)
+            }),
             businessUnits: [...PETYR_BUSINESS_UNITS],
             confidenceOptions: ["01 High", "02 Mid", "03 Low"],
             companies: sortAnnualCompanies(batchCompanies)
@@ -720,7 +732,10 @@ export async function saveAnnualForecastEntryBatch(
 ): Promise<AnnualForecastEntryBatchSaveResult> {
   const currentDate = new Date();
   const year = requireYear(input.year, currentDate);
-  const initialMode = getAnnualForecastEntryInitialMode(year, currentDate);
+  const initialWindowOverrides = await getPetyrInitialForecastWindowOverridesWithDiagnostics();
+  const initialMode = getAnnualForecastEntryInitialMode(year, currentDate, {
+    adminUnlocked: isInitialForecastYearAdminUnlocked(initialWindowOverrides.overrides, year)
+  });
   const csmName = asString(input.csmName);
   if (!csmName) {
     throw new AnnualForecastEntryBatchError("csmName is required.", 400);

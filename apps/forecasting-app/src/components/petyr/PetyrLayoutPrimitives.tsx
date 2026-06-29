@@ -33,6 +33,7 @@ type PetyrWorkspaceShellProps = Omit<PetyrPageShellProps, "children"> & {
   activeSection: PetyrWorkspaceSection;
   companyDetailHref?: string | null;
   forecastEntryHref?: string | null;
+  canViewCsmOverview?: boolean;
   children: ReactNode;
 };
 
@@ -123,6 +124,7 @@ export function PetyrWorkspaceShell({
   activeSection,
   companyDetailHref = null,
   forecastEntryHref = null,
+  canViewCsmOverview = true,
   children,
   ...props
 }: PetyrWorkspaceShellProps) {
@@ -130,10 +132,11 @@ export function PetyrWorkspaceShell({
   const helpHref = buildForecastEntryFaqHref(forecastEntryHref);
   const hrefs: Record<PetyrWorkspaceSection, string | null> = {
     management: "/forecasting?view=management",
-    csm: "/forecasting?view=csm",
+    csm: canViewCsmOverview ? "/forecasting?view=csm" : null,
     company: companyDetailHref,
     entry: forecastEntryHref
   };
+  const visibleNavItems = workspaceNavItems.filter((item) => item.key !== "csm" || canViewCsmOverview);
 
   return (
     <PetyrPageShell {...props}>
@@ -159,8 +162,14 @@ export function PetyrWorkspaceShell({
         ) : null}
       </div>
 
-      <nav aria-label="Petyr forecasting sections" className="grid h-auto grid-cols-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm md:grid-cols-4">
-        {workspaceNavItems.map((item) => (
+      <nav
+        aria-label="Petyr forecasting sections"
+        className={cn(
+          "grid h-auto grid-cols-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm",
+          visibleNavItems.length === 4 ? "md:grid-cols-4" : "md:grid-cols-3"
+        )}
+      >
+        {visibleNavItems.map((item) => (
           <PetyrWorkspaceNavLink
             key={item.key}
             active={activeSection === item.key}

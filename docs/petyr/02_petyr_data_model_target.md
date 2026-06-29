@@ -87,7 +87,8 @@ Annual Forecast Entry section. The Business Unit annual values remain in
 values. Unclicked AI placeholders are not persisted and do not contribute.
 
 FC Initial is editable only from December 10 of the previous year through
-January 10 of the selected year. Outside that window it is read-only.
+January 10 of the selected year, or while Petyr Admin has unlocked that selected
+target year. Outside that window and without an admin unlock it is read-only.
 
 `forecast_annual_entry.initial_forecast` is the company/year total derived from
 the per-Business Unit Initial Forecast values stored in
