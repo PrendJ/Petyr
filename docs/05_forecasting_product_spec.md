@@ -183,6 +183,14 @@ These read models use `redash_raw_master_campaigns_latest`,
 `forecast_monthly`, `forecast_annual`, `company_forecast_status` and
 `ai_forecast_cache`. They do not call Redash and
 do not read `RedashSnapshot.payload` directly.
+Numeric `ai_forecast_cache` reads must use only the columns needed for forecast
+math and display: company, Business Unit, year, month, forecast value,
+confidence score, model version and generation timestamp. Heavy Forecast
+Intelligence fields such as explanation, request payload summary, validated
+output and error message must stay out of Management/CSM/Company Detail numeric
+read paths. If the numeric AI cache read fails, Petyr must continue rendering
+with empty AI rows and a diagnostic warning instead of treating the whole
+PostgreSQL read model as empty.
 
 ### `/forecasting/entry`
 

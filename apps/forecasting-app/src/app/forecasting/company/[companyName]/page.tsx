@@ -8,8 +8,8 @@ import { hasPetyrPermission, PETYR_PERMISSIONS } from "@/lib/petyr/authCore";
 import { mapLatestPetyrCompanyIntelligenceToActionResult } from "@/lib/petyr/companyIntelligenceState";
 import { resolvePreferredCsmName } from "@/lib/petyr/csmIdentity";
 import { formatPetyrCurrencyValue, formatPetyrNumber, formatPetyrPercent } from "@/lib/petyr/formatters";
-import { getCompanyDetail, getForecastEntryCompanies, type PetyrCompanyDetail } from "@/services/petyrDataService";
-import { getPetyrCompanyAlerts, type PetyrAlert, type PetyrAlertSeverity, type PetyrAlertType } from "@/services/petyrAlertService";
+import { getCompanyDetail, getCompanyDetailNavigationCompanies, type PetyrCompanyDetail } from "@/services/petyrDataService";
+import { buildPetyrCompanyAlertsFromDetail, type PetyrAlert, type PetyrAlertSeverity, type PetyrAlertType } from "@/services/petyrAlertService";
 import { getLatestPetyrCompanyIntelligence } from "@/services/petyrForecastIntelligenceCacheService";
 import { CompanyBusinessUnitRevenueChart, CompanyMonthlyTrendChart } from "./CompanyDetailCharts";
 import { PetyrFloatingDiagnosticsMenu } from "@/components/petyr/PetyrFloatingDiagnosticsMenu";
@@ -764,21 +764,34 @@ export default async function CompanyDetailPage({ params, searchParams }: Compan
   const selectedYear = parseYearParam(rawYear) ?? new Date().getFullYear();
   const companyName = decodeRouteParam(routeParams.companyName).trim();
   const yearDiagnostics = rawYear && !parseYearParam(rawYear) ? [`Invalid year query parameter "${rawYear}" ignored.`] : [];
-  const [result, alertsResult, navigationResult, latestIntelligence] = await Promise.all([
+  const [result, navigationResult, latestIntelligence] = await Promise.all([
     getCompanyDetail(companyName, selectedYear),
-    getPetyrCompanyAlerts(companyName, { year: selectedYear }),
-    getForecastEntryCompanies(),
+    getCompanyDetailNavigationCompanies(),
     getLatestPetyrCompanyIntelligence({ companyName, year: selectedYear })
   ]);
   const data = result.data;
   const overview = data.overview;
   const displayCompanyName = overview?.companyName || companyName || "Company";
-  const navigationCompanies: CompanyDetailNavigationOption[] = navigationResult.data.map((company) => ({
+  const navigationCompaniesBase: CompanyDetailNavigationOption[] = navigationResult.data.map((company) => ({
     companyName: company.companyName,
     csmName: company.csmName || "Unassigned",
     isForecastActive: company.isForecastActive ?? null,
     priorityScore: company.priorityScore
   }));
+  const hasDisplayCompanyInNavigation = navigationCompaniesBase.some(
+    (company) => normalizeRouteKey(company.companyName) === normalizeRouteKey(displayCompanyName)
+  );
+  const navigationCompanies = hasDisplayCompanyInNavigation
+    ? navigationCompaniesBase
+    : [
+        ...navigationCompaniesBase,
+        {
+          companyName: displayCompanyName,
+          csmName: overview?.csmName || "Unassigned",
+          isForecastActive: data.companyStatus?.isActive ?? overview?.isForecastActive ?? null,
+          priorityScore: 0
+        }
+      ];
   const preferredCsmName = resolvePreferredCsmName(
     identity.user.displayName,
     navigationCompanies.map((company) => company.csmName)
@@ -790,6 +803,7 @@ export default async function CompanyDetailPage({ params, searchParams }: Compan
   const forecastEntryHref = buildForecastEntryHref(displayCompanyName, csmName, selectedYear);
   const companyDetailHref = buildCompanyDetailHref(displayCompanyName, selectedYear);
   const activeStatus = data.companyStatus?.isActive ?? overview?.isForecastActive ?? navigationCompany?.isForecastActive ?? null;
+  const alertsResult = buildPetyrCompanyAlertsFromDetail(data, displayCompanyName, { year: selectedYear, diagnostics: result.diagnostics });
   const diagnostics = [...new Set([...yearDiagnostics, ...result.diagnostics, ...alertsResult.diagnostics, ...navigationResult.diagnostics])];
   const canViewAdminTools = hasPetyrPermission(identity, PETYR_PERMISSIONS.admin);
   const canRunIntelligence = hasPetyrPermission(identity, PETYR_PERMISSIONS.forecastWrite);

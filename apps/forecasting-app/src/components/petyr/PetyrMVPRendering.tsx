@@ -665,7 +665,7 @@ function ManagementView({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="h-[340px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={260}>
               <LineChart data={monthlyManagement}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
@@ -1897,7 +1897,7 @@ function CompanyView() {
           <CardDescription>Previous-month forecast, ongoing forecast, AI forecast and closed revenue over time.</CardDescription>
         </CardHeader>
         <CardContent className="h-[340px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={260}>
               <LineChart data={profile?.monthly || []}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
@@ -1920,7 +1920,7 @@ function CompanyView() {
         </CardHeader>
         <CardContent className="h-[340px]">
             {profile?.budgetGroups ? (
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={260}>
                 <BarChart data={profile.budgetGroups}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="group" />

@@ -95,7 +95,7 @@ export function CompanyMonthlyTrendChart({ rows }: { rows: CompanyMonthlyTrendCh
   }));
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={260}>
       <LineChart data={chartRows}>
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="month" />
@@ -141,7 +141,7 @@ export function CompanyBusinessUnitRevenueChart({ rows }: { rows: CompanyBusines
   });
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={260}>
       <ComposedChart data={chartRows}>
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="group" interval={0} tick={{ fontSize: 12 }} />

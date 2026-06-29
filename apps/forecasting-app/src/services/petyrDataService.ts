@@ -1,4 +1,4 @@
-import { Prisma, type AiForecastCache, type CompanyForecastStatus, type ForecastAnnual, type ForecastMonthly } from "@prisma/client";
+import { Prisma, type CompanyForecastStatus, type ForecastAnnual, type ForecastMonthly } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import {
   getRedashPetyrSourceMapping,
@@ -20,6 +20,7 @@ import {
 import { logPetyrPerformance, startPetyrPerformanceTimer } from "@/lib/petyr/performance";
 import { resolvePreferredCsmName } from "@/lib/petyr/csmIdentity";
 import { getPetyrCachedRead } from "@/services/forecastEntryReadCache";
+import type { PetyrNumericAiForecastCacheReadModelRow } from "@/lib/petyr/numericAiForecastCacheReadModel";
 
 const SAFE_IDENTIFIER_PATTERN = /^[a-z_][a-z0-9_]*$/;
 const SYSTEM_COLUMNS = new Set(["snapshot_id", "row_index", "synced_at"]);
@@ -53,6 +54,7 @@ const PLANNED_FUTURE_EXCLUDED_STATUSES = new Set([
   "lost",
   "archived"
 ]);
+const MAX_AI_FORECAST_CACHE_READ_ROWS = 50000;
 
 const CAMPAIGN_SOURCE = getRedashPetyrSourceMapping("master_campaigns");
 const AGREEMENT_SOURCE = getRedashPetyrSourceMapping("master_agreements");
@@ -62,6 +64,18 @@ type SourceKey = RedashPetyrSourceKey;
 
 type RelationExistsRow = {
   exists: boolean;
+};
+
+type PetyrNumericAiForecastCacheRow = Omit<PetyrNumericAiForecastCacheReadModelRow, "forecastValue" | "confidenceScore"> & {
+  forecastValue: Prisma.Decimal;
+  confidenceScore: Prisma.Decimal | null;
+};
+
+type PetyrAiForecastCacheReadFilter = {
+  year?: number;
+  month?: number;
+  companyNames?: string[];
+  limit?: number;
 };
 
 type TableColumnRow = {
@@ -349,6 +363,13 @@ export type PetyrCompanyDetail = {
 };
 
 export type PetyrForecastEntryCompany = PetyrCompanyOverview & {
+  priorityScore: number;
+};
+
+export type PetyrCompanyNavigationOption = {
+  companyName: string;
+  csmName: string;
+  isForecastActive: boolean | null;
   priorityScore: number;
 };
 
@@ -1369,33 +1390,83 @@ async function readCompanyForecastStatuses(diagnostics: string[], where?: Prisma
   return prisma.companyForecastStatus.findMany({ where });
 }
 
-async function readAiForecastCacheRows(diagnostics: string[], where?: Prisma.AiForecastCacheWhereInput) {
-  if (!(await relationExists("ai_forecast_cache"))) {
-    diagnostics.push("ai_forecast_cache is missing. Apply the forecasting app Prisma schema before Petyr can read cached AI forecasts.");
+async function readAiForecastCacheRows(diagnostics: string[], filter: PetyrAiForecastCacheReadFilter = {}) {
+  try {
+    if (!(await relationExists("ai_forecast_cache"))) {
+      diagnostics.push("ai_forecast_cache is missing. Apply the forecasting app Prisma schema before Petyr can read cached AI forecasts.");
+      return [];
+    }
+
+    const companyNames = [...new Set((filter.companyNames ?? []).map((name) => name.trim()).filter(Boolean))];
+    if (filter.companyNames && companyNames.length === 0) return [];
+
+    const conditions = [
+      Prisma.sql`status = 'success'`,
+      Prisma.sql`month BETWEEN 1 AND 12`,
+      Prisma.sql`business_unit <> ${PETYR_FORECAST_INTELLIGENCE_CACHE_BUSINESS_UNIT}`
+    ];
+
+    if (filter.year !== undefined) conditions.push(Prisma.sql`year = ${filter.year}`);
+    if (filter.month !== undefined) conditions.push(Prisma.sql`month = ${filter.month}`);
+    if (companyNames.length > 0) conditions.push(Prisma.sql`company_name IN (${Prisma.join(companyNames)})`);
+
+    const limit = filter.limit ?? MAX_AI_FORECAST_CACHE_READ_ROWS;
+    const rows = await prisma.$queryRaw<PetyrNumericAiForecastCacheRow[]>(Prisma.sql`
+      SELECT
+        id AS "id",
+        company_name AS "companyName",
+        business_unit AS "businessUnit",
+        year AS "year",
+        month AS "month",
+        forecast_value AS "forecastValue",
+        confidence_score AS "confidenceScore",
+        model_version AS "modelVersion",
+        generated_at AS "generatedAt"
+      FROM (
+        SELECT
+          id,
+          company_name,
+          business_unit,
+          year,
+          month,
+          forecast_value,
+          confidence_score,
+          model_version,
+          generated_at,
+          ROW_NUMBER() OVER (
+            PARTITION BY company_name, business_unit, year, month
+            ORDER BY generated_at DESC, updated_at DESC, id DESC
+          ) AS row_number
+        FROM ai_forecast_cache
+        WHERE ${Prisma.join(conditions, " AND ")}
+      ) latest_numeric_ai_forecasts
+      WHERE row_number = 1
+      ORDER BY "generatedAt" DESC, "id" DESC
+      LIMIT ${limit}
+    `);
+
+    logPetyrPerformance("readAiForecastCacheRows", {
+      tableName: "ai_forecast_cache",
+      rowCount: rows.length,
+      hasFilter: Boolean(filter.year !== undefined || filter.month !== undefined || companyNames.length > 0)
+    });
+
+    return rows;
+  } catch (error) {
+    diagnostics.push(`Unable to read numeric ai_forecast_cache rows from PostgreSQL: ${errorMessage(error)}. Petyr will continue without cached AI Forecast values.`);
+    logPetyrPerformance("readAiForecastCacheRows", {
+      tableName: "ai_forecast_cache",
+      rowCount: 0,
+      hasFilter: Boolean(filter.year !== undefined || filter.month !== undefined || (filter.companyNames?.length ?? 0) > 0),
+      status: "error"
+    });
+
     return [];
   }
-
-  const numericForecastWhere: Prisma.AiForecastCacheWhereInput = {
-    status: "success",
-    month: { gte: 1, lte: 12 },
-    NOT: { businessUnit: PETYR_FORECAST_INTELLIGENCE_CACHE_BUSINESS_UNIT }
-  };
-
-  const rows = await prisma.aiForecastCache.findMany({
-    where: where ? { AND: [where, numericForecastWhere] } : numericForecastWhere,
-    orderBy: { generatedAt: "desc" }
-  });
-  logPetyrPerformance("readAiForecastCacheRows", {
-    tableName: "ai_forecast_cache",
-    rowCount: rows.length,
-    hasFilter: Boolean(where)
-  });
-
-  return rows;
 }
 
-function latestAiForecasts(rows: AiForecastCache[]) {
-  const latestByKey = new Map<string, AiForecastCache>();
+function latestAiForecasts(rows: PetyrNumericAiForecastCacheRow[]) {
+  const latestByKey = new Map<string, PetyrNumericAiForecastCacheRow>();
 
   for (const row of rows) {
     const key = [normalizeKey(row.companyName), normalizeKey(row.businessUnit), row.year, row.month].join("\u0000");
@@ -1501,7 +1572,7 @@ function buildOverviewRows(input: {
   monthlyRows: ForecastMonthly[];
   annualRows: ForecastAnnual[];
   companyStatuses: CompanyForecastStatus[];
-  aiRows: AiForecastCache[];
+  aiRows: PetyrNumericAiForecastCacheRow[];
 }) {
   const companies = new Map<string, CompanyAccumulator>();
   const aiCacheKeys = new Set(
@@ -1696,7 +1767,7 @@ function createEmptyMonthlyTrend() {
   }));
 }
 
-function buildAiCacheKey(row: Pick<AiForecastCache, "companyName" | "businessUnit" | "year" | "month">) {
+function buildAiCacheKey(row: Pick<PetyrNumericAiForecastCacheRow, "companyName" | "businessUnit" | "year" | "month">) {
   return [normalizeKey(row.companyName), normalizeKey(row.businessUnit), row.year, row.month].join("\u0000");
 }
 
@@ -1706,7 +1777,7 @@ function buildMonthlyTrend(input: {
   campaignDateColumnExists: boolean;
   campaignRows: MaterializedCampaignRow[];
   monthlyRows: ForecastMonthly[];
-  aiRows: AiForecastCache[];
+  aiRows: PetyrNumericAiForecastCacheRow[];
 }) {
   const monthlyTrend = createEmptyMonthlyTrend();
   const latestAiRows = latestAiForecasts(input.aiRows);
@@ -1775,7 +1846,7 @@ function buildCompanyBusinessUnitMonthlyView(input: {
   campaignDateColumnExists: boolean;
   campaignRows: MaterializedCampaignRow[];
   monthlyRows: ForecastMonthly[];
-  aiRows: AiForecastCache[];
+  aiRows: PetyrNumericAiForecastCacheRow[];
 }) {
   const byBusinessUnit = new Map<string, PetyrCompanyBusinessUnitMonth[]>();
   const latestAiRows = latestAiForecasts(input.aiRows);
@@ -1853,7 +1924,7 @@ function buildCsmOverviewCompanies(input: {
   companies: PetyrCompanyOverview[];
   campaignRows: MaterializedCampaignRow[];
   monthlyRows: ForecastMonthly[];
-  aiRows: AiForecastCache[];
+  aiRows: PetyrNumericAiForecastCacheRow[];
 }) {
   const companyByKey = new Map(input.companies.map((company) => [normalizeKey(company.companyName), company]));
   const latestAiRows = latestAiForecasts(input.aiRows);
@@ -2361,7 +2432,7 @@ function buildBusinessUnitSummaryRows(input: {
   campaignRows: MaterializedCampaignRow[];
   monthlyRows: ForecastMonthly[];
   annualRows: ForecastAnnual[];
-  aiRows: AiForecastCache[];
+  aiRows: PetyrNumericAiForecastCacheRow[];
   diagnostics?: PlannedFutureCampaignDiagnostics;
 }) {
   const byBusinessUnit = new Map<string, BusinessUnitRevenueAccumulator>();
@@ -3164,7 +3235,7 @@ function filterAnnualRowsByCompanies(rows: ForecastAnnual[], companies: Set<stri
   return rows.filter((row) => companies.has(normalizeKey(row.companyName)));
 }
 
-function filterAiRowsByCompanies(rows: AiForecastCache[], companies: Set<string>) {
+function filterAiRowsByCompanies(rows: PetyrNumericAiForecastCacheRow[], companies: Set<string>) {
   return rows.filter((row) => companies.has(normalizeKey(row.companyName)));
 }
 
@@ -3175,7 +3246,7 @@ function buildCsmSummaries(input: {
   companies: PetyrCompanyOverview[];
   campaignRows: MaterializedCampaignRow[];
   monthlyRows: ForecastMonthly[];
-  aiRows: AiForecastCache[];
+  aiRows: PetyrNumericAiForecastCacheRow[];
 }) {
   const byCsm = new Map<string, PetyrCompanyOverview[]>();
 
@@ -3770,7 +3841,7 @@ export async function getCompanyDetail(companyName: string, year?: number) {
       readForecastMonthlyRows(diagnostics, { companyName: { in: requestedCompanyNames }, year: resolvedYear }),
       readForecastAnnualRows(diagnostics, { companyName: { in: requestedCompanyNames }, year: resolvedYear }),
       readCompanyForecastStatuses(diagnostics, { companyName: { in: requestedCompanyNames } }),
-      readAiForecastCacheRows(diagnostics, { companyName: { in: requestedCompanyNames }, year: resolvedYear })
+      readAiForecastCacheRows(diagnostics, { companyNames: requestedCompanyNames, year: resolvedYear })
     ]);
     const latestAiRows = latestAiForecasts(aiRows);
 
@@ -3891,7 +3962,7 @@ export async function getCompanyDetail(companyName: string, year?: number) {
           forecastValue: decimalToNumber(row.forecastValue) ?? 0,
           confidenceScore: decimalToNumber(row.confidenceScore),
           modelVersion: row.modelVersion,
-          explanation: row.explanation,
+          explanation: null,
           generatedAt: row.generatedAt.toISOString()
         })),
         monthlyTrend: companyMonthlyTrend,
@@ -3944,6 +4015,62 @@ export async function getForecastEntryCompanies() {
       rows.sort((left, right) => right.priorityScore - left.priorityScore || left.companyName.localeCompare(right.companyName)),
       overview.diagnostics
     );
+  } finally {
+    finishPerformance();
+  }
+}
+
+export async function getCompanyDetailNavigationCompanies() {
+  const diagnostics: string[] = [];
+  const finishPerformance = startPetyrPerformanceTimer("getForecastEntryCompanies");
+
+  try {
+    const ownershipContext = await buildOwnershipContext(diagnostics);
+    const [ownershipRows, companyStatuses] = await Promise.all([
+      queryOwnershipRows(ownershipContext),
+      readCompanyForecastStatuses(diagnostics)
+    ]);
+    const ownershipMaps = buildCompanyOwnershipMaps(ownershipRows);
+    const statusByKey = new Map(companyStatuses.map((row) => [normalizeKey(row.companyName), row]));
+    const rowsByKey = new Map<string, PetyrCompanyNavigationOption>();
+
+    if (ownershipContext.exists && ownershipContext.columns.company && ownershipRows.length === 0) {
+      diagnostics.push("company_ownership is materialized but has no usable company owner rows. Company Detail navigation is using minimal forecast-status fallback rows when available.");
+    }
+
+    if (ownershipMaps.hasRows) {
+      for (const ownership of ownershipMaps.byCompany.values()) {
+        const status = statusByKey.get(normalizeKey(ownership.companyName));
+        rowsByKey.set(normalizeKey(ownership.companyName), {
+          companyName: ownership.companyName,
+          csmName: ownership.csmName || "Unassigned",
+          isForecastActive: status?.isActive ?? null,
+          priorityScore: status?.isActive === false ? -100000 : 10000
+        });
+      }
+    } else {
+      diagnostics.push(`Company Detail navigation ownership fallback is active: canonical company ownership is unavailable, so CSM filters may be limited until company_ownership is synced.`);
+    }
+
+    for (const status of companyStatuses) {
+      const key = normalizeKey(status.companyName);
+      if (rowsByKey.has(key)) continue;
+
+      rowsByKey.set(key, {
+        companyName: status.companyName,
+        csmName: "Unassigned",
+        isForecastActive: status.isActive,
+        priorityScore: status.isActive === false ? -100000 : 10000
+      });
+    }
+
+    return createResult(
+      [...rowsByKey.values()].sort((left, right) => right.priorityScore - left.priorityScore || left.companyName.localeCompare(right.companyName)),
+      diagnostics
+    );
+  } catch (error) {
+    diagnostics.push(`Unable to read lightweight Company Detail navigation from PostgreSQL: ${errorMessage(error)}`);
+    return createResult<PetyrCompanyNavigationOption[]>([], diagnostics);
   } finally {
     finishPerformance();
   }
@@ -4090,7 +4217,7 @@ export async function getForecastEntryScopedBatch(input: {
       }),
       readCompanyForecastStatuses(diagnostics, { companyName: { in: companyNames } }),
       readAiForecastCacheRows(diagnostics, {
-        companyName: { in: companyNames },
+        companyNames,
         year: resolvedYear,
         month: resolvedMonth
       })
@@ -4112,7 +4239,7 @@ export async function getForecastEntryScopedBatch(input: {
     const overviewByKey = new Map(overviewRows.map((row) => [normalizeKey(row.companyName), row]));
     const statusByKey = new Map(companyStatuses.map((row) => [normalizeKey(row.companyName), row]));
     const monthlyByKey = new Map<string, ForecastMonthly>();
-    const aiByKey = new Map<string, AiForecastCache>();
+    const aiByKey = new Map<string, PetyrNumericAiForecastCacheRow>();
     const revenueByKey = new Map<string, number>();
 
     for (const row of monthlyRows) {
@@ -4194,7 +4321,7 @@ export async function getForecastEntryScopedBatch(input: {
             value: decimalToNumber(aiForecast?.forecastValue),
             confidenceScore: decimalToNumber(aiForecast?.confidenceScore),
             modelVersion: aiForecast?.modelVersion ?? null,
-            explanation: aiForecast?.explanation ?? null,
+            explanation: null,
             generatedAt: aiForecast?.generatedAt.toISOString() ?? null
           }
         };
@@ -4261,7 +4388,7 @@ export async function getAnnualForecastEntryScopedPortfolio(input: {
       queryCampaignRowsForCompanies(campaignContext, companyNames),
       readCompanyForecastStatuses(diagnostics, { companyName: { in: companyNames } }),
       readAiForecastCacheRows(diagnostics, {
-        companyName: { in: companyNames },
+        companyNames,
         year: resolvedYear
       })
     ]);
@@ -4446,7 +4573,7 @@ export async function getForecastEntryContextsBatch(input: {
     const statusByKey = new Map(inputs.companyStatuses.map((row) => [normalizeKey(row.companyName), row]));
     const monthlyByKey = new Map<string, ForecastMonthly>();
     const annualByKey = new Map<string, ForecastAnnual>();
-    const aiByKey = new Map<string, AiForecastCache>();
+    const aiByKey = new Map<string, PetyrNumericAiForecastCacheRow>();
     const revenueByKey = new Map<string, number>();
 
     for (const row of inputs.monthlyRows) {
@@ -4518,7 +4645,7 @@ export async function getForecastEntryContextsBatch(input: {
             value: decimalToNumber(aiForecast?.forecastValue),
             confidenceScore: decimalToNumber(aiForecast?.confidenceScore),
             modelVersion: aiForecast?.modelVersion ?? null,
-            explanation: aiForecast?.explanation ?? null,
+            explanation: null,
             generatedAt: aiForecast?.generatedAt.toISOString() ?? null
           }
         };
@@ -4768,7 +4895,7 @@ export async function getForecastEntryContext(csmName: string, companyName: stri
           value: decimalToNumber(aiForecast?.forecastValue),
           confidenceScore: decimalToNumber(aiForecast?.confidenceScore),
           modelVersion: aiForecast?.modelVersion ?? null,
-          explanation: aiForecast?.explanation ?? null,
+          explanation: null,
           generatedAt: aiForecast?.generatedAt.toISOString() ?? null
         }
       };

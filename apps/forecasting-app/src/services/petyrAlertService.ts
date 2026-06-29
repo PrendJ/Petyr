@@ -776,21 +776,36 @@ export async function getPetyrCompanyAlerts(
   const currentDate = input.currentDate ?? new Date();
   const year = resolveYear(input.year, currentDate, diagnostics);
   const detailResult = await getCompanyDetail(companyName, year);
+
+  return buildPetyrCompanyAlertsFromDetail(detailResult.data, companyName, {
+    ...input,
+    year,
+    currentDate,
+    diagnostics: [...diagnostics, ...detailResult.diagnostics]
+  });
+}
+
+export function buildPetyrCompanyAlertsFromDetail(
+  detail: PetyrCompanyDetail,
+  companyName: string,
+  input: Omit<PetyrAlertQuery, "companyName"> & { diagnostics?: string[] } = {}
+): PetyrDataServiceResult<PetyrAlert[]> {
+  const diagnostics = [...(input.diagnostics ?? [])];
+  const currentDate = input.currentDate ?? new Date();
+  const year = resolveYear(input.year, currentDate, diagnostics);
   const month = resolveMonth(input.month, currentDate.getMonth() + 1, diagnostics);
-  const resolvedCompanyName = detailResult.data.overview?.companyName ?? companyName;
-  const scopedOverview = buildCompanyScopedOverviewWorkspace(detailResult.data, year, month);
+  const resolvedCompanyName = detail.overview?.companyName ?? companyName;
+  const scopedOverview = buildCompanyScopedOverviewWorkspace(detail, year, month);
   const alerts = scopedOverview
     ? buildPetyrAlertsFromOverview(scopedOverview, { ...input, companyName: resolvedCompanyName, year, month, currentDate })
     : [];
-
-  diagnostics.push(...detailResult.diagnostics);
 
   return createResult(
     uniqueSortedAlerts(
       [
         ...alerts,
-        ...buildCompanyAgreementExpiringAlerts(detailResult.data, resolvedCompanyName, year, month, currentDate),
-        ...buildCompanyExpiredAgreementResidualAlerts(detailResult.data, resolvedCompanyName, year, month, currentDate)
+        ...buildCompanyAgreementExpiringAlerts(detail, resolvedCompanyName, year, month, currentDate),
+        ...buildCompanyExpiredAgreementResidualAlerts(detail, resolvedCompanyName, year, month, currentDate)
       ],
       input.limit
     ),
