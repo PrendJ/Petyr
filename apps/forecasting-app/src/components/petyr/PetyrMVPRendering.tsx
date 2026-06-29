@@ -2006,26 +2006,30 @@ export default function PetyrMVPRendering({
   activeView = 'management',
   preferredCsmName = null,
   canViewAdminTools = false,
+  canViewCsmOverview = true,
   canManageObjectives = false,
 }: {
   data: PetyrApprovedRenderingData;
   activeView?: 'management' | 'csm';
   preferredCsmName?: string | null;
   canViewAdminTools?: boolean;
+  canViewCsmOverview?: boolean;
   canManageObjectives?: boolean;
 }) {
   const menuForecastEntryHref = defaultForecastEntryHref(data.csmCustomersBase, preferredCsmName);
   const menuCompanyDetailHref = defaultCompanyDetailHref(data.csmCustomersBase, preferredCsmName);
+  const visibleView = activeView === 'csm' && !canViewCsmOverview ? 'management' : activeView;
 
   return (
     <RenderingDataContext.Provider value={data}>
       <PreferredCsmContext.Provider value={preferredCsmName}>
         <PetyrWorkspaceShell
-          activeSection={activeView}
+          activeSection={visibleView}
           companyDetailHref={menuCompanyDetailHref}
           forecastEntryHref={menuForecastEntryHref}
+          canViewCsmOverview={canViewCsmOverview}
         >
-          {activeView === 'csm' ? (
+          {visibleView === 'csm' ? (
             <CSMView />
           ) : (
             <ManagementView canViewAdminTools={canViewAdminTools} canManageObjectives={canManageObjectives} />

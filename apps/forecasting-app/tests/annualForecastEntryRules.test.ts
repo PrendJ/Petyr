@@ -8,6 +8,11 @@ import {
   getAnnualForecastEntryYearOptions,
   isPetyrAnnualConfidence
 } from "../src/lib/petyr/annualForecastEntryRules";
+import {
+  isInitialForecastYearAdminUnlocked,
+  parsePetyrInitialForecastWindowOverrides,
+  PetyrInitialForecastWindowOverrideValidationError
+} from "../src/services/petyrInitialForecastWindowOverrideService";
 
 function dateFor(year: number, month: number, day: number) {
   return new Date(year, month - 1, day, 12, 0, 0);
@@ -32,6 +37,54 @@ test("FC Initial is editable only from December 10 previous year through January
   assert.equal(getAnnualForecastEntryInitialMode(2027, dateFor(2026, 12, 10)).editable, true);
   assert.equal(getAnnualForecastEntryInitialMode(2027, dateFor(2027, 1, 10)).editable, true);
   assert.equal(getAnnualForecastEntryInitialMode(2027, dateFor(2027, 1, 11)).editable, false);
+});
+
+test("FC Initial can be admin-unlocked outside the default window for the selected year", () => {
+  const outsideWindow = dateFor(2027, 8, 15);
+
+  assert.equal(getAnnualForecastEntryInitialMode(2027, outsideWindow).editable, false);
+  assert.deepEqual(
+    {
+      editable: getAnnualForecastEntryInitialMode(2027, outsideWindow, { adminUnlocked: true }).editable,
+      adminUnlocked: getAnnualForecastEntryInitialMode(2027, outsideWindow, { adminUnlocked: true }).adminUnlocked
+    },
+    {
+      editable: true,
+      adminUnlocked: true
+    }
+  );
+  assert.equal(getAnnualForecastEntryInitialMode(2028, outsideWindow).editable, false);
+});
+
+test("FC Initial default window remains editable without admin unlock", () => {
+  const mode = getAnnualForecastEntryInitialMode(2027, dateFor(2026, 12, 10));
+
+  assert.equal(mode.editable, true);
+  assert.equal(mode.adminUnlocked, false);
+});
+
+test("Forecast Initial window override parser normalizes valid unlocked years", () => {
+  const overrides = parsePetyrInitialForecastWindowOverrides(
+    JSON.stringify({ unlockedYears: [2027, "2026", 2027], updatedBy: "admin-user" }),
+    new Date("2026-08-15T10:00:00.000Z"),
+    dateFor(2026, 8, 15)
+  );
+
+  assert.deepEqual(overrides.unlockedYears, [2026, 2027]);
+  assert.equal(overrides.updatedBy, "admin-user");
+  assert.equal(isInitialForecastYearAdminUnlocked(overrides, 2027), true);
+  assert.equal(isInitialForecastYearAdminUnlocked(overrides, 2028), false);
+});
+
+test("Forecast Initial window override parser rejects unsupported years", () => {
+  assert.throws(
+    () => parsePetyrInitialForecastWindowOverrides(
+      JSON.stringify({ unlockedYears: [2029], updatedBy: "admin-user" }),
+      null,
+      dateFor(2026, 8, 15)
+    ),
+    PetyrInitialForecastWindowOverrideValidationError
+  );
 });
 
 test("FC Ongoing sums only saved or confirmed values passed to the calculator", () => {

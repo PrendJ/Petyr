@@ -68,7 +68,7 @@ Rules:
 - Default year is current year until December 9, next year from December 10
   through December 31, and the new current year from January 1.
 - FC Initial is editable only from December 10 of year N-1 through January 10 of
-  year N.
+  year N, or while Petyr Admin has unlocked the selected target year.
 - FC Ongoing is the sum of saved or AI-confirmed annual Business Unit values.
   Unclicked FC AI placeholders are not saved and do not contribute.
 - FC Ongoing Confidence is required on modified rows and accepts only `01 High`,
@@ -98,13 +98,17 @@ Rules:
 - Annual Forecast Entry is the canonical Initial Forecast workflow.
 - Forecast Initial is editable only from December 10 of year N-1 through January
   10 of year N.
+- Petyr Admin may unlock Forecast Initial for a selected target year at any
+  time; while unlocked, users with `petyr:forecast:write` can enter or edit
+  Forecast Initial through Annual Forecast Entry outside the default window.
 - During that window, saved Annual Entry Business Unit values also populate
   `forecast_annual.initial_forecast`.
 - `forecast_annual_entry.initial_forecast` is the sum of saved per-Business Unit
   Initial Forecast values for the same company/year.
-- From January 11 onward, Forecast Initial is read-only and remains fixed.
+- From January 11 onward, Forecast Initial is read-only and remains fixed unless
+  the selected target year is admin-unlocked.
 - Later Annual Entry saves may update Ongoing Forecast in `forecast_annual.value`
-  without changing `forecast_annual.initial_forecast`.
+  without changing `forecast_annual.initial_forecast` when the year is locked.
 - The old Initial Forecast Excel bootstrap, snapshot read path and automatic
   scheduler/consolidation endpoint are deprecated and must not be used for
   product behavior.
@@ -233,7 +237,7 @@ Access and audit:
 ## View ownership
 
 - CSM Overview: read-only.
-- Company Detail: analytical and read-only for forecast data edits; it can expose CSM, company, previous/next and year navigation filters backed by Forecast Entry ordering. Users with `petyr:forecast:write` can run consultative Forecast Intelligence, but not apply numeric AI Forecast rows.
+- Company Detail: analytical and read-only for forecast data edits; it can expose CSM, company, previous/next and year navigation filters backed by Forecast Entry ordering. It must not expose consultative Forecast Intelligence generation or apply numeric AI Forecast rows.
 - Forecast Entry: only monthly forecast editing area; users with `petyr:forecast:write` can run consultative Forecast Intelligence from Monthly forecast, and admin users can also see the manual AI Forecast support tools.
 - Management View: aggregated, not editing; management users can manage annual Branch and Business Unit objectives at the bottom of the view.
 
@@ -314,7 +318,7 @@ local deterministic forecast values + local business signals + LLM interpretatio
 
 Petyr local code is the source of truth for all forecast numbers. OpenRouter must not calculate, recalculate, adjust, smooth, round, override or invent forecast values. It may return only validated structured business analysis over the local payload.
 
-AI Forecast numeric rows and Forecast Intelligence JSON both write only to `ai_forecast_cache`; they must not update CSM forecast, closed revenue, management objectives, Initial Forecast or annual forecast data. The manual numeric generation/apply UI belongs only in Forecast Entry's admin-visible support tool. CSM-facing Forecast Intelligence generation is allowed in Forecast Entry Monthly forecast and Company Detail for users with `petyr:forecast:write`; it is consultative-only and may save/reuse only the sentinel intelligence cache row. Company Detail may show saved numeric cache rows as read-only evidence.
+AI Forecast numeric rows and Forecast Intelligence JSON both write only to `ai_forecast_cache`; they must not update CSM forecast, closed revenue, management objectives, Initial Forecast or annual forecast data. The manual numeric generation/apply UI belongs only in Forecast Entry's admin-visible support tool. CSM-facing Forecast Intelligence generation is allowed in Forecast Entry Monthly forecast for users with `petyr:forecast:write`; it is consultative-only and may save/reuse only the sentinel intelligence cache row. Company Detail may show saved numeric cache rows as read-only evidence, but must not expose Forecast Intelligence generation or render persisted Forecast Intelligence sentinel rows.
 
 Complete anonymization through a dedicated tool/API is deferred for the first
 manual MVP and must not block the first controlled test. When that tool/API is

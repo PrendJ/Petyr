@@ -778,11 +778,13 @@ tool inside Forecast Entry only. It must stay below the main Forecast Entry
 editor. It remains read-only for editing: users can preview AI output and
 explicitly apply validated rows to `ai_forecast_cache`, but cannot edit AI
 Forecast values in the component and cannot write CSM-owned forecast tables from
-the AI UI. Forecast Entry Monthly forecast and Company Detail may expose a
-separate CSM-facing `Generate Intelligence` control for users with
-`petyr:forecast:write`; that control is consultative-only, uses the dry-run
-Forecast Intelligence path, hides OpenRouter I/O and raw prompt payloads, and
-must not apply numeric AI Forecast rows.
+the AI UI. Forecast Entry Monthly forecast may expose a separate CSM-facing
+`Generate Intelligence` control for users with `petyr:forecast:write`; that
+control is consultative-only, uses the dry-run Forecast Intelligence path, hides
+OpenRouter I/O and raw prompt payloads, and must not apply numeric AI Forecast
+rows. Company Detail must not expose that Intelligence control or render
+persisted Forecast Intelligence sentinel rows; future company-level intelligence
+belongs to separate documented scope.
 
 Current UI sections:
 

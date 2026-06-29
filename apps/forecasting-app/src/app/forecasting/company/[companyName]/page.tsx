@@ -5,17 +5,14 @@ import { CardContent, CardDescription, CardHeader, CardTitle } from "@/component
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requirePetyrPagePermission } from "@/lib/petyr/auth";
 import { hasPetyrPermission, PETYR_PERMISSIONS } from "@/lib/petyr/authCore";
-import { mapLatestPetyrCompanyIntelligenceToActionResult } from "@/lib/petyr/companyIntelligenceState";
 import { resolvePreferredCsmName } from "@/lib/petyr/csmIdentity";
 import { formatPetyrCurrencyValue, formatPetyrNumber, formatPetyrPercent } from "@/lib/petyr/formatters";
 import { getCompanyDetail, getCompanyDetailNavigationCompanies, type PetyrCompanyDetail } from "@/services/petyrDataService";
 import { buildPetyrCompanyAlertsFromDetail, type PetyrAlert, type PetyrAlertSeverity, type PetyrAlertType } from "@/services/petyrAlertService";
-import { getLatestPetyrCompanyIntelligence } from "@/services/petyrForecastIntelligenceCacheService";
 import { CompanyBusinessUnitRevenueChart, CompanyMonthlyTrendChart } from "./CompanyDetailCharts";
 import { PetyrFloatingDiagnosticsMenu } from "@/components/petyr/PetyrFloatingDiagnosticsMenu";
 import { CompanyBusinessUnitMonthlyView } from "@/components/petyr/CompanyBusinessUnitMonthlyView";
 import { CompanyDetailNavigator, type CompanyDetailNavigationOption } from "@/components/petyr/CompanyDetailNavigator";
-import { PetyrCompanyIntelligenceSection } from "@/components/petyr/PetyrCompanyIntelligenceSection";
 import {
   PetyrCard,
   PetyrEmptyState,
@@ -764,10 +761,9 @@ export default async function CompanyDetailPage({ params, searchParams }: Compan
   const selectedYear = parseYearParam(rawYear) ?? new Date().getFullYear();
   const companyName = decodeRouteParam(routeParams.companyName).trim();
   const yearDiagnostics = rawYear && !parseYearParam(rawYear) ? [`Invalid year query parameter "${rawYear}" ignored.`] : [];
-  const [result, navigationResult, latestIntelligence] = await Promise.all([
+  const [result, navigationResult] = await Promise.all([
     getCompanyDetail(companyName, selectedYear),
-    getCompanyDetailNavigationCompanies(),
-    getLatestPetyrCompanyIntelligence({ companyName, year: selectedYear })
+    getCompanyDetailNavigationCompanies()
   ]);
   const data = result.data;
   const overview = data.overview;
@@ -806,8 +802,6 @@ export default async function CompanyDetailPage({ params, searchParams }: Compan
   const alertsResult = buildPetyrCompanyAlertsFromDetail(data, displayCompanyName, { year: selectedYear, diagnostics: result.diagnostics });
   const diagnostics = [...new Set([...yearDiagnostics, ...result.diagnostics, ...alertsResult.diagnostics, ...navigationResult.diagnostics])];
   const canViewAdminTools = hasPetyrPermission(identity, PETYR_PERMISSIONS.admin);
-  const canRunIntelligence = hasPetyrPermission(identity, PETYR_PERMISSIONS.forecastWrite);
-  const initialIntelligenceResult = mapLatestPetyrCompanyIntelligenceToActionResult(latestIntelligence);
 
   return (
     <PetyrWorkspaceShell activeSection="company" companyDetailHref={companyDetailHref} forecastEntryHref={forecastEntryHref}>
@@ -857,15 +851,6 @@ export default async function CompanyDetailPage({ params, searchParams }: Compan
       <SectionCard title="Relevant company insights" description="Only active rule-based insight evidence is shown for this company.">
         <AlertsSection rows={alertsResult.data} />
       </SectionCard>
-
-      {canRunIntelligence ? (
-        <PetyrCompanyIntelligenceSection
-          companyName={displayCompanyName}
-          year={selectedYear}
-          context="company-detail"
-          initialResult={initialIntelligenceResult}
-        />
-      ) : null}
 
       <SectionCard title="Company campaigns" description="Campaign rows come from the latest PostgreSQL materialized data and are filtered by selected year.">
         <CampaignsSection rows={data.campaigns} />

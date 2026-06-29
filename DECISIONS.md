@@ -13,6 +13,27 @@ Each decision should include:
 
 ---
 
+## 2026-06-29 - Allow Petyr Admin to unlock Forecast Initial by target year
+
+- **Status:** Accepted.
+- **Context:** Annual Forecast Entry makes Forecast Initial editable only from December 10 of year N-1 through January 10 of year N, then freezes Initial Forecast while Ongoing Forecast can continue changing. Product needs admins to reopen that Initial Forecast entry window at any time, for example in August, so CSMs can enter missing initial values without a legacy import or scheduler path.
+- **Decision:** Petyr Admin can unlock or lock Forecast Initial per Annual Forecast Entry target year. The override is stored in `app_setting` under `petyr_initial_forecast_window_overrides_v1`; no new table is added. When a year is unlocked, normal users with `petyr:forecast:write` can edit Forecast Initial from Annual Forecast Entry outside the default window. Locking the year restores the default December 10-January 10 rule and does not mutate saved Initial Forecast values.
+- **Alternatives discarded:** A global all-years unlock; an unlock with automatic expiry; admin-only Forecast Initial entry outside the normal CSM workflow; a new dedicated table for v1.
+- **Reason:** Per-year unlock matches the operational exception without changing the canonical Annual Forecast Entry workflow or creating a parallel Initial Forecast import path.
+- **Consequences:** Forecast Initial remains frozen by default. Admin unlock state becomes a product setting, Annual Forecast Entry read/save must consider it, and admins should lock the year again once the exceptional entry period is over.
+- **Related docs:** `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/05_forecasting_product_spec.md`, `docs/petyr/02_petyr_data_model_target.md`, `docs/petyr/03_petyr_business_rules.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+
+## 2026-06-29 - Remove Forecast Intelligence from Company Detail
+
+- **Status:** Accepted.
+- **Context:** Company Detail previously exposed a CSM-facing Forecast Intelligence section for users with `petyr:forecast:write`, backed by the existing sentinel `ai_forecast_cache` row. Product clarified that the Intelligence section inside Company Detail must be removed entirely and redesigned elsewhere with different modalities.
+- **Decision:** Company Detail must not render the Intelligence section, expose `Generate Intelligence`, or load persisted Forecast Intelligence sentinel rows for the selected company/year. Forecast Entry Monthly may continue to expose the CSM-facing consultative Intelligence flow; numeric AI Forecast cache evidence can remain read-only in Company Detail.
+- **Alternatives discarded:** Keeping the current section hidden by permission; keeping persisted Intelligence visible without generation; moving the section inside another Company Detail card in the same task; redesigning the future intelligence experience without documented scope.
+- **Reason:** The current Company Detail Intelligence placement is no longer product-approved and would create misleading surface area while the future experience is being reconsidered.
+- **Consequences:** Company Detail gets lighter and no longer performs the extra Forecast Intelligence sentinel read. Future company-level intelligence must be specified in documentation/backlog before implementation.
+- **Supersedes:** The Company Detail portion of `2026-06-19 - Expose CSM-safe Forecast Intelligence in Forecast Entry and Company Detail`.
+- **Related docs:** `apps/forecasting-app/src/app/forecasting/company/[companyName]/page.tsx`, `docs/05_forecasting_product_spec.md`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/petyr/03_petyr_business_rules.md`, `docs/petyr/FORECAST_INTELLIGENCE_LAYER.md`, `docs/petyr/AI_FORECASTING_DESIGN.md`, `apps/forecasting-app/README.md`, `BACKLOG.md`, `DEVLOG.md`.
+
 ## 2026-06-29 - Load Petyr Management first and defer non-visible reads
 
 - **Status:** Accepted.

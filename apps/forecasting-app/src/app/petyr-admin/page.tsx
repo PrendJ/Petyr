@@ -8,9 +8,11 @@ import PetyrAiPreviewBacktestControl from "@/components/petyr/PetyrAiPreviewBack
 import PetyrAiModelSettingsForm from "@/components/petyr/PetyrAiModelSettingsForm";
 import PetyrClosedRevenueOngoingBackfillControl from "@/components/petyr/PetyrClosedRevenueOngoingBackfillControl";
 import PetyrDatabaseBackupControl from "@/components/petyr/PetyrDatabaseBackupControl";
+import PetyrInitialForecastWindowControl from "@/components/petyr/PetyrInitialForecastWindowControl";
 import PetyrMonthlyForecastExcelWorkflow from "@/components/petyr/PetyrMonthlyForecastExcelWorkflow";
 import { requirePetyrPagePermission } from "@/lib/petyr/auth";
 import { PETYR_PERMISSIONS } from "@/lib/petyr/authCore";
+import { getAnnualForecastEntryYearOptions } from "@/lib/petyr/annualForecastEntryRules";
 import { resolvePreferredCsmName } from "@/lib/petyr/csmIdentity";
 import { formatPetyrInteger } from "@/lib/petyr/formatters";
 import { isPetyrPerfLogsEnabled } from "@/lib/petyr/performance";
@@ -34,6 +36,11 @@ import {
   getPetyrPerformanceResults,
   type PetyrPerformanceResults
 } from "@/services/petyrPerformanceResultsService";
+import {
+  getDefaultPetyrInitialForecastWindowOverrides,
+  getPetyrInitialForecastWindowOverrides,
+  type PetyrInitialForecastWindowOverrides
+} from "@/services/petyrInitialForecastWindowOverrideService";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +59,11 @@ type AiForecastWeightsState = {
   error: string | null;
 };
 
+type InitialForecastWindowState = {
+  setting: PetyrInitialForecastWindowOverrides;
+  error: string | null;
+};
+
 function formatError(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -61,6 +73,16 @@ function formatSettingsError(error: unknown) {
 
   if (message.includes("does not exist")) {
     return "Petyr app settings table is missing. Apply the forecasting app Prisma schema before saving AI settings.";
+  }
+
+  return message;
+}
+
+function formatInitialForecastWindowError(error: unknown) {
+  const message = formatError(error);
+
+  if (message.includes("does not exist")) {
+    return "Petyr app settings table is missing. Apply the forecasting app Prisma schema before saving Forecast Initial window overrides.";
   }
 
   return message;
@@ -188,6 +210,20 @@ async function loadAiForecastWeights(): Promise<AiForecastWeightsState> {
     return {
       setting: getDefaultPetyrAiForecastBaselineWeights(),
       error: formatSettingsError(error)
+    };
+  }
+}
+
+async function loadInitialForecastWindow(): Promise<InitialForecastWindowState> {
+  try {
+    return {
+      setting: await getPetyrInitialForecastWindowOverrides(),
+      error: null
+    };
+  } catch (error) {
+    return {
+      setting: getDefaultPetyrInitialForecastWindowOverrides(),
+      error: formatInitialForecastWindowError(error)
     };
   }
 }
@@ -784,14 +820,16 @@ function DataHealthSection({ state }: { state: LoadState<PetyrDataHealthResult> 
 
 export default async function PetyrAdminPage() {
   const identity = await requirePetyrPagePermission(PETYR_PERMISSIONS.admin);
-  const [dataHealth, performanceResults, aiSetting, aiForecastWeights, csmFilterCandidates] = await Promise.all([
+  const [dataHealth, performanceResults, aiSetting, aiForecastWeights, initialForecastWindow, csmFilterCandidates] = await Promise.all([
     loadDataHealth(),
     loadPerformanceResults(),
     loadAiSetting(),
     loadAiForecastWeights(),
+    loadInitialForecastWindow(),
     loadCsmFilterCandidates()
   ]);
   const preferredCsmName = resolvePreferredCsmName(identity.user.displayName, csmFilterCandidates);
+  const annualYearOptions = getAnnualForecastEntryYearOptions();
 
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-950 sm:px-6 lg:px-8">
@@ -800,7 +838,7 @@ export default async function PetyrAdminPage() {
           <div>
             <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Petyr Admin</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-600">
-              Temporary internal workspace for data health, AI model settings, database backup and Excel-first forecast imports.
+              Temporary internal workspace for data health, Forecast Initial window control, AI settings, database backup and Excel-first forecast imports.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -845,6 +883,17 @@ export default async function PetyrAdminPage() {
           title="Database backup"
         >
           <PetyrDatabaseBackupControl />
+        </SectionCard>
+
+        <SectionCard
+          description="Unlock Forecast Initial entry for a selected target year outside the default December 10-January 10 window."
+          title="Forecast Initial window"
+        >
+          <PetyrInitialForecastWindowControl
+            initialError={initialForecastWindow.error}
+            initialSetting={initialForecastWindow.setting}
+            yearOptions={annualYearOptions}
+          />
         </SectionCard>
 
         <SectionCard
