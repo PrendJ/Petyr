@@ -63,6 +63,12 @@ section alongside Monthly Forecast Entry.
 Rules:
 
 - CSM filter follows the same ownership/preselection logic as Monthly.
+- Company lists for Monthly and Annual Forecast Entry include every
+  company-CSM association whose Company Ownership workspace has
+  `workspace_updated_on` within the last 6 months. A company may therefore
+  appear in more than one CSM portfolio when multiple recent associations exist.
+- If no recent workspace associations are available, Petyr may fall back to the
+  latest owner per company with diagnostics.
 - Year options start at 2026, include at least 2026 and 2027, and progressively
   expose the next year.
 - Default year is current year until December 9, next year from December 10
@@ -237,6 +243,8 @@ Access and audit:
 ## View ownership
 
 - CSM Overview: read-only.
+- CSM Overview company lists use the same recent 6-month Company Ownership
+  workspace association rule as Forecast Entry portfolio lists.
 - Company Detail: analytical and read-only for forecast data edits; it can expose CSM, company, previous/next and year navigation filters backed by Forecast Entry ordering. It must not expose consultative Forecast Intelligence generation or apply numeric AI Forecast rows.
 - Forecast Entry: only monthly forecast editing area; users with `petyr:forecast:write` can run consultative Forecast Intelligence from Monthly forecast, and admin users can also see the manual AI Forecast support tools.
 - Management View: aggregated, not editing; management users can manage annual Branch and Business Unit objectives at the bottom of the view.

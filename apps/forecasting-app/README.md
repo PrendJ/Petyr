@@ -175,7 +175,22 @@ The read endpoint requires `petyr:read`; the save endpoint and normal
 `/forecasting/entry` page require `petyr:forecast:write`. The normal page works
 only on the current server month/year, exposes only a CSM filter, official Petyr
 Business Units, current-month active forecast cells, read-only Closed Revenue
-and one note per company. Monthly data is loaded on the initial page render through a portfolio-scoped batch read model; Annual Forecast Entry starts loading in the background as soon as the Monthly workspace is usable, so the Annual tab shows already loaded data when available or a passive loading/unavailable state while the request is still in progress. The old full single-company Forecast Entry workspace
+YTD and one note per company. Monthly Business Unit groups start collapsed; the
+Expand/Collapse control is rendered as a button at the right edge of the group
+header. When a Business Unit is expanded, Previous Month Forecast appears to the
+left of Ongoing Forecast and Closed Revenue YTD remains to the right of Ongoing
+Forecast. The CSM filter area and Monthly table headers stay sticky while
+scrolling the portfolio table. Monthly saves use a floating bottom-right `Save`
+button that remains visible while scrolling and turns green for five seconds
+after an effective save. Monthly data is loaded on the initial page render
+through a portfolio-scoped batch read model. Company lists use all Company
+Ownership company-CSM workspace associations whose `workspace_updated_on` is
+within the last 6 months, so one company can appear under multiple CSMs when
+multiple recent workspace associations exist; if none are available, Petyr
+falls back to the latest owner per company with diagnostics. Annual Forecast
+Entry starts loading in the background as soon as the Monthly workspace is
+usable, so the Annual tab shows already loaded data when available or a passive
+loading/unavailable state while the request is still in progress. The old full single-company Forecast Entry workspace
 is preserved at `/forecasting/entry/old` and requires `petyr:admin`.
 
 Normal Forecast Entry annual batch workflow uses:
@@ -188,7 +203,7 @@ POST /api/petyr/forecast-entry/annual-batch/save
 The annual section is a separate tab inside `/forecasting/entry`. It exposes CSM and Year filters, and its CSM selector stays synchronized with Monthly Forecast Entry when both sections are loaded. It stores customer + year Forecast Initial and Confidence in
 `forecast_annual_entry`, stores annual BU values in `forecast_annual`, and
 audits effective changes through `forecast_save_session` /
-`forecast_change_log` with source `Annual Forecast Entry`. Its read endpoint uses a portfolio-scoped PostgreSQL read model for the selected CSM/year instead of loading full Company Detail for each customer. After schema changes,
+`forecast_change_log` with source `Annual Forecast Entry`. Annual saves use the same floating bottom-right `Save` button pattern and do not show separate top or bottom inline save buttons. Its read endpoint uses a portfolio-scoped PostgreSQL read model for the selected CSM/year instead of loading full Company Detail for each customer. After schema changes,
 run `npm run db:sync` locally or apply the reviewed Prisma migration/deploy step
 in managed environments.
 

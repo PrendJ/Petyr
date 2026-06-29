@@ -263,16 +263,23 @@ same four-section workspace header/navigation available so users can continue
 navigating.
 
 Normal batch table rules:
-- rows are companies/customers assigned to the selected CSM;
+- rows are companies/customers associated to the selected CSM through
+  Company Ownership workspaces updated in the last 6 months; a company may
+  appear under more than one CSM when multiple recent company-CSM associations
+  exist;
 - the first column is the company name linked to Company Detail for the current year;
 - columns are grouped by the 10 official Petyr Business Units only;
 - each Business Unit starts collapsed and shows only the active editable field;
+- the Business Unit Expand/Collapse control must look actionable as a button and sit at the far right of the Business Unit group header;
+- the CSM filter area and Monthly table column headers must stay sticky while the user scrolls down the portfolio table;
 - days 1-15: active field is Previous Month Forecast;
 - from day 16: active field is Ongoing Forecast;
-- the inactive monthly forecast field and Closed Revenue are visible only when a BU is expanded;
-- Closed Revenue is always read-only;
+- the inactive monthly forecast field and Closed Revenue YTD are visible only when a BU is expanded;
+- in expanded Business Unit groups, Previous Month Forecast is shown to the left of Ongoing Forecast and Closed Revenue YTD is shown to the right of Ongoing Forecast;
+- editable monthly forecast columns should be wide enough for their header labels;
+- Closed Revenue YTD is always read-only;
 - each company has one note field;
-- one final Save Forecast action saves all company updates.
+- one floating bottom-right `Save` action saves all company updates, stays visible while scrolling, and turns green for five seconds after an effective save.
 
 AI suggestion behavior:
 - saved CSM values display as saved forecast values;
@@ -303,7 +310,10 @@ Annual Forecast Entry rules:
 - The default year is the current year until December 9, switches to the next
   year from December 10 through December 31, and becomes the new current year on
   January 1.
-- rows are all companies/customers assigned to the selected CSM;
+- rows are all companies/customers associated to the selected CSM through
+  Company Ownership workspaces updated in the last 6 months; a company may
+  appear under more than one CSM when multiple recent company-CSM associations
+  exist;
 - ordering is active customers first, then inactive customers with Revenue or
   Planned, then inactive customers without Revenue or Planned;
 - inactive rows remain visible with muted styling;
@@ -335,6 +345,9 @@ Annual Forecast Entry rules:
 - annual saves reject unconfirmed placeholders, negative/non-numeric BU values,
   Forecast Initial changes outside the edit window, unknown Business Units and missing
   confidence on modified rows.
+- the Annual section uses the same floating bottom-right `Save` action pattern as
+  Monthly Forecast Entry; inline top or bottom save buttons must not be shown in
+  the normal Forecast Entry workflow.
 
 Batch save rules:
 - current server month/year is validated server-side;

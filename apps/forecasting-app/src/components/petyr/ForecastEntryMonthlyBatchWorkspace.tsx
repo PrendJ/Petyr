@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,9 +32,11 @@ type Notice = {
 };
 
 type SourceState = "accepted_ai" | "manual_edit";
+type MonthlyForecastType = "previous_month" | "ongoing";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const NOTE_ONLY_MESSAGE = "Company note requires at least one active forecast value entered, accepted from AI or modified.";
+const EXPANDED_FORECAST_COLUMNS: MonthlyForecastType[] = ["previous_month", "ongoing"];
 
 function monthLabel(month: number) {
   return MONTHS[month - 1] ?? `Month ${month}`;
@@ -108,12 +110,12 @@ function activeForecast(cell: ForecastEntryBatchCell, editableForecastType: stri
   return editableForecastType === "ongoing" ? cell.ongoingForecast : cell.previousMonthForecast;
 }
 
-function inactiveForecast(cell: ForecastEntryBatchCell, editableForecastType: string | null) {
-  return editableForecastType === "ongoing" ? cell.previousMonthForecast : cell.ongoingForecast;
+function forecastForType(cell: ForecastEntryBatchCell, forecastType: MonthlyForecastType) {
+  return forecastType === "ongoing" ? cell.ongoingForecast : cell.previousMonthForecast;
 }
 
-function inactiveForecastLabel(editableForecastType: string | null) {
-  return editableForecastType === "ongoing" ? "Previous Month Forecast" : "Ongoing Forecast";
+function expandedForecastHeaderClass(forecastType: MonthlyForecastType, editableForecastType: string | null) {
+  return forecastType === editableForecastType ? "bg-white text-slate-700" : "bg-slate-50 text-slate-500";
 }
 
 function valuesFromBatch(batch: ForecastEntryBatchDataResult) {
@@ -189,6 +191,9 @@ export default function ForecastEntryMonthlyBatchWorkspace({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showSavedState, setShowSavedState] = useState(false);
+  const savedStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [activeEntryTab, setActiveEntryTab] = useState("monthly");
   const [annualBatch, setAnnualBatch] = useState<AnnualForecastEntryBatchDataResult | null>(initialAnnualBatch);
   const [isAnnualLoading, setIsAnnualLoading] = useState(false);
   const [annualLoadAttempted, setAnnualLoadAttempted] = useState(Boolean(initialAnnualBatch));
@@ -214,6 +219,27 @@ export default function ForecastEntryMonthlyBatchWorkspace({
     // Annual Forecast Entry is a background warmup for the initial CSM/year.
     // Filter changes reload it through loadBatch/onBatchChange synchronization.
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (savedStateTimeoutRef.current) {
+        clearTimeout(savedStateTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  function markSavedState() {
+    setShowSavedState(true);
+
+    if (savedStateTimeoutRef.current) {
+      clearTimeout(savedStateTimeoutRef.current);
+    }
+
+    savedStateTimeoutRef.current = setTimeout(() => {
+      setShowSavedState(false);
+      savedStateTimeoutRef.current = null;
+    }, 5000);
+  }
 
   function toggleBusinessUnit(businessUnit: string) {
     setExpandedBusinessUnits((current) => {
@@ -369,6 +395,9 @@ export default function ForecastEntryMonthlyBatchWorkspace({
           ? "No changes detected"
           : `Saved ${payload.forecastUpserts} value(s) across ${payload.companiesSaved} compan${payload.companiesSaved === 1 ? "y" : "ies"}.`
       });
+      if (!payload.noChanges) {
+        markSavedState();
+      }
     } catch (error) {
       setNotice({
         type: "error",
@@ -408,6 +437,7 @@ export default function ForecastEntryMonthlyBatchWorkspace({
       <Tabs
         defaultValue="monthly"
         className="space-y-5"
+        onValueChange={setActiveEntryTab}
       >
         <TabsList className="rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
           <TabsTrigger value="monthly" className="rounded-xl">
@@ -427,42 +457,44 @@ export default function ForecastEntryMonthlyBatchWorkspace({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-end">
-            <PetyrSelectField
-              label="CSM"
-              disabled={isLoading || isSaving}
-              value={selectedCsm}
-              onChange={(event) => {
-                void loadBatch(event.target.value);
-              }}
-            >
-              {batch.data.csmOptions.map((csmName) => (
-                <option key={csmName} value={csmName}>
-                  {csmName}
-                </option>
-              ))}
-            </PetyrSelectField>
-            <PetyrInlineNotice tone={isLocked ? "warning" : "success"}>
-              {isLocked
-                ? batch.data.entryMode.reason
-                : `${activeLabel} is editable for the current server month. Other forecast fields and Closed Revenue are read-only.`}
-            </PetyrInlineNotice>
-          </div>
+          <div className="sticky top-0 z-40 space-y-4 border-b border-slate-200 bg-white/95 pb-4 pt-1 backdrop-blur">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-end">
+              <PetyrSelectField
+                label="CSM"
+                disabled={isLoading || isSaving}
+                value={selectedCsm}
+                onChange={(event) => {
+                  void loadBatch(event.target.value);
+                }}
+              >
+                {batch.data.csmOptions.map((csmName) => (
+                  <option key={csmName} value={csmName}>
+                    {csmName}
+                  </option>
+                ))}
+              </PetyrSelectField>
+              <PetyrInlineNotice tone={isLocked ? "warning" : "success"}>
+                {isLocked
+                  ? batch.data.entryMode.reason
+                  : `${activeLabel} is editable for the current server month. Other forecast fields and Closed Revenue YTD are read-only.`}
+              </PetyrInlineNotice>
+            </div>
 
-          <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <LegendChip className="border-blue-300 bg-blue-100" label="AI suggestion/placeholder" />
-            <LegendChip className="border-violet-300 bg-violet-100" label="CSM validated from AI" />
-            <LegendChip className="border-emerald-300 bg-emerald-100" label="CSM manually edited" />
-            <LegendChip className="border-slate-300 bg-white" label="Saved CSM forecast" />
-            <LegendChip className="border-amber-300 bg-amber-100" label="Closed Revenue read-only" />
-            <LegendChip className="border-slate-300 bg-slate-200" label="Locked forecast field" />
+            <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <LegendChip className="border-blue-300 bg-blue-100" label="AI suggestion/placeholder" />
+              <LegendChip className="border-violet-300 bg-violet-100" label="CSM validated from AI" />
+              <LegendChip className="border-emerald-300 bg-emerald-100" label="CSM manually edited" />
+              <LegendChip className="border-slate-300 bg-white" label="Saved CSM forecast" />
+              <LegendChip className="border-amber-300 bg-amber-100" label="Closed Revenue YTD read-only" />
+              <LegendChip className="border-slate-300 bg-slate-200" label="Locked forecast field" />
+            </div>
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-slate-200">
             <Table className="min-w-max">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="sticky left-0 z-20 min-w-[240px] bg-white" rowSpan={2}>
+                  <TableHead className="sticky left-0 top-[136px] z-30 min-w-[240px] bg-white" rowSpan={2}>
                     Customer
                   </TableHead>
                   {batch.data.businessUnits.map((businessUnit) => {
@@ -470,45 +502,51 @@ export default function ForecastEntryMonthlyBatchWorkspace({
                     return (
                       <TableHead
                         key={businessUnit}
-                        className="min-w-[133px] border-l border-slate-200 bg-slate-50 text-center"
+                        className="sticky top-[136px] z-20 min-w-[190px] border-l border-slate-200 bg-slate-50 text-center"
                         colSpan={expanded ? 3 : 1}
                       >
                         <button
                           type="button"
-                          className="inline-flex w-full items-center justify-center gap-2 rounded-lg px-2 py-1 text-sm font-semibold text-slate-700 hover:bg-white"
+                          className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
                           onClick={() => toggleBusinessUnit(businessUnit)}
+                          aria-expanded={expanded}
                         >
-                          {businessUnit}
-                          <span className="text-xs text-slate-400">{expanded ? "Collapse" : "Expand"}</span>
+                          <span>{businessUnit}</span>
+                          <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                            {expanded ? "Collapse" : "Expand"}
+                          </span>
                         </button>
                       </TableHead>
                     );
                   })}
-                  <TableHead className="min-w-[260px] bg-white" rowSpan={2}>
+                  <TableHead className="sticky top-[136px] z-20 min-w-[260px] bg-white" rowSpan={2}>
                     Note
                   </TableHead>
                 </TableRow>
                 <TableRow className="hover:bg-transparent">
                   {batch.data.businessUnits.flatMap((businessUnit) => {
                     const expanded = expandedBusinessUnits.has(businessUnit);
-                    const columns = [
-                      <TableHead key={`${businessUnit}-active`} className="min-w-[133px] border-l border-slate-200 bg-white text-xs">
+                    if (!expanded) {
+                      return [
+                      <TableHead key={`${businessUnit}-active`} className="sticky top-[184px] z-20 min-w-[190px] border-l border-slate-200 bg-white text-xs text-slate-700">
                         {activeLabel}
                       </TableHead>
-                    ];
-
-                    if (expanded) {
-                      columns.push(
-                        <TableHead key={`${businessUnit}-inactive`} className="min-w-[126px] bg-white text-xs">
-                          {inactiveForecastLabel(editableForecastType)}
-                        </TableHead>,
-                        <TableHead key={`${businessUnit}-closed`} className="min-w-[119px] bg-amber-50 text-xs">
-                          Closed Revenue
-                        </TableHead>
-                      );
+                      ];
                     }
 
-                    return columns;
+                    return [
+                      ...EXPANDED_FORECAST_COLUMNS.map((forecastType) => (
+                        <TableHead
+                          key={`${businessUnit}-${forecastType}`}
+                          className={`sticky top-[184px] z-20 min-w-[190px] border-l border-slate-200 text-xs ${expandedForecastHeaderClass(forecastType, editableForecastType)}`}
+                        >
+                          {forecastTypeLabel(forecastType)}
+                        </TableHead>
+                      )),
+                      <TableHead key={`${businessUnit}-closed`} className="sticky top-[184px] z-20 min-w-[170px] border-l border-slate-200 bg-amber-50 text-xs text-amber-900">
+                        Closed Revenue YTD
+                      </TableHead>
+                    ];
                   })}
                 </TableRow>
               </TableHeader>
@@ -541,47 +579,55 @@ export default function ForecastEntryMonthlyBatchWorkspace({
                                 : aiPlaceholder
                                   ? "border-blue-300 bg-blue-50"
                                   : "border-slate-200 bg-white";
-                        const columns = [
-                          <TableCell key={`${key}-active`} className="border-l border-slate-200">
-                            <Input
-                              inputMode="decimal"
-                              disabled={isLocked || isSaving}
-                              readOnly={isLocked}
-                              placeholder={aiPlaceholder || "n/a"}
-                              value={values[key] ?? ""}
-                              onFocus={() => acceptAiPlaceholder(company, cell)}
-                              onClick={() => acceptAiPlaceholder(company, cell)}
-                              onChange={(event) => updateValue(company, cell, event.target.value)}
-                              className={`h-10 min-w-[105px] rounded-xl text-right font-semibold ${isLocked ? "bg-slate-100" : activeInputClass}`}
-                            />
-                            {sourceState ? (
-                              <div className="mt-1 text-[11px] font-medium text-slate-500">
-                                {sourceState === "accepted_ai" ? "Validated from AI" : "Manual edit"}
-                              </div>
-                            ) : current.hasSavedCsmValue ? (
-                              <div className="mt-1 text-[11px] text-slate-500">
-                                Saved CSM forecast
-                                {cell.aiForecast.value !== null ? ` (${formatPetyrCurrencyValue(cell.aiForecast.value)} AI Forecast)` : ""}
-                              </div>
+                        const renderEditableCell = (cellKeySuffix: string) => (
+                          <TableCell key={`${key}-${cellKeySuffix}`} className="min-w-[190px] border-l border-slate-200">
+                              <Input
+                                inputMode="decimal"
+                                disabled={isLocked || isSaving}
+                                readOnly={isLocked}
+                                placeholder={aiPlaceholder || "n/a"}
+                                value={values[key] ?? ""}
+                                onFocus={() => acceptAiPlaceholder(company, cell)}
+                                onClick={() => acceptAiPlaceholder(company, cell)}
+                                onChange={(event) => updateValue(company, cell, event.target.value)}
+                                className={`h-10 w-full min-w-[158px] rounded-xl text-right font-semibold ${isLocked ? "bg-slate-100" : activeInputClass}`}
+                              />
+                              {sourceState ? (
+                                <div className="mt-1 text-[11px] font-medium text-slate-500">
+                                  {sourceState === "accepted_ai" ? "Validated from AI" : "Manual edit"}
+                                </div>
+                              ) : current.hasSavedCsmValue ? (
+                                <div className="mt-1 text-[11px] text-slate-500">
+                                  Saved CSM forecast
+                                  {cell.aiForecast.value !== null ? ` (${formatPetyrCurrencyValue(cell.aiForecast.value)} AI Forecast)` : ""}
+                                </div>
 
-                            ) : aiPlaceholder ? (
-                              <div className="mt-1 text-[11px] text-blue-700">AI suggestion</div>
-                            ) : null}
-                          </TableCell>
-                        ];
-
-                        if (expanded) {
-                          columns.push(
-                            <TableCell key={`${key}-inactive`} className="bg-slate-50 text-right font-medium text-slate-700">
-                              {formatPetyrCurrencyValue(inactiveForecast(cell, editableForecastType)?.value)}
-                            </TableCell>,
-                            <TableCell key={`${key}-closed`} className="bg-amber-50 text-right font-medium text-slate-700">
-                              {formatPetyrCurrencyValue(cell.closedRevenue)}
+                              ) : aiPlaceholder ? (
+                                <div className="mt-1 text-[11px] text-blue-700">AI suggestion</div>
+                              ) : null}
                             </TableCell>
-                          );
+                        );
+
+                        if (!expanded) {
+                          return [renderEditableCell("active")];
                         }
 
-                        return columns;
+                        return [
+                          ...EXPANDED_FORECAST_COLUMNS.map((forecastType) => {
+                            if (forecastType === editableForecastType) {
+                              return renderEditableCell(forecastType);
+                            }
+
+                            return (
+                              <TableCell key={`${key}-${forecastType}`} className="min-w-[190px] border-l border-slate-200 bg-slate-50 text-right font-medium text-slate-700">
+                                {formatPetyrCurrencyValue(forecastForType(cell, forecastType)?.value)}
+                              </TableCell>
+                            );
+                          }),
+                          <TableCell key={`${key}-closed`} className="min-w-[170px] border-l border-slate-200 bg-amber-50 text-right font-medium text-slate-700">
+                            {formatPetyrCurrencyValue(cell.closedRevenue)}
+                          </TableCell>
+                        ];
                       })}
                       <TableCell className="min-w-[260px]">
                         <Textarea
@@ -605,9 +651,6 @@ export default function ForecastEntryMonthlyBatchWorkspace({
             </Table>
           </div>
 
-          <Button className="w-full rounded-xl" type="button" disabled={isLocked || isSaving || isLoading} onClick={saveBatch}>
-            {isSaving ? "Saving forecast" : "Save forecast"}
-          </Button>
         </CardContent>
           </PetyrCard>
         </TabsContent>
@@ -642,6 +685,23 @@ export default function ForecastEntryMonthlyBatchWorkspace({
         </TabsContent>
 
       </Tabs>
+      {activeEntryTab === "monthly" ? (
+        <>
+          <Button
+            className={`fixed bottom-5 right-5 z-50 h-12 min-w-[112px] rounded-xl px-6 shadow-lg shadow-slate-900/20 ${
+              showSavedState ? "bg-emerald-600 text-white hover:bg-emerald-600" : ""
+            }`}
+            type="button"
+            disabled={isLocked || isSaving || isLoading}
+            onClick={saveBatch}
+          >
+            {isSaving ? "Saving" : "Save"}
+          </Button>
+          <div className="sr-only" aria-live="polite">
+            {showSavedState ? "Forecast saved." : ""}
+          </div>
+        </>
+      ) : null}
     </PetyrWorkspaceShell>
   );
 }

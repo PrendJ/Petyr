@@ -20,6 +20,30 @@ Each entry must include:
 
 ## 2026-06-29
 
+- **Area:** Petyr / Forecasting / CSM company lists
+- **Change:** Changed CSM Overview and normal Forecast Entry Monthly/Annual portfolio reads so CSM company lists use every Company Ownership company-CSM association whose `workspace_updated_on` is within the last 6 months. A company can now appear in multiple CSM portfolios when multiple recent workspace associations exist. If no recent workspace associations are available, Petyr falls back to the previous latest-owner-per-company behavior with diagnostics.
+- **Reason:** Product requested that companies no longer be assigned to only one CSM solely by the last workspace update date; each CSM list must show the company when that CSM association has a recently updated workspace.
+- **Impact:** CSM portfolio list membership changes. Management aggregates, Redash sources, database schema, permissions, save contracts, forecast calculations and direct Redash isolation are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/services/petyrDataService.ts`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/05_forecasting_product_spec.md`, `docs/petyr/03_petyr_business_rules.md`, `apps/forecasting-app/README.md`, `DECISIONS.md`, `DEVLOG.md`.
+- **Validation:** Passed `npm.cmd run build` and `npm.cmd run test:petyr-data-service` from `apps/forecasting-app`.
+- **Follow-up:** None.
+
+- **Area:** Petyr / Forecast Entry / Monthly table layout
+- **Change:** Updated Monthly Forecast Entry so the CSM filter area and table headers stay sticky during vertical scrolling, Business Unit Expand/Collapse controls render as button-like controls aligned to the right side of each group header, editable forecast columns use wider header-matched widths, and expanded Business Unit groups always show Previous Month Forecast to the left of Ongoing Forecast with Closed Revenue YTD on the right.
+- **Reason:** Product requested clearer affordance for Expand/Collapse, persistent scroll context while entering portfolio forecasts, a stable expanded column order and the Closed Revenue label renamed to Closed Revenue YTD.
+- **Impact:** UI behavior and visible copy changed only. Forecast Entry batch read/save endpoints, monthly editability rules, audit sessions, change logs, permissions, calculations and PostgreSQL data ownership are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/ForecastEntryMonthlyBatchWorkspace.tsx`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/05_forecasting_product_spec.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+- **Validation:** Passed `npm.cmd run build` from `apps/forecasting-app`.
+- **Follow-up:** None.
+
+- **Area:** Petyr / Forecast Entry / Save controls
+- **Change:** Replaced the normal Monthly and Annual Forecast Entry inline save buttons with a single floating bottom-right `Save` button for each active tab. The button stays visible while scrolling, keeps the label `Save`, and turns green for five seconds only after an effective successful save.
+- **Reason:** Product requested the Forecast Entry save action to be always visible/actionable and consistently labelled across monthly amount entry and annual forecast entry, without the old top or bottom save buttons.
+- **Impact:** UI behavior changed only. Monthly and Annual save endpoints, payloads, validation, audit sessions, change logs, permissions, forecast calculations and PostgreSQL data ownership are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/ForecastEntryMonthlyBatchWorkspace.tsx`, `apps/forecasting-app/src/components/petyr/AnnualForecastEntryBatchWorkspace.tsx`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/05_forecasting_product_spec.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+- **Validation:** Passed `npm.cmd run build` from `apps/forecasting-app`.
+- **Follow-up:** None.
+
 - **Area:** Petyr / Admin / Forecast Initial window
 - **Change:** Added a Petyr Admin Forecast Initial window control that unlocks or locks selected Annual Forecast Entry target years through `GET/PUT /api/petyr/admin/initial-forecast-window`, stored in `app_setting` as `petyr_initial_forecast_window_overrides_v1`. Annual Forecast Entry read/save now treats an admin-unlocked year as Forecast Initial editable outside the default December 10-January 10 window while preserving the normal locked behavior for other years.
 - **Reason:** Product needs admins to let CSM/IGSM users enter Initial Forecast at any time of year, for example in August, without reviving legacy Initial Forecast import or scheduler workflows.

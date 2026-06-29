@@ -13,6 +13,16 @@ Each decision should include:
 
 ---
 
+## 2026-06-29 - Use recent workspace associations for Petyr CSM company lists
+
+- **Status:** Accepted.
+- **Context:** Petyr CSM company lists previously deduplicated Company Ownership to one CSM per company by choosing the row with the latest workspace update. Product clarified that each CSM portfolio must show every company with that CSM association when the related workspace was updated in the last 6 months.
+- **Decision:** CSM Overview and normal Forecast Entry Monthly/Annual portfolio lists use company-CSM associations from `company_ownership` whose `workspace_updated_on` is within the last 6 months. A company may appear under multiple CSMs when multiple recent workspace associations exist. If no recent associations are available, Petyr may fall back to the latest owner per company with diagnostics.
+- **Alternatives discarded:** Keeping only the latest workspace owner per company; using historical campaign/agreement CSM as the first-choice portfolio mapping; changing Management View aggregate ownership in the same task.
+- **Reason:** The product workflow needs CSM portfolio lists to reflect recent workspace associations, not only the single most recently updated workspace.
+- **Consequences:** CSM-facing company lists can include the same company in multiple CSM portfolios. Management aggregates remain on the existing deduplicated current-owner mapping to avoid double-counting unless a later product decision changes aggregate semantics.
+- **Related docs:** `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/05_forecasting_product_spec.md`, `docs/petyr/03_petyr_business_rules.md`, `apps/forecasting-app/README.md`, `apps/forecasting-app/src/services/petyrDataService.ts`, `DEVLOG.md`.
+
 ## 2026-06-29 - Allow Petyr Admin to unlock Forecast Initial by target year
 
 - **Status:** Accepted.

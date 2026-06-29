@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -134,6 +134,8 @@ export default function AnnualForecastEntryBatchWorkspace({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showSavedState, setShowSavedState] = useState(false);
+  const savedStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hasLocalChanges = useMemo(
     () =>
@@ -153,6 +155,27 @@ export default function AnnualForecastEntryBatchWorkspace({
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [hasLocalChanges]);
+
+  useEffect(() => {
+    return () => {
+      if (savedStateTimeoutRef.current) {
+        clearTimeout(savedStateTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  function markSavedState() {
+    setShowSavedState(true);
+
+    if (savedStateTimeoutRef.current) {
+      clearTimeout(savedStateTimeoutRef.current);
+    }
+
+    savedStateTimeoutRef.current = setTimeout(() => {
+      setShowSavedState(false);
+      savedStateTimeoutRef.current = null;
+    }, 5000);
+  }
 
   function resetLocalState(nextBatch: AnnualForecastEntryBatchDataResult) {
     setBatch(nextBatch);
@@ -328,6 +351,9 @@ export default function AnnualForecastEntryBatchWorkspace({
           ? "No changes detected"
           : `Saved annual changes for ${payload.companiesSaved} compan${payload.companiesSaved === 1 ? "y" : "ies"}.`
       });
+      if (!payload.noChanges) {
+        markSavedState();
+      }
     } catch (error) {
       setNotice({
         type: "error",
@@ -338,7 +364,7 @@ export default function AnnualForecastEntryBatchWorkspace({
     }
   }
 
-  const saveDisabled = isLoading || isSaving || !hasLocalChanges;
+  const saveDisabled = isLoading || isSaving;
 
   return (
     <PetyrCard>
@@ -386,17 +412,29 @@ export default function AnnualForecastEntryBatchWorkspace({
 
         {notice ? <PetyrInlineNotice tone={notice.type === "success" ? "success" : "danger"}>{notice.text}</PetyrInlineNotice> : null}
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <LegendChip className="border-blue-300 bg-blue-100" label="Forecast AI placeholder" />
-            <LegendChip className="border-violet-300 bg-violet-100" label="AI confirmed" />
-            <LegendChip className="border-emerald-300 bg-emerald-100" label="Manual value" />
-            <LegendChip className="border-slate-300 bg-white" label="Saved value" />
-            <LegendChip className="border-slate-300 bg-slate-100" label="Inactive customer" />
-          </div>
-          <Button type="button" className="rounded-xl" disabled={saveDisabled} onClick={saveBatch}>
-            {isSaving ? "Saving changes" : "Save Changes"}
+        <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <LegendChip className="border-blue-300 bg-blue-100" label="Forecast AI placeholder" />
+          <LegendChip className="border-violet-300 bg-violet-100" label="AI confirmed" />
+          <LegendChip className="border-emerald-300 bg-emerald-100" label="Manual value" />
+          <LegendChip className="border-slate-300 bg-white" label="Saved value" />
+          <LegendChip className="border-slate-300 bg-slate-100" label="Inactive customer" />
+        </div>
+
+        <div className="fixed bottom-5 right-5 z-50">
+          <Button
+            type="button"
+            className={`h-12 min-w-[112px] rounded-xl px-6 shadow-lg shadow-slate-900/20 ${
+              showSavedState ? "bg-emerald-600 text-white hover:bg-emerald-600" : ""
+            }`}
+            disabled={saveDisabled}
+            onClick={saveBatch}
+          >
+            {isSaving ? "Saving" : "Save"}
           </Button>
+        </div>
+
+        <div className="sr-only" aria-live="polite">
+          {showSavedState ? "Forecast saved." : ""}
         </div>
 
         <div className="overflow-x-auto rounded-2xl border border-slate-200">
@@ -556,12 +594,6 @@ export default function AnnualForecastEntryBatchWorkspace({
               )}
             </TableBody>
           </Table>
-        </div>
-
-        <div className="flex justify-end">
-          <Button type="button" className="rounded-xl" disabled={saveDisabled} onClick={saveBatch}>
-            {isSaving ? "Saving changes" : "Save Changes"}
-          </Button>
         </div>
       </CardContent>
     </PetyrCard>
