@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
 import { requirePetyrApiPermission } from "@/lib/petyr/auth";
 import { PETYR_PERMISSIONS } from "@/lib/petyr/authCore";
+import { resolvePreferredCsmName } from "@/lib/petyr/csmIdentity";
 import {
   getPetyrApprovedRenderingDataForView,
   type PetyrApprovedRenderingView
 } from "@/services/petyrApprovedRenderingAdapter";
+import { getForecastEntryCompanies } from "@/services/petyrDataService";
 
 export const dynamic = "force-dynamic";
 
 function parseView(value: string | null): PetyrApprovedRenderingView {
-  if (value === "management" || value === "csm" || value === "all") return value;
+  if (value === "management" || value === "csm" || value === "csm-scoped" || value === "all") return value;
   return "all";
 }
 
@@ -23,9 +25,19 @@ export async function GET(request: Request) {
   if (auth instanceof NextResponse) return auth;
 
   const { searchParams } = new URL(request.url);
-  const data = await getPetyrApprovedRenderingDataForView(
-    parseView(searchParams.get("view")),
-    parseYear(searchParams.get("year"))
-  );
+  const view = parseView(searchParams.get("view"));
+  let scopedCsmName: string | null = null;
+
+  if (view === "csm-scoped") {
+    const companies = await getForecastEntryCompanies();
+    scopedCsmName = resolvePreferredCsmName(
+      auth.user.displayName,
+      companies.data.map((company) => company.csmName || "Unassigned")
+    );
+  }
+
+  const data = await getPetyrApprovedRenderingDataForView(view, parseYear(searchParams.get("year")), {
+    csmName: scopedCsmName
+  });
   return NextResponse.json(data);
 }

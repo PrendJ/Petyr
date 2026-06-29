@@ -26,7 +26,7 @@ function preferredCsm(data: PetyrApprovedRenderingData, userDisplayName: string 
   );
 }
 
-function renderingDataUrl(view: ForecastingView | "all") {
+function renderingDataUrl(view: ForecastingView | "csm-scoped") {
   const params = new URLSearchParams({ view });
   return `/api/petyr/forecasting/rendering-data?${params.toString()}`;
 }
@@ -42,16 +42,18 @@ export function PetyrForecastingDataHydrator({
   const [data, setData] = useState(initialData);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [attempt, setAttempt] = useState(0);
+  const [backgroundPreloadEnabled, setBackgroundPreloadEnabled] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
-    let backgroundHandle: ReturnType<typeof setTimeout> | null = null;
+    let scopedCsmHandle: ReturnType<typeof setTimeout> | null = null;
 
     setLoadState("loading");
+    setBackgroundPreloadEnabled(false);
 
     void (async () => {
       try {
-        const response = await fetch(renderingDataUrl(activeView), {
+        const response = await fetch(renderingDataUrl("management"), {
           cache: "no-store",
           signal: controller.signal
         });
@@ -63,21 +65,24 @@ export function PetyrForecastingDataHydrator({
         const payload = (await response.json()) as PetyrApprovedRenderingData;
         setData(payload);
         setLoadState("ready");
+        setBackgroundPreloadEnabled(true);
 
-        backgroundHandle = setTimeout(() => {
+        scopedCsmHandle = setTimeout(() => {
           void (async () => {
             try {
-              const fullResponse = await fetch(renderingDataUrl("all"), {
+              const csmResponse = await fetch(renderingDataUrl("csm-scoped"), {
                 cache: "no-store",
                 signal: controller.signal
               });
 
-              if (!fullResponse.ok) return;
+              if (!csmResponse.ok) return;
 
-              const fullPayload = (await fullResponse.json()) as PetyrApprovedRenderingData;
-              setData(fullPayload);
+              const csmPayload = (await csmResponse.json()) as PetyrApprovedRenderingData;
+              if (activeView === "csm") {
+                setData(csmPayload);
+              }
             } catch {
-              // Background hydration is best-effort; the active view has already rendered.
+              // Scoped CSM hydration is best-effort; Management is already usable.
             }
           })();
         }, 250);
@@ -91,7 +96,7 @@ export function PetyrForecastingDataHydrator({
 
     return () => {
       controller.abort();
-      if (backgroundHandle) clearTimeout(backgroundHandle);
+      if (scopedCsmHandle) clearTimeout(scopedCsmHandle);
     };
   }, [activeView, attempt]);
 
@@ -109,7 +114,7 @@ export function PetyrForecastingDataHydrator({
         canViewAdminTools={canViewAdminTools}
         canManageObjectives={canManageObjectives}
       />
-      <PetyrForecastEntryPreloader csmName={preferredCsmName} enabled={canWriteForecast} />
+      <PetyrForecastEntryPreloader csmName={preferredCsmName} enabled={canWriteForecast && backgroundPreloadEnabled} />
       {loadState !== "ready" ? (
         <div className="fixed bottom-4 left-4 z-50 flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-lg shadow-slate-900/10">
           {isLoading ? <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-sky-500" aria-hidden="true" /> : null}

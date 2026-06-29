@@ -18,6 +18,16 @@ Each entry must include:
 
 ---
 
+## 2026-06-29
+
+- **Area:** Petyr / Forecasting / Management-first data loading
+- **Change:** Changed `/forecasting` hydration so the browser always requests Management rendering data first, marks the workspace usable, then starts scoped CSM Overview preload for the authenticated/preferred CSM plus Forecast Entry Monthly/Annual warmup in the background. Added `view=csm-scoped` to the protected rendering-data endpoint. Changed normal Forecast Entry so Annual Forecast Entry starts background loading as soon as the Monthly workspace is usable and the Annual tab no longer exposes a separate manual load button.
+- **Reason:** Petyr opens on Management, so the first visible dashboard must not wait on CSM Overview, Forecast Entry Annual or full cross-view hydration.
+- **Impact:** Perceived loading order changes only. PostgreSQL-backed data sources, Redash isolation, permissions, schema, forecast calculations, save APIs, Company Detail on-demand reads and UI ownership rules remain unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/app/api/petyr/forecasting/rendering-data/route.ts`, `apps/forecasting-app/src/components/petyr/PetyrForecastingDataHydrator.tsx`, `apps/forecasting-app/src/components/petyr/ForecastEntryMonthlyBatchWorkspace.tsx`, `apps/forecasting-app/src/services/petyrApprovedRenderingAdapter.ts`, `docs/05_forecasting_product_spec.md`, `apps/forecasting-app/README.md`, `DECISIONS.md`, `DEVLOG.md`.
+- **Validation:** Passed `npm.cmd run build` and `npm.cmd run test:annual-forecast-entry` from `apps/forecasting-app`.
+- **Follow-up:** Compare Petyr Admin Performance Results after production-sized traffic to decide whether CSM Overview needs a deeper PostgreSQL query-level scoped read model.
+
 ## 2026-06-26
 
 - **Area:** Petyr / Forecasting / Active-view-first data loading

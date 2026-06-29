@@ -67,7 +67,7 @@ const APPROVED_URGENT_ACTION_GROUPS: Array<Pick<ApprovedUrgentAction, "id" | "ti
 ];
 const APPROVED_URGENT_ACTION_IDS = new Set(APPROVED_URGENT_ACTION_GROUPS.map((group) => group.id));
 
-export type PetyrApprovedRenderingView = "all" | "management" | "csm";
+export type PetyrApprovedRenderingView = "all" | "management" | "csm" | "csm-scoped";
 
 function monthLabel(month: number) {
   return MONTH_LABELS[month - 1] ?? String(month);
@@ -580,6 +580,50 @@ export async function getPetyrApprovedRenderingCsmData(year = getPetyrDefaultYea
   }
 }
 
+export async function getPetyrApprovedRenderingScopedCsmData(
+  csmName: string,
+  year = getPetyrDefaultYear()
+): Promise<PetyrApprovedRenderingData> {
+  const finishPerformance = startPetyrPerformanceTimer("getPetyrApprovedRenderingData", { year, view: "csm-scoped" });
+
+  try {
+    const csmWorkspaceResult = await getCsmOverviewWorkspace(year);
+    const csmKey = normalizeKey(csmName);
+    const scopedWorkspace = {
+      ...csmWorkspaceResult.data,
+      csmNames: csmName ? [csmName] : csmWorkspaceResult.data.csmNames,
+      companies: csmName
+        ? csmWorkspaceResult.data.companies.filter((company) => normalizeKey(company.csmName) === csmKey)
+        : []
+    };
+    const scopedCompanyKeys = new Set(scopedWorkspace.companies.map((company) => normalizeKey(company.companyName)));
+    scopedWorkspace.urgentActions = csmWorkspaceResult.data.urgentActions
+      .map((action) => ({
+        ...action,
+        companies: action.companies.filter((company) => scopedCompanyKeys.has(normalizeKey(company.companyName)))
+      }))
+      .filter((action) => action.companies.length > 0);
+    const csmCustomersFromWorkspace = scopedWorkspace.companies.map(customerRow);
+    const diagnostics = uniqueDiagnostics(csmWorkspaceResult.diagnostics.map((message) => toDiagnostic(message)));
+
+    addCsmDiagnostics({
+      diagnostics,
+      csmCustomersFromWorkspace,
+      csmCustomersBase: csmCustomersFromWorkspace
+    });
+
+    return {
+      ...getPetyrApprovedRenderingShellData(year),
+      csmCustomersBase: csmCustomersFromWorkspace,
+      companyProfiles: buildCompanyProfiles(csmCustomersFromWorkspace),
+      urgentActions: approvedUrgentActionsFromAlerts(scopedWorkspace),
+      diagnostics: uniqueDiagnostics(diagnostics)
+    };
+  } finally {
+    finishPerformance();
+  }
+}
+
 export async function getPetyrApprovedRenderingData(year = getPetyrDefaultYear()): Promise<PetyrApprovedRenderingData> {
   const finishPerformance = startPetyrPerformanceTimer("getPetyrApprovedRenderingData", { year, view: "all" });
 
@@ -646,9 +690,11 @@ export async function getPetyrApprovedRenderingData(year = getPetyrDefaultYear()
 
 export async function getPetyrApprovedRenderingDataForView(
   view: PetyrApprovedRenderingView,
-  year = getPetyrDefaultYear()
+  year = getPetyrDefaultYear(),
+  options: { csmName?: string | null } = {}
 ) {
   if (view === "management") return getPetyrApprovedRenderingManagementData(year);
+  if (view === "csm-scoped") return getPetyrApprovedRenderingScopedCsmData(options.csmName ?? "", year);
   if (view === "csm") return getPetyrApprovedRenderingCsmData(year);
   return getPetyrApprovedRenderingData(year);
 }

@@ -173,10 +173,12 @@ function LegendChip({ className, label }: { className: string; label: string }) 
 
 export default function ForecastEntryMonthlyBatchWorkspace({
   initialBatch,
-  initialAnnualYear
+  initialAnnualYear,
+  initialAnnualBatch = null
 }: {
   initialBatch: ForecastEntryBatchDataResult;
   initialAnnualYear?: string;
+  initialAnnualBatch?: AnnualForecastEntryBatchDataResult | null;
 }) {
   const [batch, setBatch] = useState(initialBatch);
   const [selectedCsm, setSelectedCsm] = useState(initialBatch.data.selectedCsm);
@@ -187,9 +189,9 @@ export default function ForecastEntryMonthlyBatchWorkspace({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [annualBatch, setAnnualBatch] = useState<AnnualForecastEntryBatchDataResult | null>(null);
+  const [annualBatch, setAnnualBatch] = useState<AnnualForecastEntryBatchDataResult | null>(initialAnnualBatch);
   const [isAnnualLoading, setIsAnnualLoading] = useState(false);
-  const [annualLoadAttempted, setAnnualLoadAttempted] = useState(false);
+  const [annualLoadAttempted, setAnnualLoadAttempted] = useState(Boolean(initialAnnualBatch));
 
   const editableForecastType = batch.data.entryMode.editableForecastType;
   const isLocked = batch.data.entryMode.locked || !editableForecastType;
@@ -206,6 +208,12 @@ export default function ForecastEntryMonthlyBatchWorkspace({
     setNotes({});
     window.history.replaceState(null, "", buildEntryPageUrl(batch.data.selectedCsm));
   }, [batch]);
+
+  useEffect(() => {
+    void loadAnnualBatchIfNeeded();
+    // Annual Forecast Entry is a background warmup for the initial CSM/year.
+    // Filter changes reload it through loadBatch/onBatchChange synchronization.
+  }, []);
 
   function toggleBusinessUnit(businessUnit: string) {
     setExpandedBusinessUnits((current) => {
@@ -400,9 +408,6 @@ export default function ForecastEntryMonthlyBatchWorkspace({
       <Tabs
         defaultValue="monthly"
         className="space-y-5"
-        onValueChange={(value) => {
-          if (value === "annual") void loadAnnualBatchIfNeeded();
-        }}
       >
         <TabsList className="rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
           <TabsTrigger value="monthly" className="rounded-xl">
@@ -627,11 +632,10 @@ export default function ForecastEntryMonthlyBatchWorkspace({
                     ? "Loading Annual Forecast Entry..."
                     : notice?.type === "error"
                       ? notice.text
-                      : "Annual Forecast Entry will load when this tab is opened."}
+                      : annualLoadAttempted
+                        ? "Annual Forecast Entry data is unavailable."
+                        : "Annual Forecast Entry is loading in the background."}
                 </PetyrInlineNotice>
-                <Button type="button" className="rounded-xl" disabled={isAnnualLoading} onClick={() => void loadAnnualBatchIfNeeded()}>
-                  {isAnnualLoading ? "Loading annual data" : annualLoadAttempted ? "Retry Annual Forecast Entry" : "Load Annual Forecast Entry"}
-                </Button>
               </CardContent>
             </PetyrCard>
           )}
