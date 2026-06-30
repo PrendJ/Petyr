@@ -180,8 +180,9 @@ YTD and one note per company. Monthly Business Unit groups start collapsed; the
 Expand/Collapse control is rendered as a button at the right edge of the group
 header. When a Business Unit is expanded, Previous Month Forecast appears to the
 left of Ongoing Forecast and Closed Revenue YTD remains to the right of Ongoing
-Forecast. The CSM filter area and Monthly table headers stay sticky while
-scrolling the portfolio table. Monthly saves use a floating bottom-right `Save`
+Forecast. The Monthly table uses its own vertical scroll area: the CSM filter
+area stays sticky above it, and Monthly table headers stay fixed at the top of
+the table while scrolling the portfolio. Monthly saves use a floating bottom-right `Save`
 button that remains visible while scrolling and turns green for five seconds
 after an effective save. Monthly data is loaded on the initial page render
 through a portfolio-scoped batch read model. Changing the CSM dropdown reloads immediately; changing Month or Year updates the controls only until the user presses `Load`. Company lists use all Company
@@ -201,7 +202,7 @@ GET /api/petyr/forecast-entry/annual-batch?csmName=...&year=YYYY
 POST /api/petyr/forecast-entry/annual-batch/save
 ```
 
-The annual section is a separate tab inside `/forecasting/entry`. It exposes CSM and Year filters, and its CSM selector stays synchronized with Monthly Forecast Entry when both sections are loaded. The Annual table shows a compact horizontally scrollable summary row above the legend and table with the selected CSM year total plus one selected-year total for each official Business Unit. The Annual table keeps Customer and Confidence visible during horizontal scroll, keeps headers fixed during vertical scroll, marks editable/manual-entry columns with a subtle background, and includes a legend-row button to collapse or show all Business Unit columns. Collapsed mode keeps only Active through Confidence plus Closed Revenue YTD through Logs visible. It stores customer + year Forecast Initial and Confidence in
+The annual section is a separate tab inside `/forecasting/entry`. It exposes CSM and Year filters, and its CSM selector stays synchronized with Monthly Forecast Entry when both sections are loaded. The Annual table shows a compact horizontally scrollable summary row above the legend and table with the selected CSM year total plus one selected-year total for each official Business Unit. The Annual table uses its own vertical scroll area so the header row stays visible while users scroll down the portfolio, keeps Customer and Confidence visible during horizontal scroll, marks editable/manual-entry columns with a subtle background, and includes a legend-row button to collapse or show all Business Unit columns. Collapsed mode keeps only Active through Confidence plus Closed Revenue YTD through Logs visible. It stores customer + year Forecast Initial and Confidence in
 `forecast_annual_entry`, stores annual BU values in `forecast_annual`, and
 audits effective changes through `forecast_save_session` /
 `forecast_change_log` with source `Annual Forecast Entry`. Annual saves use the same floating bottom-right `Save` button pattern and do not show separate top or bottom inline save buttons. Its read endpoint uses a portfolio-scoped PostgreSQL read model for the selected CSM/year instead of loading full Company Detail for each customer. After schema changes,

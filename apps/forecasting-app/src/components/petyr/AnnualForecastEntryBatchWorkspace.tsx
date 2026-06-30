@@ -115,7 +115,7 @@ function percentLabel(value: number | null | undefined) {
 
 const CUSTOMER_STICKY_CLASS = "sticky left-0 z-30 min-w-[220px] bg-white";
 const CONFIDENCE_STICKY_CLASS = "sticky left-[220px] z-30 min-w-[150px] bg-amber-50 shadow-[8px_0_12px_-12px_rgba(15,23,42,0.45)]";
-const HEADER_STICKY_CLASS = "sticky top-0 z-20";
+const HEADER_STICKY_CLASS = "sticky top-0 z-40 shadow-[0_1px_0_0_rgba(226,232,240,1)]";
 const MANUAL_HEADER_CLASS = "bg-amber-50 text-amber-950";
 const MANUAL_CELL_CLASS = "bg-amber-50/70";
 
@@ -501,7 +501,7 @@ export default function AnnualForecastEntryBatchWorkspace({
           {showSavedState ? "Forecast saved." : ""}
         </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-slate-200">
+        <div className="max-h-[calc(100vh-10rem)] overflow-auto rounded-2xl border border-slate-200 bg-white">
           <Table className="min-w-max">
             <TableHeader>
               <TableRow className="hover:bg-transparent">

@@ -20,6 +20,24 @@ Each entry must include:
 
 ## 2026-06-30
 
+- **Area:** Petyr / Forecast Entry / Monthly table sticky header
+- **Change:** Changed Monthly Forecast Entry so the portfolio table has its own vertical scroll area and the two-row table header sticks to the top of that table instead of using fixed viewport offsets below the filter area.
+- **Reason:** Product reported that Monthly Forecast Entry headers appeared too low and did not stay fixed together with the filter area while scrolling down the portfolio.
+- **Impact:** UI behavior changed only. Monthly read/save APIs, schema, permissions, Redash/PostgreSQL data flow, calculations, audit persistence and copy are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/ForecastEntryMonthlyBatchWorkspace.tsx`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/05_forecasting_product_spec.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+- **Validation:** Static source checks passed for removal of the old monthly header viewport offsets and for the new table scroll container. Build validation status is listed in the task handoff.
+- **Follow-up:** Run `npm run build` from `apps/forecasting-app` if the local shell exposes npm.
+
+## 2026-06-30
+
+- **Area:** Petyr / Forecast Entry / Annual table sticky header
+- **Change:** Changed Annual Forecast Entry so the portfolio table has its own vertical scroll area and a stronger sticky header layer, keeping the header row (`Customer`, `Active`, `Forecast Initial`, `Forecast Ongoing`, `Confidence`, and following columns) visible while users scroll down the annual portfolio.
+- **Reason:** Product requested the first Annual Forecast Entry table row to remain visible during downward scrolling.
+- **Impact:** UI behavior changed only. Annual read/save APIs, schema, permissions, Redash/PostgreSQL data flow, calculations, audit persistence and copy are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/AnnualForecastEntryBatchWorkspace.tsx`, `apps/forecasting-app/README.md`, `docs/05_forecasting_product_spec.md`, `DEVLOG.md`.
+- **Validation:** Static source checks passed for the new annual table scroll container and documentation references. `npm.cmd run build` passed from `apps/forecasting-app`.
+- **Follow-up:** None.
+
 - **Area:** Petyr / Forecasting / Company Detail campaign names
 - **Change:** Changed the Master Campaigns logical `campaignName` mapping from `project_name` to `customer_title`, while keeping the Company Detail table label `Campaign name` unchanged.
 - **Reason:** Product clarified that Redash maps the desired campaign display title counterintuitively to `customer_title`, and using it should fix Company Detail campaign name rendering.

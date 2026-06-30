@@ -548,11 +548,11 @@ export default function ForecastEntryMonthlyBatchWorkspace({
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+          <div className="max-h-[calc(100vh-18rem)] overflow-auto rounded-2xl border border-slate-200 bg-white">
             <Table className="min-w-max">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="sticky left-0 top-[136px] z-30 min-w-[240px] bg-white" rowSpan={2}>
+                  <TableHead className="sticky left-0 top-0 z-40 min-w-[240px] bg-white shadow-[0_1px_0_0_rgba(226,232,240,1)]" rowSpan={2}>
                     Customer
                   </TableHead>
                   {batch.data.businessUnits.map((businessUnit) => {
@@ -560,7 +560,7 @@ export default function ForecastEntryMonthlyBatchWorkspace({
                     return (
                       <TableHead
                         key={businessUnit}
-                        className="sticky top-[136px] z-20 min-w-[190px] border-l border-slate-200 bg-slate-50 text-center"
+                        className="sticky top-0 z-30 min-w-[190px] border-l border-slate-200 bg-slate-50 text-center shadow-[0_1px_0_0_rgba(226,232,240,1)]"
                         colSpan={expanded ? 3 : 1}
                       >
                         <button
@@ -577,7 +577,7 @@ export default function ForecastEntryMonthlyBatchWorkspace({
                       </TableHead>
                     );
                   })}
-                  <TableHead className="sticky top-[136px] z-20 min-w-[260px] bg-white" rowSpan={2}>
+                  <TableHead className="sticky top-0 z-30 min-w-[260px] bg-white shadow-[0_1px_0_0_rgba(226,232,240,1)]" rowSpan={2}>
                     Note
                   </TableHead>
                 </TableRow>
@@ -586,7 +586,7 @@ export default function ForecastEntryMonthlyBatchWorkspace({
                     const expanded = expandedBusinessUnits.has(businessUnit);
                     if (!expanded) {
                       return [
-                      <TableHead key={`${businessUnit}-active`} className="sticky top-[184px] z-20 min-w-[190px] border-l border-slate-200 bg-white text-xs text-slate-700">
+                      <TableHead key={`${businessUnit}-active`} className="sticky top-12 z-30 min-w-[190px] border-l border-slate-200 bg-white text-xs text-slate-700 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
                         {activeLabel}
                       </TableHead>
                       ];
@@ -596,12 +596,12 @@ export default function ForecastEntryMonthlyBatchWorkspace({
                       ...EXPANDED_FORECAST_COLUMNS.map((forecastType) => (
                         <TableHead
                           key={`${businessUnit}-${forecastType}`}
-                          className={`sticky top-[184px] z-20 min-w-[190px] border-l border-slate-200 text-xs ${expandedForecastHeaderClass(forecastType, editableForecastType)}`}
+                          className={`sticky top-12 z-30 min-w-[190px] border-l border-slate-200 text-xs shadow-[0_1px_0_0_rgba(226,232,240,1)] ${expandedForecastHeaderClass(forecastType, editableForecastType)}`}
                         >
                           {forecastTypeLabel(forecastType)}
                         </TableHead>
                       )),
-                      <TableHead key={`${businessUnit}-closed`} className="sticky top-[184px] z-20 min-w-[170px] border-l border-slate-200 bg-amber-50 text-xs text-amber-900">
+                      <TableHead key={`${businessUnit}-closed`} className="sticky top-12 z-30 min-w-[170px] border-l border-slate-200 bg-amber-50 text-xs text-amber-900 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
                         Closed Revenue YTD
                       </TableHead>
                     ];
