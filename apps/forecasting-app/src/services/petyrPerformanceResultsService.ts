@@ -214,14 +214,32 @@ export async function getPetyrPerformanceResults(): Promise<PetyrPerformanceResu
     };
   }
 
-  const rows = await prisma.petyrPerformanceMeasurement.findMany({
-    where: { operation: { in: operations } },
-    orderBy: { measuredAt: "desc" },
-    take: 200
-  });
+  const [rows, latestRows, dailyAiForecastRows] = await Promise.all([
+    prisma.petyrPerformanceMeasurement.findMany({
+      where: { operation: { in: operations } },
+      orderBy: { measuredAt: "desc" },
+      take: 200
+    }),
+    Promise.all(
+      operations.map((operation) => prisma.petyrPerformanceMeasurement.findFirst({
+        where: { operation },
+        orderBy: { measuredAt: "desc" }
+      }))
+    ),
+    prisma.petyrPerformanceMeasurement.findMany({
+      where: { operation: "Daily AI Forecast run" },
+      orderBy: { measuredAt: "desc" },
+      take: 20
+    })
+  ]);
   const latestByOperation = new Map<string, PetyrPerformanceResultRow>();
   const history = rows.map(toRow);
+  const dailyAiForecastRuns = dailyAiForecastRows.map(toRow);
 
+  for (const row of latestRows) {
+    if (!row) continue;
+    latestByOperation.set(row.operation, toRow(row));
+  }
   for (const row of history) {
     if (!latestByOperation.has(row.operation)) latestByOperation.set(row.operation, row);
   }
@@ -236,7 +254,7 @@ export async function getPetyrPerformanceResults(): Promise<PetyrPerformanceResu
     checks,
     operationStats,
     recentHistory: history.slice(0, 40),
-    dailyAiForecastRuns: history.filter((row) => row.operation === "Daily AI Forecast run").slice(0, 20),
+    dailyAiForecastRuns,
     warnings: []
   };
 }

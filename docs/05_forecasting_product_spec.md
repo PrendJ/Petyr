@@ -275,9 +275,11 @@ Normal batch table rules:
 - columns are grouped by the 10 official Petyr Business Units only;
 - each Business Unit starts collapsed and shows only the active editable field;
 - the Business Unit Expand/Collapse control must look actionable as a button and sit at the far right of the Business Unit group header;
-- the Monthly table must use its own vertical scroll area; the CSM filter area
-  stays sticky above it, and Monthly table column headers stay fixed at the top
-  of the table while the user scrolls down the portfolio;
+- the Monthly table must use its own vertical scroll area; the CSM, Month, Year
+  and Load control row plus the legend stay sticky above it, while the Monthly
+  section title, period summary and editability notice scroll away. Monthly
+  table column headers stay fixed at the top of the table while the user scrolls
+  down the portfolio;
 - days 1-15: active field is Previous Month Forecast;
 - from day 16: active field is Ongoing Forecast;
 - the inactive monthly forecast field and Closed Revenue YTD are visible only when a BU is expanded;
@@ -325,9 +327,11 @@ Annual Forecast Entry rules:
 - inactive rows remain visible with muted styling;
 - customer names link to Company Detail; the Logs action opens Company Detail
   at the company logs anchor in a new tab and is labelled `See latest logs of <company>`;
-- the Annual table uses its own vertical scroll area so table headers stay
-  visible while users scroll down the portfolio, and the Customer and Confidence
-  columns remain visible during horizontal scroll;
+- the Annual table uses its own vertical scroll area so only the legend row and
+  table headers stay visible while users scroll down the portfolio; the section
+  title, filters, selected-CSM annual summary and Forecast Initial window notice
+  scroll away above the table, and the Customer and Confidence columns remain
+  visible during horizontal scroll;
 - a button to the right of the legend collapses or shows all Business Unit columns,
   so the collapsed table shows only Active through Confidence and Closed Revenue YTD through Logs;
 - editable/manual-entry columns use a subtle manual-entry background to distinguish

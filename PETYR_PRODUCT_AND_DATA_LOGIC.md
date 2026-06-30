@@ -352,9 +352,11 @@ Monthly Forecast Entry table rules:
 - Business Unit groups start collapsed and show only the active editable field;
 - Expand/Collapse must look like an actionable button and sit at the far right
   of the Business Unit group header;
-- the Monthly table uses its own vertical scroll area; the CSM filter area stays
-  sticky above it, and Monthly table headers stay fixed at the top of the table
-  while users scroll down the portfolio;
+- the Monthly table uses its own vertical scroll area; the CSM, Month, Year and
+  Load control row plus the legend stay sticky above it, while the Monthly
+  section title, period summary and editability notice scroll away. Monthly
+  table headers stay fixed at the top of the table while users scroll down the
+  portfolio;
 - when a Business Unit is expanded, Previous Month Forecast is shown to the left
   of Ongoing Forecast and Closed Revenue YTD is shown to the right of Ongoing
   Forecast;

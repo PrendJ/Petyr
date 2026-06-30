@@ -115,7 +115,7 @@ function percentLabel(value: number | null | undefined) {
 
 const CUSTOMER_STICKY_CLASS = "sticky left-0 z-30 min-w-[220px] bg-white";
 const CONFIDENCE_STICKY_CLASS = "sticky left-[220px] z-30 min-w-[150px] bg-amber-50 shadow-[8px_0_12px_-12px_rgba(15,23,42,0.45)]";
-const HEADER_STICKY_CLASS = "sticky top-0 z-40 shadow-[0_1px_0_0_rgba(226,232,240,1)]";
+const HEADER_STICKY_CLASS = "sticky top-16 z-40 shadow-[0_1px_0_0_rgba(226,232,240,1)]";
 const MANUAL_HEADER_CLASS = "bg-amber-50 text-amber-950";
 const MANUAL_CELL_CLASS = "bg-amber-50/70";
 
@@ -464,26 +464,6 @@ export default function AnnualForecastEntryBatchWorkspace({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <div className="flex flex-wrap gap-x-5 gap-y-2">
-            <LegendChip className="border-blue-300 bg-blue-100" label="Forecast AI placeholder" />
-            <LegendChip className="border-violet-300 bg-violet-100" label="AI confirmed" />
-            <LegendChip className="border-emerald-300 bg-emerald-100" label="Manual value" />
-            <LegendChip className="border-amber-300 bg-amber-50" label="Manual entry field" />
-            <LegendChip className="border-slate-300 bg-white" label="Saved value" />
-            <LegendChip className="border-slate-300 bg-slate-100" label="Inactive customer" />
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-9 rounded-xl border-slate-300 bg-white px-4 text-sm"
-            onClick={() => setShowBusinessUnits((current) => !current)}
-            aria-expanded={showBusinessUnits}
-          >
-            {showBusinessUnits ? "Collapse Business Units" : "Show Business Units"}
-          </Button>
-        </div>
-
         <div className="fixed bottom-5 right-5 z-50">
           <Button
             type="button"
@@ -502,6 +482,25 @@ export default function AnnualForecastEntryBatchWorkspace({
         </div>
 
         <div className="max-h-[calc(100vh-10rem)] overflow-auto rounded-2xl border border-slate-200 bg-white">
+          <div className="sticky top-0 z-50 flex h-16 min-w-max items-center justify-between gap-5 border-b border-slate-200 bg-slate-50 px-4 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
+            <div className="flex items-center gap-x-5 gap-y-2">
+              <LegendChip className="border-blue-300 bg-blue-100" label="Forecast AI placeholder" />
+              <LegendChip className="border-violet-300 bg-violet-100" label="AI confirmed" />
+              <LegendChip className="border-emerald-300 bg-emerald-100" label="Manual value" />
+              <LegendChip className="border-amber-300 bg-amber-50" label="Manual entry field" />
+              <LegendChip className="border-slate-300 bg-white" label="Saved value" />
+              <LegendChip className="border-slate-300 bg-slate-100" label="Inactive customer" />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 shrink-0 rounded-xl border-slate-300 bg-white px-4 text-sm"
+              onClick={() => setShowBusinessUnits((current) => !current)}
+              aria-expanded={showBusinessUnits}
+            >
+              {showBusinessUnits ? "Collapse Business Units" : "Show Business Units"}
+            </Button>
+          </div>
           <Table className="min-w-max">
             <TableHeader>
               <TableRow className="hover:bg-transparent">

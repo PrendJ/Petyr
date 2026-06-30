@@ -478,8 +478,14 @@ export default function ForecastEntryMonthlyBatchWorkspace({
             {batch.data.selectedCsm}: {batch.data.companies.length} compan{batch.data.companies.length === 1 ? "y" : "ies"} - {selectedMonthLabel}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="sticky top-0 z-40 space-y-4 border-b border-slate-200 bg-white/95 pb-4 pt-1 backdrop-blur">
+        <CardContent className="space-y-3">
+          <PetyrInlineNotice tone={isLocked ? "warning" : "success"}>
+            {isLocked
+              ? batch.data.entryMode.reason
+              : `${activeLabel} is editable for ${selectedMonthLabel}. Other forecast fields and Closed Revenue YTD are read-only.`}
+          </PetyrInlineNotice>
+
+          <div className="sticky top-0 z-40 space-y-2 border-b border-slate-200 bg-white/95 pb-2 pt-1 backdrop-blur">
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_150px_120px_auto_minmax(0,1fr)] lg:items-end">
               <PetyrSelectField
                 label="CSM"
@@ -531,14 +537,9 @@ export default function ForecastEntryMonthlyBatchWorkspace({
               >
                 {isLoading ? "Loading" : "Load"}
               </Button>
-              <PetyrInlineNotice tone={isLocked ? "warning" : "success"}>
-                {isLocked
-                  ? batch.data.entryMode.reason
-                  : `${activeLabel} is editable for ${selectedMonthLabel}. Other forecast fields and Closed Revenue YTD are read-only.`}
-              </PetyrInlineNotice>
             </div>
 
-            <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2">
               <LegendChip className="border-blue-300 bg-blue-100" label="AI suggestion/placeholder" />
               <LegendChip className="border-violet-300 bg-violet-100" label="CSM validated from AI" />
               <LegendChip className="border-emerald-300 bg-emerald-100" label="CSM manually edited" />

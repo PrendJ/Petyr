@@ -20,6 +20,32 @@ Each entry must include:
 
 ## 2026-06-30
 
+- **Area:** Petyr / Forecast Entry / Monthly sticky scroll context
+- **Change:** Changed Monthly Forecast Entry so the sticky area contains only the CSM, Month, Year and Load control row plus the legend. The Monthly Forecast Batch title, period summary and editability notice now scroll away above the sticky controls, and the vertical gap between the legend and table was reduced.
+- **Reason:** Product clarified that only the operational controls, legend and table column headers should remain fixed while scrolling the monthly portfolio.
+- **Impact:** UI behavior changed only. Monthly read/save APIs, schema, permissions, Redash/PostgreSQL data flow, calculations and audit persistence are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/ForecastEntryMonthlyBatchWorkspace.tsx`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/05_forecasting_product_spec.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+- **Validation:** Build validation status is listed in the task handoff.
+- **Follow-up:** None.
+
+- **Area:** Petyr / Forecast Entry / Annual sticky scroll context
+- **Change:** Changed Annual Forecast Entry so only the legend row and table header remain sticky inside the annual portfolio scroll area. The Annual Forecast Entry title, CSM/year filters, selected-CSM annual summary row and Forecast Initial window notice now scroll away above the table.
+- **Reason:** Product clarified that only the legend and table header should stay visible while scrolling annual forecast rows; the CSM annual total row and Forecast Initial open-window notice should not remain fixed.
+- **Impact:** UI behavior changed only. Annual read/save APIs, schema, permissions, Redash/PostgreSQL data flow, calculations, audit persistence and copy are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/AnnualForecastEntryBatchWorkspace.tsx`, `docs/05_forecasting_product_spec.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+- **Validation:** Build validation status is listed in the task handoff.
+- **Follow-up:** None.
+
+## 2026-06-30
+
+- **Area:** Petyr Admin / Daily AI Forecast monitoring
+- **Change:** Changed `GET /api/petyr/admin/performance-results` so Petyr Admin loads the latest Daily AI Forecast measurements with a dedicated query instead of deriving them only from the latest 200 global performance samples. The latest-check table now also uses the latest row per expected operation.
+- **Reason:** The nightly deterministic Daily AI Forecast run could be hidden in Petyr Admin after enough unrelated performance measurements were recorded later in the day, even though the worker had persisted the run.
+- **Impact:** Petyr Admin diagnostics now keep showing the last 20 `Daily AI Forecast run` samples independently from other performance noise. No forecast calculation, AI cache write behavior, permissions, schema, worker schedule or Redash/PostgreSQL data flow changed.
+- **Files/documents involved:** `apps/forecasting-app/src/services/petyrPerformanceResultsService.ts`, `DEVLOG.md`.
+- **Validation:** `npm.cmd run build` passed from `apps/forecasting-app`.
+- **Follow-up:** None.
+
 - **Area:** Petyr / Forecast Entry / Monthly table sticky header
 - **Change:** Changed Monthly Forecast Entry so the portfolio table has its own vertical scroll area and the two-row table header sticks to the top of that table instead of using fixed viewport offsets below the filter area.
 - **Reason:** Product reported that Monthly Forecast Entry headers appeared too low and did not stay fixed together with the filter area while scrolling down the portfolio.
