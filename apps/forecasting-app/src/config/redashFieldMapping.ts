@@ -52,8 +52,8 @@ export const REDASH_PETYR_FIELD_MAPPINGS = {
         note: "Current CSM owner column in the materialized master_campaigns table."
       },
       campaignName: {
-        dbColumnName: "project_name",
-        note: "Current campaign/project display name column in the materialized master_campaigns table."
+        dbColumnName: "customer_title",
+        note: "Current campaign display name column in the materialized master_campaigns table. Redash labels this counterintuitively; keep Petyr UI labels as campaign name."
       },
       campaignStatus: {
         dbColumnName: "status",

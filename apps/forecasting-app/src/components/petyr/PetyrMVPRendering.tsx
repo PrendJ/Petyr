@@ -59,6 +59,8 @@ const chartColors = {
 const RenderingDataContext = createContext<PetyrApprovedRenderingData | null>(null);
 const PreferredCsmContext = createContext<string | null>(null);
 
+type RenderingState = 'loading' | 'ready' | 'error';
+
 function useRenderingData() {
   const data = useContext(RenderingDataContext);
 
@@ -2001,6 +2003,36 @@ function CompanyView() {
   );
 }
 
+function ForecastingDataLoadingBody() {
+  return (
+    <div className="flex min-h-[360px] items-center justify-center py-12">
+      <div role="status" aria-live="polite" className="flex flex-col items-center gap-4 text-center">
+        <span className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-slate-900" aria-hidden="true" />
+        <span className="text-sm font-semibold text-slate-900">Updating data ongoing</span>
+      </div>
+    </div>
+  );
+}
+
+function ForecastingDataErrorBody({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <div className="flex min-h-[360px] items-center justify-center py-12">
+      <div className="flex flex-col items-center gap-4 text-center">
+        <span className="h-10 w-10 rounded-full border-4 border-rose-200 bg-rose-50" aria-hidden="true" />
+        <div className="space-y-1">
+          <div className="text-sm font-semibold text-slate-900">Unable to update Management data.</div>
+          <div className="text-xs text-slate-500">Retry the PostgreSQL-backed refresh before using the dashboard.</div>
+        </div>
+        {onRetry ? (
+          <Button variant="outline" className="rounded-xl" onClick={onRetry}>
+            Retry
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export default function PetyrMVPRendering({
   data,
   activeView = 'management',
@@ -2008,6 +2040,8 @@ export default function PetyrMVPRendering({
   canViewAdminTools = false,
   canViewCsmOverview = true,
   canManageObjectives = false,
+  renderingState = 'ready',
+  onRetryRenderingData,
 }: {
   data: PetyrApprovedRenderingData;
   activeView?: 'management' | 'csm';
@@ -2015,10 +2049,19 @@ export default function PetyrMVPRendering({
   canViewAdminTools?: boolean;
   canViewCsmOverview?: boolean;
   canManageObjectives?: boolean;
+  renderingState?: RenderingState;
+  onRetryRenderingData?: () => void;
 }) {
   const menuForecastEntryHref = defaultForecastEntryHref(data.csmCustomersBase, preferredCsmName);
   const menuCompanyDetailHref = defaultCompanyDetailHref(data.csmCustomersBase, preferredCsmName);
   const visibleView = activeView === 'csm' && !canViewCsmOverview ? 'management' : activeView;
+  const workspaceBody = renderingState === 'loading'
+    ? <ForecastingDataLoadingBody />
+    : renderingState === 'error'
+      ? <ForecastingDataErrorBody onRetry={onRetryRenderingData} />
+      : visibleView === 'csm'
+        ? <CSMView />
+        : <ManagementView canViewAdminTools={canViewAdminTools} canManageObjectives={canManageObjectives} />;
 
   return (
     <RenderingDataContext.Provider value={data}>
@@ -2029,12 +2072,8 @@ export default function PetyrMVPRendering({
           forecastEntryHref={menuForecastEntryHref}
           canViewCsmOverview={canViewCsmOverview}
         >
-          {visibleView === 'csm' ? (
-            <CSMView />
-          ) : (
-            <ManagementView canViewAdminTools={canViewAdminTools} canManageObjectives={canManageObjectives} />
-          )}
-          {canViewAdminTools ? <PetyrFloatingDiagnosticsMenu diagnostics={data.diagnostics} /> : null}
+          {workspaceBody}
+          {renderingState === 'ready' && canViewAdminTools ? <PetyrFloatingDiagnosticsMenu diagnostics={data.diagnostics} /> : null}
         </PetyrWorkspaceShell>
       </PreferredCsmContext.Provider>
     </RenderingDataContext.Provider>

@@ -8,7 +8,7 @@ This file is root-level and covers the multi-project platform. Project-specific 
 
 Each entry must include:
 
-- Date
+
 - Area
 - Change
 - Reason
@@ -18,7 +18,89 @@ Each entry must include:
 
 ---
 
+## 2026-06-30
+
+- **Area:** Petyr / Forecasting / Company Detail campaign names
+- **Change:** Changed the Master Campaigns logical `campaignName` mapping from `project_name` to `customer_title`, while keeping the Company Detail table label `Campaign name` unchanged.
+- **Reason:** Product clarified that Redash maps the desired campaign display title counterintuitively to `customer_title`, and using it should fix Company Detail campaign name rendering.
+- **Impact:** Company Detail and other Petyr read models that consume the logical campaign name now display names from `redash_raw_master_campaigns_latest.customer_title`. PostgreSQL data flow, Redash source selection, UI labels, schema, permissions and forecast calculations are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/config/redashFieldMapping.ts`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/05_forecasting_product_spec.md`, `DEVLOG.md`.
+- **Validation:** Static source checks confirmed `campaignName` now maps to `customer_title`, the Company Detail UI label remains `Campaign name`, and documentation records the mapping. `npm run build` was not run because this mapping-only change has no app dependency changes and prior shell validation in this environment has no npm on PATH.
+- **Follow-up:** Run `npm run build` from `apps/forecasting-app` in an environment where npm is available.
+
+- **Area:** Petyr / Forecasting / Company Detail logs and evidence visibility
+- **Change:** Updated Company Detail so campaigns show only the latest chronologically completed campaign plus running or planned campaigns by default, with other campaigns behind an expansion control. Agreements now show only rows whose expiry date is after the moment of viewing by default, with expired or undated rows expandable. Renamed Change history to Company logs, changed the description to include notes and forecast changes, and show the latest three logs before expansion. Added a Company note form below Business Unit current-year view and above Relevant company insights; note-only entries save into `forecast_save_session` with source `Company Detail Note` and no forecast value changes.
+- **Reason:** Product requested a cleaner Company Detail reading surface and a way for CSMs to add company notes without entering Forecast Entry or modifying forecasts.
+- **Impact:** Company Detail UI behavior and note logging changed. No Prisma schema, Redash source, forecast calculation, numeric AI forecast generation, Forecast Entry save contract or direct Redash access changed. The note form requires `petyr:forecast:write` through the server action.
+- **Files/documents involved:** `apps/forecasting-app/src/app/forecasting/company/[companyName]/page.tsx`, `apps/forecasting-app/src/services/companyLogNoteService.ts`, `apps/forecasting-app/src/components/petyr/AnnualForecastEntryBatchWorkspace.tsx`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/05_forecasting_product_spec.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+- **Validation:** Static source checks passed for new labels, expansion controls, docs and anchor references. `npm run build` could not run because `npm` is not available on PATH in this shell.
+- **Follow-up:** Run `npm run build` from `apps/forecasting-app` in an environment where npm is available.
+
+## 2026-06-30
+
+
+- **Area:** Petyr / Forecasting / Company Detail permissions
+- **Change:** Restricted the Company Detail support tables `Revenue by Business Unit detail`, `Monthly forecast rows`, `Annual forecast rows` and `AI forecast cache` to users with `petyr:admin`. Non-admin users still see the analytical Company Detail story, company context, campaigns, agreements and change history.
+- **Reason:** Product requested those secondary technical/evidence sections to be visible only to admins.
+- **Impact:** UI visibility changed only. Company Detail remains read-only; PostgreSQL reads, Redash isolation, forecast calculations, schema, API contracts and save behavior are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/app/forecasting/company/[companyName]/page.tsx`, `docs/05_forecasting_product_spec.md`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/petyr/03_petyr_business_rules.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+- **Validation:** Static source checks passed for the admin-only render guard and documentation updates. `npm run build` could not run: sandboxed execution fails before command start with a bundled bubblewrap digest mismatch, and the escalated shell does not have `npm` on PATH.
+- **Follow-up:** Run `npm run build` from `apps/forecasting-app` in an environment where npm is available.
+- **Area:** Petyr / Forecasting / Company Detail Business Unit view
+- **Change:** Renamed the Company Detail Business Unit section to `Business Unit current-year view`, changed its description to explain that expanding a Business Unit shows the individual months, removed the collapsed `Previous-month forecast` summary chip, and relabelled the collapsed closed revenue total as `Closed Revenue YTD`.
+- **Reason:** Product requested clearer Company Detail copy so users understand the collapsed Business Unit rows show current-year totals and the monthly detail is available through expansion.
+- **Impact:** UI copy/layout changed only. Company Detail data sources, PostgreSQL reads, Forecast Entry editing, forecast values, AI cache reads, schema, permissions and Redash isolation are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/app/forecasting/company/[companyName]/page.tsx`, `apps/forecasting-app/src/components/petyr/CompanyBusinessUnitMonthlyView.tsx`, `docs/05_forecasting_product_spec.md`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+- **Validation:** Static source checks passed for updated section title, description, docs references and collapsed chip labels. `npm --version` and `npm run build` could not run because `npm` is not available on PATH in this shell.
+- **Follow-up:** Run `npm run build` from `apps/forecasting-app` in an environment where npm is available.
+
+- **Area:** Petyr / Forecasting / Management loading UX
+- **Change:** Changed `/forecasting` initial Management loading so the page keeps only the shared workspace header, section navigator and an in-page loader labelled `Updating data ongoing` visible until the Management payload has loaded. The Management dashboard cards, Branch/CSM/Business Unit tables and admin diagnostics render only after the Management data is ready; Forecast Entry and scoped CSM warmups still start afterward in the background.
+- **Reason:** Product requested that users do not see an apparently empty Management UI while Branch, CSM and Business Unit data is still loading.
+- **Impact:** UI loading behavior changed only. PostgreSQL-backed data sources, Redash isolation, permissions, schema, calculations, save contracts and background warmup order are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/PetyrForecastingDataHydrator.tsx`, `apps/forecasting-app/src/components/petyr/PetyrMVPRendering.tsx`, `docs/05_forecasting_product_spec.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+- **Validation:** Static `rg` checks confirmed the new loader text, rendering-state wiring and documentation updates, and confirmed the old `Aggiornamento dati in corso...` runtime loader is no longer referenced in the touched components. `npm run build` could not run because `npm`, `npm.cmd`, `node` and `git` are not available on PATH in this shell.
+- **Follow-up:** None.
+
+## 2026-06-30
+
+- **Area:** Petyr / Forecast Entry / Annual summary visibility
+- **Change:** Added a compact horizontally scrollable Annual Forecast Entry summary row above the legend and table. The row shows the selected CSM total forecast for the selected year and one total for each official Business Unit, calculated from the same live Annual Entry values currently visible in the table.
+- **Reason:** Product requested immediate visibility of the CSM annual forecast total and BU-level annual totals while editing annual forecasts.
+- **Impact:** UI behavior changed only. Annual read/save APIs, schema, permissions, Redash sources, audit persistence and forecast formulas are unchanged. Untouched AI placeholders remain excluded from totals until accepted or edited, matching Forecast Ongoing behavior.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/AnnualForecastEntryBatchWorkspace.tsx`, `docs/05_forecasting_product_spec.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+- **Validation:** Static source checks passed; `npm --version` and build could not run because the local Codex sandbox fails before command execution with `bubblewrap digest mismatch` for the bundled `bwrap`.
+- **Follow-up:** Run `npm run build` from `apps/forecasting-app` in an environment where npm can execute.
+
 ## 2026-06-29
+
+- **Area:** Petyr / Forecast Entry / Annual table layout
+- **Change:** Updated Annual Forecast Entry so table headers stay fixed during vertical scrolling, Customer and Confidence remain visible during horizontal scrolling, editable/manual-entry columns use a subtle manual-entry background, and a legend-row button collapses or shows all Business Unit columns. Renamed Revenue EUR to Closed Revenue YTD, Planned EUR to Planned This Year, ratio columns to explicitly reference Forecast Ongoing, History to Logs, and row log actions to `See latest logs of <company>`.
+- **Reason:** Product requested better annual portfolio entry usability while scrolling, clearer distinction between manual forecast inputs and consolidated/read-only data, a compact view without Business Unit columns, and clearer column/action labels.
+- **Impact:** UI layout and visible copy changed only. Annual read/save endpoints, persistence, permissions, Redash data flow, calculations, confidence validation and audit behavior are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/AnnualForecastEntryBatchWorkspace.tsx`, `docs/05_forecasting_product_spec.md`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/petyr/03_petyr_business_rules.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+- **Validation:** Static `rg` checks passed for removed old Annual Entry labels and undefined `annualSummary` references. `cmd.exe /c npm.cmd --version` and therefore `npm run build` could not run because the local Codex sandbox fails before command execution with `bubblewrap digest mismatch` for the bundled `bwrap`.
+- **Follow-up:** Run `npm run build` from `apps/forecasting-app` in an environment where the sandbox/runtime can execute npm.
+
+## 2026-06-29
+
+- **Area:** Petyr / Forecast Entry FAQ
+- **Change:** Made the shared Forecast Entry FAQ help control explicitly show `FAQ` next to the question mark, and expanded the dedicated FAQ page with entries for Forecast Ongoing, Previous Month Forecast, Forecast Initial, change logs and input deadline windows.
+- **Reason:** Product requested the FAQ access point and content to be clearer for forecast terminology and input timing.
+- **Impact:** UI copy and help content changed only. Forecast calculations, editability rules, save APIs, audit persistence, permissions, Redash sources and database schema are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/PetyrLayoutPrimitives.tsx`, `apps/forecasting-app/src/components/petyr/ForecastEntryFaq.tsx`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/05_forecasting_product_spec.md`, `DEVLOG.md`.
+- **Validation:** Attempted `npm run build` from `apps/forecasting-app`, but WSL cannot find `npm`. Attempted `powershell.exe -NoProfile -Command "npm.cmd run build"`, but PowerShell cannot find `npm.cmd`. Static text checks confirmed the new FAQ entries, visible `FAQ` help label and documentation updates.
+- **Follow-up:** None.
+
+## 2026-06-29
+
+- **Area:** Petyr / Forecast Entry / Monthly period selection
+- **Change:** Added Month and Year controls next to the Monthly Forecast Entry CSM filter, with a same-row `Load` button for loading a non-default monthly period. The CSM dropdown still reloads immediately when changed. Monthly batch reads now accept optional `year` and `month`, `/forecasting/entry` preserves them in the URL, and monthly saves validate the selected target period through the existing editability rules instead of forcing only the current server month.
+- **Reason:** Product requested current-month visibility by default while allowing users to explicitly load a different month/year from the Monthly Forecast Entry filter row.
+- **Impact:** UI behavior and Monthly Forecast Entry target-period handling changed. Past months remain locked by `getForecastEntryMode`; future months use the existing previous-month forecast rule. Redash sources, database schema, permissions, annual entry behavior and CSM dropdown behavior are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/ForecastEntryMonthlyBatchWorkspace.tsx`, `apps/forecasting-app/src/services/forecastEntryBatchService.ts`, `apps/forecasting-app/src/app/api/petyr/forecast-entry/batch/route.ts`, `apps/forecasting-app/src/app/forecasting/entry/page.tsx`, `docs/05_forecasting_product_spec.md`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+- **Validation:** Attempted `npm.cmd run build` and `powershell.exe -NoProfile -Command "npm.cmd run build"`, but neither WSL nor PowerShell can find `npm`/`npm.cmd` in this environment. Static `rg` checks passed for removed current-only Monthly Forecast Entry references and updated batch route/page query wiring.
+- **Follow-up:** None.
 
 - **Area:** Petyr / Forecasting / CSM company lists
 - **Change:** Changed CSM Overview and normal Forecast Entry Monthly/Annual portfolio reads so CSM company lists use every Company Ownership company-CSM association whose `workspace_updated_on` is within the last 6 months. A company can now appear in multiple CSM portfolios when multiple recent workspace associations exist. If no recent workspace associations are available, Petyr falls back to the previous latest-owner-per-company behavior with diagnostics.

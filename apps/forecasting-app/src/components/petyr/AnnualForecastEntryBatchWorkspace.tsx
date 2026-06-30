@@ -37,7 +37,7 @@ function buildCompanyDetailPageUrl(companyName: string, year: number) {
 }
 
 function buildHistoryUrl(companyName: string, year: number) {
-  return `${buildCompanyDetailPageUrl(companyName, year)}#history-changes`;
+  return `${buildCompanyDetailPageUrl(companyName, year)}#company-logs`;
 }
 
 function cellKey(companyName: string, businessUnit: string) {
@@ -113,6 +113,12 @@ function percentLabel(value: number | null | undefined) {
   return value === null || value === undefined ? "n/a" : formatPetyrPercent(value * 100);
 }
 
+const CUSTOMER_STICKY_CLASS = "sticky left-0 z-30 min-w-[220px] bg-white";
+const CONFIDENCE_STICKY_CLASS = "sticky left-[220px] z-30 min-w-[150px] bg-amber-50 shadow-[8px_0_12px_-12px_rgba(15,23,42,0.45)]";
+const HEADER_STICKY_CLASS = "sticky top-0 z-20";
+const MANUAL_HEADER_CLASS = "bg-amber-50 text-amber-950";
+const MANUAL_CELL_CLASS = "bg-amber-50/70";
+
 export default function AnnualForecastEntryBatchWorkspace({
   initialBatch,
   onBatchChange
@@ -135,7 +141,9 @@ export default function AnnualForecastEntryBatchWorkspace({
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showSavedState, setShowSavedState] = useState(false);
+  const [showBusinessUnits, setShowBusinessUnits] = useState(true);
   const savedStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
 
   const hasLocalChanges = useMemo(
     () =>
@@ -266,6 +274,27 @@ export default function AnnualForecastEntryBatchWorkspace({
     return company.businessUnits.reduce((sum, cell) => sum + (currentBuValue(company, cell) ?? 0), 0);
   }
 
+  const annualSummary = useMemo(() => {
+    const byBusinessUnit = Object.fromEntries(batch.data.businessUnits.map((businessUnit) => [businessUnit, 0])) as Record<string, number>;
+    let total = 0;
+
+    for (const company of batch.data.companies) {
+      for (const cell of company.businessUnits) {
+        const value = currentBuValue(company, cell) ?? 0;
+        byBusinessUnit[cell.businessUnit] = (byBusinessUnit[cell.businessUnit] ?? 0) + value;
+        total += value;
+      }
+    }
+
+    return {
+      total,
+      byBusinessUnit: batch.data.businessUnits.map((businessUnit) => ({
+        businessUnit,
+        value: byBusinessUnit[businessUnit] ?? 0
+      }))
+    };
+  }, [batch.data.businessUnits, batch.data.companies, sourceStates, values]);
+
   function getCompanySaveValues(company: AnnualForecastEntryBatchCompany) {
     return company.businessUnits.flatMap((cell) => {
       const key = cellKey(company.companyName, cell.businessUnit);
@@ -364,7 +393,8 @@ export default function AnnualForecastEntryBatchWorkspace({
     }
   }
 
-  const saveDisabled = isLoading || isSaving;
+  const visibleBusinessUnitCount = showBusinessUnits ? batch.data.businessUnits.length : 0;
+  const saveDisabled = isSaving || isLoading || !hasLocalChanges;
 
   return (
     <PetyrCard>
@@ -412,12 +442,46 @@ export default function AnnualForecastEntryBatchWorkspace({
 
         {notice ? <PetyrInlineNotice tone={notice.type === "success" ? "success" : "danger"}>{notice.text}</PetyrInlineNotice> : null}
 
-        <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <LegendChip className="border-blue-300 bg-blue-100" label="Forecast AI placeholder" />
-          <LegendChip className="border-violet-300 bg-violet-100" label="AI confirmed" />
-          <LegendChip className="border-emerald-300 bg-emerald-100" label="Manual value" />
-          <LegendChip className="border-slate-300 bg-white" label="Saved value" />
-          <LegendChip className="border-slate-300 bg-slate-100" label="Inactive customer" />
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+          <div className="flex min-w-max items-center gap-2 px-3 py-2">
+            <div className="sticky left-0 z-10 flex min-w-[190px] items-center justify-between gap-3 border-r border-slate-200 bg-white pr-3">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                {batch.data.selectedYear} CSM forecast
+              </span>
+              <span className="text-sm font-bold text-slate-950">{formatPetyrCurrencyValue(annualSummary.total)}</span>
+            </div>
+            {annualSummary.byBusinessUnit.map((item) => (
+              <div
+                key={item.businessUnit}
+                className="flex min-w-[132px] items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+              >
+                <span className="max-w-[58px] truncate text-[11px] font-medium text-slate-500" title={item.businessUnit}>
+                  {item.businessUnit}
+                </span>
+                <span className="text-sm font-semibold text-slate-900">{formatPetyrCurrencyValue(item.value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="flex flex-wrap gap-x-5 gap-y-2">
+            <LegendChip className="border-blue-300 bg-blue-100" label="Forecast AI placeholder" />
+            <LegendChip className="border-violet-300 bg-violet-100" label="AI confirmed" />
+            <LegendChip className="border-emerald-300 bg-emerald-100" label="Manual value" />
+            <LegendChip className="border-amber-300 bg-amber-50" label="Manual entry field" />
+            <LegendChip className="border-slate-300 bg-white" label="Saved value" />
+            <LegendChip className="border-slate-300 bg-slate-100" label="Inactive customer" />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 rounded-xl border-slate-300 bg-white px-4 text-sm"
+            onClick={() => setShowBusinessUnits((current) => !current)}
+            aria-expanded={showBusinessUnits}
+          >
+            {showBusinessUnits ? "Collapse Business Units" : "Show Business Units"}
+          </Button>
         </div>
 
         <div className="fixed bottom-5 right-5 z-50">
@@ -441,22 +505,24 @@ export default function AnnualForecastEntryBatchWorkspace({
           <Table className="min-w-max">
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="sticky left-0 z-20 min-w-[220px] bg-white">Customer</TableHead>
-                <TableHead className="min-w-[120px]">Active</TableHead>
-                <TableHead className="w-[104px] min-w-[104px]">Forecast Initial</TableHead>
-                <TableHead className="min-w-[150px]">Forecast Ongoing</TableHead>
-                <TableHead className="min-w-[150px]">Confidence</TableHead>
-                {batch.data.businessUnits.map((businessUnit) => (
-                  <TableHead key={businessUnit} className="min-w-[105px] text-right">
-                    {businessUnit}
-                  </TableHead>
-                ))}
-                <TableHead className="min-w-[140px] text-right">Revenue EUR</TableHead>
-                <TableHead className="min-w-[140px] text-right">Planned EUR</TableHead>
-                <TableHead className="min-w-[130px] text-right">Revenue / Forecast</TableHead>
-                <TableHead className="min-w-[130px] text-right">Planned / Forecast</TableHead>
-                <TableHead className="min-w-[140px] text-right">Uncovered / Forecast</TableHead>
-                <TableHead className="min-w-[120px]">History</TableHead>
+                <TableHead className={`${CUSTOMER_STICKY_CLASS} ${HEADER_STICKY_CLASS}`}>Customer</TableHead>
+                <TableHead className={`${HEADER_STICKY_CLASS} min-w-[120px] ${MANUAL_HEADER_CLASS}`}>Active</TableHead>
+                <TableHead className={`${HEADER_STICKY_CLASS} w-[104px] min-w-[104px] ${MANUAL_HEADER_CLASS}`}>Forecast Initial</TableHead>
+                <TableHead className={`${HEADER_STICKY_CLASS} min-w-[150px] bg-white`}>Forecast Ongoing</TableHead>
+                <TableHead className={`${CONFIDENCE_STICKY_CLASS} ${HEADER_STICKY_CLASS}`}>Confidence</TableHead>
+                {showBusinessUnits
+                  ? batch.data.businessUnits.map((businessUnit) => (
+                      <TableHead key={businessUnit} className={`${HEADER_STICKY_CLASS} min-w-[105px] text-right ${MANUAL_HEADER_CLASS}`}>
+                        {businessUnit}
+                      </TableHead>
+                    ))
+                  : null}
+                <TableHead className={`${HEADER_STICKY_CLASS} min-w-[150px] bg-white text-right`}>Closed Revenue YTD</TableHead>
+                <TableHead className={`${HEADER_STICKY_CLASS} min-w-[150px] bg-white text-right`}>Planned This Year</TableHead>
+                <TableHead className={`${HEADER_STICKY_CLASS} min-w-[170px] bg-white text-right`}>Revenue / Forecast Ongoing</TableHead>
+                <TableHead className={`${HEADER_STICKY_CLASS} min-w-[170px] bg-white text-right`}>Planned / Forecast Ongoing</TableHead>
+                <TableHead className={`${HEADER_STICKY_CLASS} min-w-[180px] bg-white text-right`}>Uncovered / Forecast Ongoing</TableHead>
+                <TableHead className={`${HEADER_STICKY_CLASS} min-w-[220px] bg-white`}>Logs</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -472,7 +538,7 @@ export default function AnnualForecastEntryBatchWorkspace({
 
                   return (
                     <TableRow key={company.companyName} className={inactiveClass}>
-                      <TableCell className={`sticky left-0 z-10 min-w-[220px] ${company.isForecastActive ? "bg-white" : "bg-slate-50"}`}>
+                      <TableCell className={`${CUSTOMER_STICKY_CLASS} ${company.isForecastActive ? "bg-white" : "bg-slate-50"}`}>
                         <Link
                           href={buildCompanyDetailPageUrl(company.companyName, batch.data.selectedYear)}
                           className="font-semibold text-slate-900 underline-offset-4 hover:underline"
@@ -481,7 +547,7 @@ export default function AnnualForecastEntryBatchWorkspace({
                         </Link>
                         <div className="mt-1 text-xs text-slate-500">{company.csmName}</div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={MANUAL_CELL_CLASS}>
                         <label className="inline-flex items-center gap-2 text-sm">
                           <input
                             type="checkbox"
@@ -492,7 +558,7 @@ export default function AnnualForecastEntryBatchWorkspace({
                           {activeValues[company.companyName] ? "ON" : "OFF"}
                         </label>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={batch.data.initialMode.editable ? MANUAL_CELL_CLASS : "bg-slate-50"}>
                         <Input
                           inputMode="decimal"
                           disabled={!batch.data.initialMode.editable || isSaving}
@@ -501,18 +567,22 @@ export default function AnnualForecastEntryBatchWorkspace({
                           onChange={(event) => updateInitial(company.companyName, event.target.value)}
                           placeholder="n/a"
                           className={`h-10 min-w-[91px] rounded-xl text-right font-semibold ${
-                            touchedInitial.has(company.companyName) ? "border-emerald-300 bg-emerald-50" : "bg-white"
+                            touchedInitial.has(company.companyName)
+                              ? "border-emerald-300 bg-emerald-50"
+                              : batch.data.initialMode.editable
+                                ? "border-amber-200 bg-amber-50"
+                                : "bg-white"
                           }`}
                         />
                       </TableCell>
                       <TableCell className="text-right font-semibold">{formatPetyrCurrencyValue(fcOngoing)}</TableCell>
-                      <TableCell>
+                      <TableCell className={`${CONFIDENCE_STICKY_CLASS} ${company.isForecastActive ? "" : "bg-slate-50"}`}>
                         <select
                           value={confidenceValues[company.companyName] ?? ""}
                           disabled={isSaving}
                           onChange={(event) => updateConfidence(company.companyName, event.target.value)}
                           className={`h-10 min-w-[130px] rounded-xl border px-3 text-sm ${
-                            touchedConfidence.has(company.companyName) ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white"
+                            touchedConfidence.has(company.companyName) ? "border-emerald-300 bg-emerald-50" : "border-amber-200 bg-amber-50"
                           }`}
                         >
                           <option value="">Select...</option>
@@ -523,7 +593,7 @@ export default function AnnualForecastEntryBatchWorkspace({
                           ))}
                         </select>
                       </TableCell>
-                      {company.businessUnits.map((cell) => {
+                      {showBusinessUnits ? company.businessUnits.map((cell) => {
                         const key = cellKey(company.companyName, cell.businessUnit);
                         const sourceState = sourceStates[key];
                         const aiPlaceholder = !cell.savedForecast.hasSavedValue && cell.aiForecast.value !== null
@@ -535,13 +605,13 @@ export default function AnnualForecastEntryBatchWorkspace({
                             : sourceState === "manual_edit"
                               ? "border-emerald-300 bg-emerald-50"
                               : cell.savedForecast.hasSavedValue
-                                ? "border-slate-300 bg-white"
+                                ? "border-amber-200 bg-amber-50"
                                 : aiPlaceholder
                                   ? "border-blue-300 bg-blue-50"
-                                  : "border-slate-200 bg-white";
+                                  : "border-amber-200 bg-amber-50";
 
                         return (
-                          <TableCell key={key}>
+                          <TableCell key={key} className={MANUAL_CELL_CLASS}>
                             <Input
                               inputMode="decimal"
                               disabled={isSaving}
@@ -566,7 +636,7 @@ export default function AnnualForecastEntryBatchWorkspace({
                             ) : null}
                           </TableCell>
                         );
-                      })}
+                      }) : null}
                       <TableCell className="text-right font-medium">{formatPetyrCurrencyValue(company.revenue)}</TableCell>
                       <TableCell className="text-right font-medium">{formatPetyrCurrencyValue(company.planned)}</TableCell>
                       <TableCell className="text-right">{percentLabel(percentages.revenuePct)}</TableCell>
@@ -577,9 +647,9 @@ export default function AnnualForecastEntryBatchWorkspace({
                           href={buildHistoryUrl(company.companyName, batch.data.selectedYear)}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
+                          className="inline-flex min-h-10 w-[190px] items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium leading-snug text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
                         >
-                          History
+                          See latest logs of {company.companyName}
                         </a>
                       </TableCell>
                     </TableRow>
@@ -587,7 +657,7 @@ export default function AnnualForecastEntryBatchWorkspace({
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={batch.data.businessUnits.length + 11} className="bg-slate-50 py-8 text-center text-sm text-slate-500">
+                  <TableCell colSpan={visibleBusinessUnitCount + 11} className="bg-slate-50 py-8 text-center text-sm text-slate-500">
                     No companies available for this CSM.
                   </TableCell>
                 </TableRow>

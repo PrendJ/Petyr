@@ -79,6 +79,10 @@ Rules:
   Unclicked FC AI placeholders are not saved and do not contribute.
 - FC Ongoing Confidence is required on modified rows and accepts only `01 High`,
   `02 Mid` and `03 Low`.
+- Annual Entry table headers stay fixed during vertical scroll, and Customer plus Confidence stay visible during horizontal scroll.
+- The legend row includes a Business Unit collapse/show button; collapsed mode hides all BU input columns and keeps Active through Confidence plus Closed Revenue YTD through Logs visible.
+- Editable Annual Entry columns use a subtle manual-entry background, while consolidated/read-only columns remain visually quieter.
+- Annual Entry revenue/planned columns are labelled Closed Revenue YTD and Planned This Year; ratio columns explicitly use Forecast Ongoing; the history action is labelled Logs and each row link says `See latest logs of <company>`.
 - Annual Entry Planned includes future `Setup`, `Recruiting` and `Running`
   campaigns for the selected year in this workflow. This does not change the
   broader Management View planned-through-year-end rule unless a future decision
@@ -245,7 +249,7 @@ Access and audit:
 - CSM Overview: read-only.
 - CSM Overview company lists use the same recent 6-month Company Ownership
   workspace association rule as Forecast Entry portfolio lists.
-- Company Detail: analytical and read-only for forecast data edits; it can expose CSM, company, previous/next and year navigation filters backed by Forecast Entry ordering. It must not expose consultative Forecast Intelligence generation or apply numeric AI Forecast rows.
+- Company Detail: analytical and read-only for forecast data edits; it can expose CSM, company, previous/next and year navigation filters backed by Forecast Entry ordering. Revenue by Business Unit detail, Monthly forecast rows, Annual forecast rows and AI forecast cache support tables are visible only to users with `petyr:admin`. It must not expose consultative Forecast Intelligence generation or apply numeric AI Forecast rows.
 - Forecast Entry: only monthly forecast editing area; users with `petyr:forecast:write` can run consultative Forecast Intelligence from Monthly forecast, and admin users can also see the manual AI Forecast support tools.
 - Management View: aggregated, not editing; management users can manage annual Branch and Business Unit objectives at the bottom of the view.
 

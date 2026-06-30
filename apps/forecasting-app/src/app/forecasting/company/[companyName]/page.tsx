@@ -1,12 +1,16 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { requirePetyrPagePermission } from "@/lib/petyr/auth";
 import { hasPetyrPermission, PETYR_PERMISSIONS } from "@/lib/petyr/authCore";
 import { resolvePreferredCsmName } from "@/lib/petyr/csmIdentity";
 import { formatPetyrCurrencyValue, formatPetyrNumber, formatPetyrPercent } from "@/lib/petyr/formatters";
+import { saveCompanyLogNote } from "@/services/companyLogNoteService";
 import { getCompanyDetail, getCompanyDetailNavigationCompanies, type PetyrCompanyDetail } from "@/services/petyrDataService";
 import { buildPetyrCompanyAlertsFromDetail, type PetyrAlert, type PetyrAlertSeverity, type PetyrAlertType } from "@/services/petyrAlertService";
 import { CompanyBusinessUnitRevenueChart, CompanyMonthlyTrendChart } from "./CompanyDetailCharts";
@@ -36,6 +40,9 @@ type CompanyDetailPageProps = {
 };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const ACTIVE_OR_PLANNED_CAMPAIGN_STATUSES = new Set(["running", "setup", "recruiting"]);
+const COMPLETED_CAMPAIGN_STATUSES = new Set(["completed"]);
+
 const ALERT_TYPE_LABELS: Record<PetyrAlertType, string> = {
   agreement_expiring_60_days: "Agreement expiring within 60 days",
   expiredAgreementWithResidual: "Expired agreement with residual",
@@ -47,6 +54,31 @@ const ALERT_TYPE_LABELS: Record<PetyrAlertType, string> = {
   csm_forecast_below_ai_forecast: "CSM forecast below AI forecast",
   business_unit_below_historical_pace: "Business Unit below historical pace"
 };
+
+async function addCompanyLogNote(formData: FormData) {
+  "use server";
+
+  const identity = await requirePetyrPagePermission(PETYR_PERMISSIONS.forecastWrite);
+  const companyName = String(formData.get("companyName") ?? "");
+  const csmName = String(formData.get("csmName") ?? "");
+  const year = parseYearParam(String(formData.get("year") ?? "")) ?? new Date().getFullYear();
+  const activeStatusValue = String(formData.get("companyActiveStatus") ?? "");
+  const companyActiveStatus = activeStatusValue === "false" ? false : activeStatusValue === "true" ? true : null;
+  const createdBy = identity.user.displayName || identity.user.email || "Petyr user";
+
+  await saveCompanyLogNote({
+    companyName,
+    csmName,
+    year,
+    note: formData.get("note"),
+    companyActiveStatus,
+    createdBy
+  });
+
+  const href = buildCompanyDetailHref(companyName, year) + "#company-logs";
+  revalidatePath(`/forecasting/company/${encodeURIComponent(companyName)}`);
+  redirect(href);
+}
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -160,6 +192,75 @@ function alertTone(severity: PetyrAlertSeverity) {
 
 function isExpiredAgreement(row: PetyrCompanyDetail["agreements"][number]) {
   return row.status.toLowerCase() === "expired";
+}
+
+function statusKey(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function dateTimeValue(value: string | null | undefined) {
+  if (!value) return Number.NaN;
+
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? Number.NaN : time;
+}
+
+function isAgreementNotExpired(row: PetyrCompanyDetail["agreements"][number], now: Date) {
+  const expiryTime = dateTimeValue(row.expiryDate);
+  return Number.isFinite(expiryTime) && expiryTime > now.getTime();
+}
+
+function sortCampaignRows(rows: PetyrCompanyDetail["campaigns"]) {
+  return [...rows].sort((left, right) => {
+    const leftDate = dateTimeValue(left.endDate);
+    const rightDate = dateTimeValue(right.endDate);
+    const leftSafeDate = Number.isFinite(leftDate) ? leftDate : Number.NEGATIVE_INFINITY;
+    const rightSafeDate = Number.isFinite(rightDate) ? rightDate : Number.NEGATIVE_INFINITY;
+
+    return rightSafeDate - leftSafeDate || left.name.localeCompare(right.name);
+  });
+}
+
+function campaignRowKey(row: PetyrCompanyDetail["campaigns"][number], index: number) {
+  return `${row.name}-${row.endDate ?? "no-date"}-${index}`;
+}
+
+function getVisibleCampaignRows(rows: PetyrCompanyDetail["campaigns"]) {
+  const sortedRows = sortCampaignRows(rows);
+  const latestCompleted = sortedRows.find((row) => COMPLETED_CAMPAIGN_STATUSES.has(statusKey(row.status)));
+  const visibleKeys = new Set<string>();
+  const visibleRows: PetyrCompanyDetail["campaigns"] = [];
+
+  sortedRows.forEach((row, index) => {
+    const key = campaignRowKey(row, index);
+    const isActiveOrPlanned = ACTIVE_OR_PLANNED_CAMPAIGN_STATUSES.has(statusKey(row.status));
+    const isLatestCompleted = latestCompleted === row;
+
+    if (!isActiveOrPlanned && !isLatestCompleted) return;
+    visibleKeys.add(key);
+    visibleRows.push(row);
+  });
+
+  return {
+    visibleRows,
+    hiddenRows: sortedRows.filter((row, index) => !visibleKeys.has(campaignRowKey(row, index)))
+  };
+}
+
+function getVisibleAgreementRows(rows: PetyrCompanyDetail["agreements"], now: Date) {
+  const sortedRows = [...rows].sort((left, right) => {
+    const leftDate = dateTimeValue(left.expiryDate);
+    const rightDate = dateTimeValue(right.expiryDate);
+    const leftSafeDate = Number.isFinite(leftDate) ? leftDate : Number.POSITIVE_INFINITY;
+    const rightSafeDate = Number.isFinite(rightDate) ? rightDate : Number.POSITIVE_INFINITY;
+
+    return leftSafeDate - rightSafeDate || left.name.localeCompare(right.name);
+  });
+
+  return {
+    visibleRows: sortedRows.filter((row) => isAgreementNotExpired(row, now)),
+    hiddenRows: sortedRows.filter((row) => !isAgreementNotExpired(row, now))
+  };
 }
 
 function buildForecastEntryHref(companyName: string, csmName: string, year: number) {
@@ -359,7 +460,7 @@ function BusinessUnitSection({ rows }: { rows: PetyrCompanyDetail["businessUnitS
   );
 }
 
-function AgreementsSection({ rows }: { rows: PetyrCompanyDetail["agreements"] }) {
+function AgreementsTable({ rows }: { rows: PetyrCompanyDetail["agreements"] }) {
   if (rows.length === 0) return <EmptyTableState text="No agreement data is available for this company." />;
 
   return (
@@ -400,14 +501,30 @@ function AgreementsSection({ rows }: { rows: PetyrCompanyDetail["agreements"] })
   );
 }
 
-function CampaignsSection({ rows }: { rows: PetyrCompanyDetail["campaigns"] }) {
-  const sortedRows = [...rows].sort((left, right) => {
-    const leftDate = left.endDate ? Date.parse(left.endDate) : Number.NEGATIVE_INFINITY;
-    const rightDate = right.endDate ? Date.parse(right.endDate) : Number.NEGATIVE_INFINITY;
-    return rightDate - leftDate || left.name.localeCompare(right.name);
-  });
+function AgreementsSection({ rows, now }: { rows: PetyrCompanyDetail["agreements"]; now: Date }) {
+  if (rows.length === 0) return <EmptyTableState text="No agreement data is available for this company." />;
 
-  if (sortedRows.length === 0) return <EmptyTableState text="No campaigns found for this company and selected year." />;
+  const { visibleRows, hiddenRows } = getVisibleAgreementRows(rows, now);
+
+  return (
+    <div className="space-y-3">
+      <AgreementsTable rows={visibleRows} />
+      {hiddenRows.length > 0 ? (
+        <details>
+          <summary className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-50">
+            Show expired or undated agreements ({hiddenRows.length})
+          </summary>
+          <div className="mt-3">
+            <AgreementsTable rows={hiddenRows} />
+          </div>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+function CampaignsTable({ rows }: { rows: PetyrCompanyDetail["campaigns"] }) {
+  if (rows.length === 0) return <EmptyTableState text="No campaign rows match the visible criteria for this company." />;
 
   return (
     <div className="overflow-auto rounded-2xl border border-slate-200 bg-white">
@@ -427,7 +544,7 @@ function CampaignsSection({ rows }: { rows: PetyrCompanyDetail["campaigns"] }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sortedRows.map((row, index) => (
+          {rows.map((row, index) => (
             <TableRow key={`${row.name}-${index}`}>
               <TableCell className="font-medium text-slate-900">{row.name}</TableCell>
               <TableCell className="text-slate-700">{row.status}</TableCell>
@@ -463,6 +580,28 @@ function CampaignsSection({ rows }: { rows: PetyrCompanyDetail["campaigns"] }) {
           ))}
         </TableBody>
       </Table>
+    </div>
+  );
+}
+
+function CampaignsSection({ rows }: { rows: PetyrCompanyDetail["campaigns"] }) {
+  if (rows.length === 0) return <EmptyTableState text="No campaigns found for this company and selected year." />;
+
+  const { visibleRows, hiddenRows } = getVisibleCampaignRows(rows);
+
+  return (
+    <div className="space-y-3">
+      <CampaignsTable rows={visibleRows} />
+      {hiddenRows.length > 0 ? (
+        <details>
+          <summary className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-50">
+            Show all other campaigns ({hiddenRows.length})
+          </summary>
+          <div className="mt-3">
+            <CampaignsTable rows={hiddenRows} />
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }
@@ -671,7 +810,9 @@ function ChangeHistoryList({ rows }: { rows: PetyrCompanyDetail["changeHistory"]
             <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
               <div>
                 <div className="font-medium text-slate-900">
-                  Save session · {forecastTypeLabel(session.forecastType)} · {monthLabel(session.month)} {session.year}
+                  {session.source === "Company Detail Note"
+                    ? `Company note · ${monthLabel(session.month)} ${session.year}`
+                    : `Save session · ${forecastTypeLabel(session.forecastType)} · ${monthLabel(session.month)} ${session.year}`}
                 </div>
                 <div className="mt-1 text-xs text-slate-500">
                   {formatDateTime(session.createdAt)} · from {session.source} · by {session.createdBy}
@@ -726,15 +867,15 @@ function ChangeHistoryList({ rows }: { rows: PetyrCompanyDetail["changeHistory"]
 }
 
 function ChangeHistorySection({ rows }: { rows: PetyrCompanyDetail["changeHistory"] }) {
-  if (rows.length === 0) return <EmptyTableState text="No forecast change history is available for this company." />;
+  if (rows.length === 0) return <EmptyTableState text="No company logs are available for this company." />;
 
-  const latestRows = rows.slice(0, 2);
-  const olderRows = rows.slice(2);
+  const latestRows = rows.slice(0, 3);
+  const olderRows = rows.slice(3);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
       <div className="text-xs text-slate-500">
-        Changes are grouped by save session. The latest two save sessions are shown by default.
+        Logs are grouped by save session or company note. The latest three logs are shown by default.
       </div>
       <div className="mt-4">
         <ChangeHistoryList rows={latestRows} />
@@ -742,7 +883,7 @@ function ChangeHistorySection({ rows }: { rows: PetyrCompanyDetail["changeHistor
       {olderRows.length > 0 ? (
         <details className="mt-4">
           <summary className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-50">
-            Show full history
+            Show previous logs ({olderRows.length})
           </summary>
           <div className="mt-3">
             <ChangeHistoryList rows={olderRows} />
@@ -752,6 +893,32 @@ function ChangeHistorySection({ rows }: { rows: PetyrCompanyDetail["changeHistor
     </div>
   );
 }
+
+function CompanyNoteSection({
+  companyName,
+  csmName,
+  selectedYear,
+  activeStatus
+}: {
+  companyName: string;
+  csmName: string;
+  selectedYear: number;
+  activeStatus: boolean | null;
+}) {
+  return (
+    <form action={addCompanyLogNote} className="space-y-3">
+      <input type="hidden" name="companyName" value={companyName} />
+      <input type="hidden" name="csmName" value={csmName} />
+      <input type="hidden" name="year" value={selectedYear} />
+      <input type="hidden" name="companyActiveStatus" value={activeStatus === null ? "" : String(activeStatus)} />
+      <Textarea name="note" maxLength={4000} placeholder="Add a company note..." required />
+      <button className="inline-flex h-10 items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800" type="submit">
+        Add note
+      </button>
+    </form>
+  );
+}
+
 
 export default async function CompanyDetailPage({ params, searchParams }: CompanyDetailPageProps) {
   const identity = await requirePetyrPagePermission(PETYR_PERMISSIONS.read);
@@ -802,12 +969,13 @@ export default async function CompanyDetailPage({ params, searchParams }: Compan
   const alertsResult = buildPetyrCompanyAlertsFromDetail(data, displayCompanyName, { year: selectedYear, diagnostics: result.diagnostics });
   const diagnostics = [...new Set([...yearDiagnostics, ...result.diagnostics, ...alertsResult.diagnostics, ...navigationResult.diagnostics])];
   const canViewAdminTools = hasPetyrPermission(identity, PETYR_PERMISSIONS.admin);
+  const canAddCompanyNotes = hasPetyrPermission(identity, PETYR_PERMISSIONS.forecastWrite);
 
   return (
     <PetyrWorkspaceShell activeSection="company" companyDetailHref={companyDetailHref} forecastEntryHref={forecastEntryHref}>
       <PetyrSectionTitle
         title="Company Detail"
-        description={`Analytical company sheet for ${displayCompanyName}: agreement, closed revenue, residual, AI and change history context.`}
+        description={`Analytical company sheet for ${displayCompanyName}: agreement, closed revenue, residual, AI and company logs context.`}
         actions={
           <>
             <Badge variant={activeStatus === false ? "outline" : "secondary"}>Forecast status: {statusLabel(activeStatus)}</Badge>
@@ -842,25 +1010,36 @@ export default async function CompanyDetailPage({ params, searchParams }: Compan
       </PetyrTwoColumnGrid>
 
       <SectionCard
-        title="Business Unit month-by-month view"
-        description="Expandable monthly view by Business Unit with closed revenue, previous-month forecast, ongoing forecast and AI Forecast."
+        title="Business Unit current-year view"
+        description="Current-year Business Unit totals. Expand a Business Unit to show the individual months and review the monthly view with closed revenue, previous-month forecast, ongoing forecast and AI Forecast."
       >
         <CompanyBusinessUnitMonthlyView rows={data.monthlyBusinessUnitView} />
       </SectionCard>
+
+{canAddCompanyNotes ? (
+        <SectionCard title="Company note" description="Add a note to this company log without opening Forecast Entry or changing forecast values.">
+        <CompanyNoteSection
+          companyName={displayCompanyName}
+          csmName={csmName}
+          selectedYear={selectedYear}
+          activeStatus={activeStatus ?? null}
+        />
+      </SectionCard>
+      ) : null}
 
       <SectionCard title="Relevant company insights" description="Only active rule-based insight evidence is shown for this company.">
         <AlertsSection rows={alertsResult.data} />
       </SectionCard>
 
-      <SectionCard title="Company campaigns" description="Campaign rows come from the latest PostgreSQL materialized data and are filtered by selected year.">
+      <SectionCard title="Company campaigns" description="Shows the latest chronologically completed campaign plus campaigns that are running or planned. Other campaign rows are available by expanding the section.">
         <CampaignsSection rows={data.campaigns} />
       </SectionCard>
 
-      <SectionCard title="Agreements and residual evidence" description="Agreement value, residual and expiry evidence for the selected company.">
-        <AgreementsSection rows={data.agreements} />
+      <SectionCard title="Agreements and residual evidence" description="Shows only agreements whose expiry date is after the moment of viewing. Expired or undated rows are available by expanding the section.">
+        <AgreementsSection rows={data.agreements} now={new Date()} />
       </SectionCard>
 
-      <SectionCard id="history-changes" title="Change history" description="Latest forecast save sessions and grouped Business Unit changes.">
+      <SectionCard id="company-logs" title="Company logs" description="Contains all notes and forecast changes made for this company.">
         <ChangeHistorySection rows={data.changeHistory} />
       </SectionCard>
 
@@ -875,21 +1054,25 @@ export default async function CompanyDetailPage({ params, searchParams }: Compan
           <SecondaryCompanyContextSection selectedYear={selectedYear} data={data} />
         </PetyrSupportCard>
 
-        <PetyrSupportCard title="Revenue by Business Unit detail" description="Read-only company totals by official Business Unit for the selected year." badge="Evidence">
-          <BusinessUnitSection rows={data.businessUnitSummary} />
-        </PetyrSupportCard>
+        {canViewAdminTools ? (
+          <>
+            <PetyrSupportCard title="Revenue by Business Unit detail" description="Read-only company totals by official Business Unit for the selected year." badge="Evidence">
+              <BusinessUnitSection rows={data.businessUnitSummary} />
+            </PetyrSupportCard>
 
-        <PetyrSupportCard title="Monthly forecast rows" description="Saved CSM monthly forecast rows are shown read-only here; edit them only in Forecast Entry." badge="Support">
-          <MonthlyForecastSection rows={data.monthlyForecasts} />
-        </PetyrSupportCard>
+            <PetyrSupportCard title="Monthly forecast rows" description="Saved CSM monthly forecast rows are shown read-only here; edit them only in Forecast Entry." badge="Support">
+              <MonthlyForecastSection rows={data.monthlyForecasts} />
+            </PetyrSupportCard>
 
-        <PetyrSupportCard title="Annual forecast rows" description="CSM-owned annual forecast rows by Business Unit and year, including draft or consolidated state. These are not Management Objectives." badge="Support">
-          <AnnualForecastSection rows={data.annualForecasts} />
-        </PetyrSupportCard>
+            <PetyrSupportCard title="Annual forecast rows" description="CSM-owned annual forecast rows by Business Unit and year, including draft or consolidated state. These are not Management Objectives." badge="Support">
+              <AnnualForecastSection rows={data.annualForecasts} />
+            </PetyrSupportCard>
 
-        <PetyrSupportCard title="AI forecast cache" description="Generated AI forecast suggestions saved in ai_forecast_cache. They are read-only here; generate or apply AI Forecast only in Forecast Entry." badge="Support">
-          <AiForecastCacheSection rows={data.aiForecasts} />
-        </PetyrSupportCard>
+            <PetyrSupportCard title="AI forecast cache" description="Generated AI forecast suggestions saved in ai_forecast_cache. They are read-only here; generate or apply AI Forecast only in Forecast Entry." badge="Support">
+              <AiForecastCacheSection rows={data.aiForecasts} />
+            </PetyrSupportCard>
+          </>
+        ) : null}
       </section>
 
       {canViewAdminTools ? <PetyrFloatingDiagnosticsMenu diagnostics={diagnostics} /> : null}

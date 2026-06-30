@@ -48,9 +48,11 @@ function forecastTypeLabel(forecastType: string | null) {
   return "Forecast";
 }
 
-function buildBatchUrl(csmName: string) {
+function buildBatchUrl(csmName: string, year: number, month: number) {
   const params = new URLSearchParams();
   if (csmName) params.set("csmName", csmName);
+  params.set("year", String(year));
+  params.set("month", String(month));
   const query = params.toString();
   return query ? `/api/petyr/forecast-entry/batch?${query}` : "/api/petyr/forecast-entry/batch";
 }
@@ -64,9 +66,11 @@ function buildAnnualBatchUrl(csmName: string, year?: string) {
 }
 
 
-function buildEntryPageUrl(csmName: string) {
+function buildEntryPageUrl(csmName: string, year?: number, month?: number) {
   const params = new URLSearchParams();
   if (csmName) params.set("csmName", csmName);
+  if (year) params.set("year", String(year));
+  if (month) params.set("month", String(month));
   const query = params.toString();
   return query ? `/forecasting/entry?${query}` : "/forecasting/entry";
 }
@@ -184,6 +188,8 @@ export default function ForecastEntryMonthlyBatchWorkspace({
 }) {
   const [batch, setBatch] = useState(initialBatch);
   const [selectedCsm, setSelectedCsm] = useState(initialBatch.data.selectedCsm);
+  const [draftMonth, setDraftMonth] = useState(String(initialBatch.data.month));
+  const [draftYear, setDraftYear] = useState(String(initialBatch.data.year));
   const [expandedBusinessUnits, setExpandedBusinessUnits] = useState<Set<string>>(() => new Set());
   const [values, setValues] = useState<Record<string, string>>(() => valuesFromBatch(initialBatch));
   const [sourceStates, setSourceStates] = useState<Record<string, SourceState | undefined>>({});
@@ -211,7 +217,9 @@ export default function ForecastEntryMonthlyBatchWorkspace({
     setValues(valuesFromBatch(batch));
     setSourceStates({});
     setNotes({});
-    window.history.replaceState(null, "", buildEntryPageUrl(batch.data.selectedCsm));
+    setDraftMonth(String(batch.data.month));
+    setDraftYear(String(batch.data.year));
+    window.history.replaceState(null, "", buildEntryPageUrl(batch.data.selectedCsm, batch.data.year, batch.data.month));
   }, [batch]);
 
   useEffect(() => {
@@ -253,13 +261,13 @@ export default function ForecastEntryMonthlyBatchWorkspace({
     });
   }
 
-  async function loadBatch(csmName: string) {
+  async function loadBatch(csmName: string, year = batch.data.year, month = batch.data.month) {
     setSelectedCsm(csmName);
     setIsLoading(true);
     setNotice(null);
 
     try {
-      const response = await fetch(buildBatchUrl(csmName), { cache: "no-store" });
+      const response = await fetch(buildBatchUrl(csmName, year, month), { cache: "no-store" });
       const payload = (await response.json()) as ForecastEntryBatchDataResult;
 
       if (!response.ok) {
@@ -289,6 +297,18 @@ export default function ForecastEntryMonthlyBatchWorkspace({
     }
   }
 
+
+  async function loadSelectedPeriod() {
+    const year = Number(draftYear);
+    const month = Number(draftMonth);
+
+    if (!Number.isInteger(year) || year < 2000 || year > 2100 || !Number.isInteger(month) || month < 1 || month > 12) {
+      setNotice({ type: "error", text: "Select a valid month and year before loading." });
+      return;
+    }
+
+    await loadBatch(batch.data.selectedCsm, year, month);
+  }
   async function loadAnnualBatchIfNeeded() {
     if (annualBatch || isAnnualLoading) return;
 
@@ -411,12 +431,14 @@ export default function ForecastEntryMonthlyBatchWorkspace({
   const tableColumnCount = useMemo(() => {
     return 2 + batch.data.businessUnits.reduce((sum, businessUnit) => sum + (expandedBusinessUnits.has(businessUnit) ? 3 : 1), 0);
   }, [batch.data.businessUnits, expandedBusinessUnits]);
+  const periodSelectionChanged = draftMonth !== String(batch.data.month) || draftYear !== String(batch.data.year);
+
 
   return (
     <PetyrWorkspaceShell
       activeSection="entry"
       companyDetailHref={companyDetailHref}
-      forecastEntryHref={buildEntryPageUrl(batch.data.selectedCsm)}
+      forecastEntryHref={buildEntryPageUrl(batch.data.selectedCsm, batch.data.year, batch.data.month)}
       contentClassName="max-w-[1800px]"
     >
       <section>
@@ -458,7 +480,7 @@ export default function ForecastEntryMonthlyBatchWorkspace({
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="sticky top-0 z-40 space-y-4 border-b border-slate-200 bg-white/95 pb-4 pt-1 backdrop-blur">
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-end">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_150px_120px_auto_minmax(0,1fr)] lg:items-end">
               <PetyrSelectField
                 label="CSM"
                 disabled={isLoading || isSaving}
@@ -473,10 +495,46 @@ export default function ForecastEntryMonthlyBatchWorkspace({
                   </option>
                 ))}
               </PetyrSelectField>
+              <PetyrSelectField
+                label="Month"
+                disabled={isLoading || isSaving}
+                value={draftMonth}
+                onChange={(event) => setDraftMonth(event.target.value)}
+              >
+                {MONTHS.map((label, index) => (
+                  <option key={label} value={String(index + 1)}>
+                    {label}
+                  </option>
+                ))}
+              </PetyrSelectField>
+              <label className="space-y-1 text-sm font-medium text-slate-700">
+                Year
+                <Input
+                  type="number"
+                  min={2000}
+                  max={2100}
+                  step={1}
+                  disabled={isLoading || isSaving}
+                  value={draftYear}
+                  onChange={(event) => setDraftYear(event.target.value)}
+                  className="h-10 rounded-xl bg-white"
+                />
+              </label>
+              <Button
+                type="button"
+                variant={periodSelectionChanged ? "default" : "outline"}
+                disabled={isLoading || isSaving}
+                onClick={() => {
+                  void loadSelectedPeriod();
+                }}
+                className="h-10 rounded-xl px-5"
+              >
+                {isLoading ? "Loading" : "Load"}
+              </Button>
               <PetyrInlineNotice tone={isLocked ? "warning" : "success"}>
                 {isLocked
                   ? batch.data.entryMode.reason
-                  : `${activeLabel} is editable for the current server month. Other forecast fields and Closed Revenue YTD are read-only.`}
+                  : `${activeLabel} is editable for ${selectedMonthLabel}. Other forecast fields and Closed Revenue YTD are read-only.`}
               </PetyrInlineNotice>
             </div>
 

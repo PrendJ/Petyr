@@ -81,14 +81,10 @@ export function CompanyBusinessUnitMonthlyView({ rows }: { rows: CompanyBusiness
         return (
           <PetyrCard key={row.businessUnit} className="bg-white">
             <div className="space-y-4 p-4">
-              <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_170px_170px_170px_170px_auto] xl:items-center">
+              <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_170px_170px_170px_auto] xl:items-center">
                 <div>
                   <div className="text-sm font-semibold text-slate-900">{row.businessUnit}</div>
                   <div className="mt-1 text-xs text-slate-500">{monthsWithData} month(s) with source-backed values.</div>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-3">
-                  <div className="text-xs text-slate-500">Previous-month forecast</div>
-                  <div className="text-base font-semibold text-slate-900">{formatMoney(totalFor(row, "previousMonthForecast"))}</div>
                 </div>
                 <div className="rounded-xl bg-slate-50 p-3">
                   <div className="text-xs text-slate-500">Ongoing forecast</div>
@@ -99,7 +95,7 @@ export function CompanyBusinessUnitMonthlyView({ rows }: { rows: CompanyBusiness
                   <div className="text-base font-semibold text-slate-900">{formatMoney(totalFor(row, "aiForecast"))}</div>
                 </div>
                 <div className="rounded-xl bg-slate-50 p-3">
-                  <div className="text-xs text-slate-500">Closed revenue</div>
+                  <div className="text-xs text-slate-500">Closed Revenue YTD</div>
                   <div className="text-base font-semibold text-slate-900">{formatMoney(totalFor(row, "actualRevenue"))}</div>
                 </div>
                 <Button variant="outline" className="rounded-xl" type="button" onClick={() => setExpandedBusinessUnit(isExpanded ? null : row.businessUnit)}>

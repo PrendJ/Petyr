@@ -37,6 +37,8 @@ export class ForecastEntryBatchError extends Error {
 export type ForecastEntryBatchQuery = {
   csmName?: unknown;
   preferredCsmName?: unknown;
+  year?: unknown;
+  month?: unknown;
   warmup?: unknown;
 };
 
@@ -160,6 +162,30 @@ function currentServerPeriod() {
   };
 }
 
+function parseOptionalPeriod(input: ForecastEntryBatchQuery) {
+  const current = currentServerPeriod();
+  const requestedYear = Number(input.year);
+  const requestedMonth = Number(input.month);
+  const hasRequestedMonth = Number.isInteger(requestedMonth) && requestedMonth >= 1 && requestedMonth <= 12;
+  const hasRequestedYear = Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= 2100;
+
+  return {
+    year: hasRequestedMonth && hasRequestedYear ? requestedYear : current.year,
+    month: hasRequestedMonth ? requestedMonth : current.month
+  };
+}
+
+function parseRequiredTargetPeriod(input: ForecastEntryBatchSaveInput) {
+  const year = Number(input.year);
+  const month = Number(input.month);
+
+  if (!Number.isInteger(year) || year < 2000 || year > 2100 || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new ForecastEntryBatchError("Forecast Entry batch save requires a valid target year and month.", 400);
+  }
+
+  return { year, month };
+}
+
 function decimalToLogValue(value: Prisma.Decimal | null | undefined) {
   return value === null || value === undefined ? null : value.toFixed(2);
 }
@@ -252,7 +278,7 @@ function companyFromContext(context: PetyrForecastEntryContext, fallback: Compan
 }
 
 export async function getForecastEntryBatch(input: ForecastEntryBatchQuery = {}): Promise<ForecastEntryBatchDataResult> {
-  const { year, month } = currentServerPeriod();
+  const { year, month } = parseOptionalPeriod(input);
   const finishPerformance = startPetyrPerformanceTimer("getForecastEntryBatch", {
     year,
     month,
@@ -350,17 +376,6 @@ export async function getForecastEntryBatch(input: ForecastEntryBatchQuery = {})
   }
 }
 
-function parseRequiredCurrentPeriod(input: ForecastEntryBatchSaveInput) {
-  const current = currentServerPeriod();
-  const year = Number(input.year);
-  const month = Number(input.month);
-
-  if (year !== current.year || month !== current.month) {
-    throw new ForecastEntryBatchError("Forecast Entry batch save can only target the current server month.", 400);
-  }
-
-  return current;
-}
 
 function validateForecastType(input: ForecastEntryBatchSaveInput, year: number, month: number) {
   const mode = getForecastEntryMode({ year, month });
@@ -371,7 +386,7 @@ function validateForecastType(input: ForecastEntryBatchSaveInput, year: number, 
   }
 
   if (requestedForecastType && requestedForecastType !== mode.editableForecastType) {
-    throw new ForecastEntryBatchError(`Only ${mode.editableForecastType} can be saved for the current month.`, 423, mode);
+    throw new ForecastEntryBatchError(`Only ${mode.editableForecastType} can be saved for the selected month.`, 423, mode);
   }
 
   return mode.editableForecastType;
@@ -453,7 +468,7 @@ function monthlyForecastFor(context: PetyrForecastEntryContext, businessUnit: Pe
 }
 
 export async function saveForecastEntryBatch(input: ForecastEntryBatchSaveInput): Promise<ForecastEntryBatchSaveResult> {
-  const { year, month } = parseRequiredCurrentPeriod(input);
+  const { year, month } = parseRequiredTargetPeriod(input);
   const forecastType = validateForecastType(input, year, month);
   const csmName = asString(input.csmName);
   if (!csmName) {
@@ -603,6 +618,6 @@ export async function saveForecastEntryBatch(input: ForecastEntryBatchSaveInput)
     companiesSaved: written.saveSessionIds.length,
     noChanges: written.saveSessionIds.length === 0,
     message: written.saveSessionIds.length === 0 ? NO_CHANGES_DETECTED_MESSAGE : undefined,
-    batch: await getForecastEntryBatch({ csmName })
+    batch: await getForecastEntryBatch({ csmName, year, month })
   };
 }

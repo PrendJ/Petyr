@@ -59,7 +59,7 @@ grouped and counted in the menu, and the menu must link to `/petyr-admin` Data
 Health. The floating diagnostics menu and its operator links are visible only to
 users with `petyr:admin`.
 
-`/forecasting` may render a lightweight shell immediately after page permission checks and then refresh PostgreSQL-backed rendering data through protected API route `GET /api/petyr/forecasting/rendering-data`. The endpoint accepts optional `view=management|csm|csm-scoped|all` and `year=YYYY`: on normal app open the browser must request Management first, mark the workspace usable when Management data arrives, then start Forecast Entry Monthly/Annual warmup for users with `petyr:forecast:write`; admin users also start scoped CSM Overview preload for the authenticated/preferred CSM. It must not hydrate `view=all` as the immediate second step after Management. During the Management refresh, Petyr must show a minimal fixed bottom-left loading state so users know data is updating. Forecast Entry Monthly/Annual warmup is best-effort and available for users with `petyr:forecast:write`. The shell and partial view payloads are only temporary rendering states: final Management and CSM data must still come from PostgreSQL-backed Petyr services, diagnostics must remain visible to admins, and Forecasting must not call Redash directly. Company Detail remains on-demand and should load only the selected company/year rather than preloading every company from `/forecasting`.
+`/forecasting` may render a lightweight shell immediately after page permission checks and then refresh PostgreSQL-backed rendering data through protected API route `GET /api/petyr/forecasting/rendering-data`. The endpoint accepts optional `view=management|csm|csm-scoped|all` and `year=YYYY`: on normal app open the browser must request Management first, mark the workspace usable when Management data arrives, then start Forecast Entry Monthly/Annual warmup for users with `petyr:forecast:write`; admin users also start scoped CSM Overview preload for the authenticated/preferred CSM. It must not hydrate `view=all` as the immediate second step after Management. During the Management refresh, Petyr must show only the shared workspace header, section navigator and an in-page loader labelled `Updating data ongoing`, so users know Branch, CSM and Business Unit Management data is updating before the dashboard appears. Forecast Entry Monthly/Annual warmup is best-effort and available for users with `petyr:forecast:write`. The shell and partial view payloads are only temporary rendering states: final Management and CSM data must still come from PostgreSQL-backed Petyr services, diagnostics must remain visible to admins, and Forecasting must not call Redash directly. Company Detail remains on-demand and should load only the selected company/year rather than preloading every company from `/forecasting`.
 
 The Petyr workspace shell must be shared across Management View, CSM Overview, Company Detail and Forecast Entry: one descriptive header card, one section navigator and route-aware links. The header card title and supporting copy must describe what the active view offers, so users can understand the page immediately. CSM Overview is temporarily in development and must be visible/accessible only to users with `petyr:admin`; non-admin users must not see its navigator item, must stay on Management when requesting `?view=csm`, and must not receive CSM Overview rendering payloads. For admins, the top-level workspace switches Management/CSM through `?view=management|csm`; Company Detail and Forecast Entry use dedicated routes with query parameters when context is available.
 
@@ -108,6 +108,9 @@ apps/forecasting-app/src/services/petyrDataService.ts
 ```
 
 It reads from PostgreSQL materialized Redash latest tables and Petyr forecast tables.
+Company Detail campaign display names use
+`redash_raw_master_campaigns_latest.customer_title`, while the UI label remains
+`Campaign name`.
 When materialized Redash columns cannot be resolved through `redash_column_mapping`,
 the service returns diagnostics and keeps the UI on a safe fallback path.
 
@@ -199,8 +202,8 @@ Annual sections.
 
 Normal `/forecasting/entry` requires `petyr:forecast:write` and is accessible to
 users who can write CSM forecasts. It no longer shows the old full single-company
-editor. The Monthly section works only on the current server month/year, exposes
-only a CSM filter, and renders the selected CSM's companies in one batch table.
+editor. The Monthly section defaults to the current server month/year, exposes
+a CSM filter plus Month and Year controls, and renders the selected CSM's companies in one batch table. Changing CSM reloads immediately from the CSM dropdown; changing Month or Year requires pressing the same-row `Load` button.
 The Annual section is separate, exposes CSM and Year filters, and renders the current annual portfolio for the selected annual cycle. The Monthly and Annual CSM selectors stay synchronized: changing either selector reloads the other section to the same selected CSM when both sections are loaded.
 
 Normal Forecast Entry must not expose a company filter, Forecast Intelligence,
@@ -219,7 +222,7 @@ company selector, active/inactive toggle, AI/admin support tools and change
 history.
 
 The normal batch page is the only non-admin area where monthly CSM forecast
-values can be edited. It reads CSM options, current server month/year, official
+values can be edited. It reads CSM options, selected monthly target year/month, official
 Business Units, CSM-owned companies, Redash-derived Closed Revenue,
 previous-month forecast, ongoing forecast and AI forecast reference metadata
 through:
@@ -228,7 +231,7 @@ through:
 GET /api/petyr/forecast-entry/batch
 ```
 
-The batch read endpoint requires `petyr:read`. It must use a portfolio-scoped PostgreSQL read model for the selected CSM and current server period, not one full per-company Forecast Entry context read per customer.
+The batch read endpoint requires `petyr:read`. It must use a portfolio-scoped PostgreSQL read model for the selected CSM and selected monthly target period, not one full per-company Forecast Entry context read per customer.
 
 Annual Forecast Entry reads the selected annual portfolio, annual year options, official Business
 Units, customer active status, customer + year metadata, saved annual BU values,
@@ -249,18 +252,19 @@ GET /api/petyr/forecast-entry
 ```
 
 `/forecasting/entry` remains directly navigable. Optional `csmName` can preselect
-the CSM. Optional `year` can preselect the Annual Forecast Entry year. Company
-and month query parameters are ignored by the normal page because the normal
-workflow is CSM batch entry, not single-company editing.
+the CSM. Optional `year` can preselect the Annual Forecast Entry year. Optional
+`month`, together with `year`, can preselect the Monthly Forecast Entry period.
+Company query parameters are ignored by the normal page because the normal workflow is CSM batch entry, not single-company editing.
 
 Forecast Entry uses the shared Petyr workspace shell. The shared workspace header
 must expose a top-right `?` help control in every workspace section and link to
-the dedicated `/forecasting/entry/faq` page. The FAQ page explains forecast
-urgency ordering, monthly editability, deterministic preview, baseline
-calculations, residual pressure, rule-based alerts and Forecast Intelligence
-boundaries without changing formulas or persistence behavior. It must keep the
-same four-section workspace header/navigation available so users can continue
-navigating.
+the dedicated `/forecasting/entry/faq` page, with visible `FAQ` text next to the
+question mark. The FAQ page explains Forecast Ongoing, Previous Month Forecast,
+Forecast Initial, logs, input deadline windows, forecast urgency ordering,
+monthly editability, deterministic preview, baseline calculations, residual
+pressure, rule-based alerts and Forecast Intelligence boundaries without changing
+formulas or persistence behavior. It must keep the same four-section workspace
+header/navigation available so users can continue navigating.
 
 Normal batch table rules:
 - rows are companies/customers associated to the selected CSM through
@@ -317,8 +321,14 @@ Annual Forecast Entry rules:
 - ordering is active customers first, then inactive customers with Revenue or
   Planned, then inactive customers without Revenue or Planned;
 - inactive rows remain visible with muted styling;
-- customer names link to Company Detail; the History action opens Company Detail
-  at the change-history anchor in a new tab;
+- customer names link to Company Detail; the Logs action opens Company Detail
+  at the company logs anchor in a new tab and is labelled `See latest logs of <company>`;
+- the Customer and Confidence columns remain visible during horizontal scroll,
+  and table headers stay fixed during vertical scroll;
+- a button to the right of the legend collapses or shows all Business Unit columns,
+  so the collapsed table shows only Active through Confidence and Closed Revenue YTD through Logs;
+- editable/manual-entry columns use a subtle manual-entry background to distinguish
+  CSM-entered or to-be-entered values from consolidated/read-only data;
 - active status is a manual toggle persisted through `company_forecast_status`;
 - Forecast Initial is stored in `forecast_annual_entry.initial_forecast`, editable only
   from December 10 of year N-1 through January 10 of year N, and read-only
@@ -333,13 +343,16 @@ Annual Forecast Entry rules:
   value;
 - Forecast Ongoing is derived as the sum of saved/confirmed BU values, not from the
   old Excel BU formula;
-- Revenue is selected-year campaign revenue closed through today, read from
+- a compact horizontally scrollable summary row above the legend and table shows
+  the selected CSM total forecast for the selected year plus one total for each
+  official Business Unit, using the same live Annual Entry values shown in the table;
+- Closed Revenue YTD is selected-year campaign revenue closed through today, read from
   PostgreSQL-backed materialized data;
-- Planned is selected-year campaign revenue with end date from tomorrow through
+- Planned This Year is selected-year campaign revenue with end date from tomorrow through
   December 31 and status `Setup`, `Recruiting` or `Running`, read from the same
   PostgreSQL-backed materialized data for this Annual Entry workflow;
-- percentages are `Revenue / Forecast Ongoing`, `Planned / Forecast Ongoing`, and
-  `1 - Revenue% - Planned%`, with `n/a` when Forecast Ongoing is zero or missing;
+- percentages are labelled `Revenue / Forecast Ongoing`, `Planned / Forecast Ongoing`, and
+  `Uncovered / Forecast Ongoing`, with `n/a` when Forecast Ongoing is zero or missing;
 - each effective annual save creates `forecast_save_session` and
   `forecast_change_log` audit rows with source `Annual Forecast Entry`;
 - annual saves reject unconfirmed placeholders, negative/non-numeric BU values,
@@ -350,7 +363,7 @@ Annual Forecast Entry rules:
   the normal Forecast Entry workflow.
 
 Batch save rules:
-- current server month/year is validated server-side;
+- selected month/year is validated server-side;
 - editability is validated with `getForecastEntryMode`;
 - only the currently editable monthly forecast type is accepted;
 - official Petyr Business Units are required;
@@ -492,15 +505,14 @@ Sections:
 - active agreements, agreement value, agreement residual and agreement expiry date;
 - monthly revenue trend;
 - revenue by Business Unit, including closed-revenue bars, gray Initial Forecast markers and Previous-month forecast markers colored green when above Initial Forecast, yellow when below it and neutral when aligned;
-- Business Unit month-by-month view across 12 selected-year months with closed revenue, previous-month forecast, ongoing forecast and AI Forecast;
+- Business Unit current-year view showing Business Unit totals with Ongoing Forecast, AI Forecast and Closed Revenue YTD; users can expand a Business Unit to show the individual selected-year months with closed revenue, previous-month forecast, ongoing forecast and AI Forecast;
 - relevant company insights, showing only active rule-based insight categories and omitting zero-count categories;
-- campaign detail table with campaign name, status, Business Unit, agreement, value, costs, GM% and campaign link, ordered by End Date descending with missing End Date rows last;
-- agreement table ordered with active, non-expired agreements first and nearest expiry date first, then residual, total value and name tie-breakers;
-- forecast change history grouped by save session, placed directly below Agreements and residual evidence, showing the latest two save sessions by default with an explicit expansion control for older history;
-- monthly forecast rows: saved CSM monthly rows, read-only here;
-- annual forecast rows: CSM-owned annual forecast rows by Business Unit/year, draft or consolidated, not Management Objectives;
+- company note form below Business Unit current-year view and above Relevant company insights, saving note-only company log entries without opening Forecast Entry or changing forecast values;
+- campaign detail table with campaign name, status, Business Unit, agreement, value, costs, GM% and campaign link; by default it shows the latest chronologically completed campaign plus running or planned campaigns, while all other campaigns are available behind an explicit expansion control;
+- agreement table showing only agreements whose expiry date is after the moment of viewing by default, while expired or undated agreements remain available behind an explicit expansion control;
+- Company logs grouped by save session or company note, placed directly below Agreements and residual evidence, showing the latest three logs by default with an explicit expansion control for previous logs;
 - company active status;
-- AI forecast cache: generated suggestions in `ai_forecast_cache`, read-only here.
+- admin-only Revenue by Business Unit detail, Monthly forecast rows, Annual forecast rows and AI forecast cache support tables.
 
 This page reads PostgreSQL through `getCompanyDetail(companyName, year)` and does not
 call Redash directly. Forecast editing belongs only in `/forecasting/entry`;

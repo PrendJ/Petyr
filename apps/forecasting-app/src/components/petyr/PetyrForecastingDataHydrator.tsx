@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import PetyrMVPRendering from "@/components/petyr/PetyrMVPRendering";
 import { PetyrForecastEntryPreloader } from "@/components/petyr/PetyrForecastEntryPreloader";
-import { Button } from "@/components/ui/button";
 import { resolvePreferredCsmName } from "@/lib/petyr/csmIdentity";
 import type { PetyrApprovedRenderingData } from "@/types/petyrApprovedRendering";
 
@@ -103,8 +102,6 @@ export function PetyrForecastingDataHydrator({
   }, [activeView, attempt, canViewAdminTools]);
 
   const preferredCsmName = useMemo(() => preferredCsm(data, userDisplayName), [data, userDisplayName]);
-  const isLoading = loadState === "loading";
-  const hasError = loadState === "error";
 
   return (
     <>
@@ -116,20 +113,10 @@ export function PetyrForecastingDataHydrator({
         canViewAdminTools={canViewAdminTools}
         canViewCsmOverview={canViewAdminTools}
         canManageObjectives={canManageObjectives}
+        renderingState={loadState}
+        onRetryRenderingData={() => setAttempt((value) => value + 1)}
       />
       <PetyrForecastEntryPreloader csmName={preferredCsmName} enabled={canWriteForecast && backgroundPreloadEnabled} />
-      {loadState !== "ready" ? (
-        <div className="fixed bottom-4 left-4 z-50 flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-lg shadow-slate-900/10">
-          {isLoading ? <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-sky-500" aria-hidden="true" /> : null}
-          {hasError ? <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" aria-hidden="true" /> : null}
-          <span>{isLoading ? "Aggiornamento dati in corso..." : "Aggiornamento dati non riuscito."}</span>
-          {hasError ? (
-            <Button variant="outline" className="h-7 px-2 text-xs" onClick={() => setAttempt((value) => value + 1)}>
-              Riprova
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
     </>
   );
 }

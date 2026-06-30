@@ -18,7 +18,8 @@ function firstParam(value: string | string[] | undefined) {
 function getForecastEntryQuery(searchParams: SearchParams) {
   return {
     csmName: firstParam(searchParams.csmName)?.trim() ?? "",
-    year: firstParam(searchParams.year)?.trim() ?? ""
+    year: firstParam(searchParams.year)?.trim() ?? "",
+    month: firstParam(searchParams.month)?.trim() ?? ""
   };
 }
 
@@ -28,7 +29,9 @@ export default async function ForecastEntryPage({ searchParams }: ForecastEntryP
   const query = getForecastEntryQuery(resolvedSearchParams);
   const initialBatch = await getForecastEntryBatch({
     csmName: query.csmName,
-    preferredCsmName: identity.user.displayName
+    preferredCsmName: identity.user.displayName,
+    year: query.year,
+    month: query.month
   });
 
   return <ForecastEntryMonthlyBatchWorkspace initialBatch={initialBatch} initialAnnualYear={query.year} />;

@@ -20,7 +20,8 @@ This base app includes:
 - health API;
 - first DB preview API.
 
-`/forecasting` renders a lightweight shell immediately after Petyr read permission checks, then loads Management first from `GET /api/petyr/forecasting/rendering-data?view=management` in the browser. CSM Overview is currently in development and is visible/accessible only to users with `petyr:admin`; non-admin users are kept on Management and do not see the CSM Overview navigator item or preload its data. For admins, after Management is usable, the client starts scoped CSM Overview preload through `view=csm-scoped` for the authenticated/preferred CSM and starts Forecast Entry Monthly and Annual warmup for users with `petyr:forecast:write`. It does not immediately hydrate `view=all` after Management. While the Management refresh is running, users see a compact bottom-left loader (`Aggiornamento dati in corso...`). Forecasting data remains PostgreSQL-backed; these endpoint variants do not introduce Redash browser calls or schema changes. Company Detail is intentionally on-demand and reads only the selected company/year. Numeric AI Forecast cache reads use a narrow latest-row projection and exclude `explanation`, `request_payload_summary`, `validated_output` and `error_message`; if that read fails, Management, CSM Overview and Company Detail continue rendering with `aiRows=[]` plus a warning.
+`/forecasting` renders a lightweight shell immediately after Petyr read permission checks, then loads Management first from `GET /api/petyr/forecasting/rendering-data?view=management` in the browser. CSM Overview is currently in development and is visible/accessible only to users with `petyr:admin`; non-admin users are kept on Management and do not see the CSM Overview navigator item or preload its data. For admins, after Management is usable, the client starts scoped CSM Overview preload through `view=csm-scoped` for the authenticated/preferred CSM and starts Forecast Entry Monthly and Annual warmup for users with `petyr:forecast:write`. It does not immediately hydrate `view=all` after Management. While the Management refresh is running, users see only the shared workspace header, section navigator and an in-page loader labelled `Updating data ongoing`; Management dashboard cards, tables and diagnostics remain hidden until the Management payload is ready. Forecasting data remains PostgreSQL-backed; these endpoint variants do not introduce Redash browser calls or schema changes. Company Detail is intentionally on-demand and reads only the selected company/year. Numeric AI Forecast cache reads use a narrow latest-row projection and exclude `explanation`, `request_payload_summary`, `validated_output` and `error_message`; if that read fails, Management, CSM Overview and Company Detail continue rendering with `aiRows=[]` plus a warning.
+In Company Detail, the Business Unit current-year view shows collapsed Business Unit totals for Ongoing Forecast, AI Forecast and Closed Revenue YTD. Users can expand each Business Unit to review the individual selected-year months, including previous-month forecast, ongoing forecast, AI Forecast and closed revenue. Below that section, users with forecast write permission can add a company note directly to Company logs without opening Forecast Entry or changing forecast values. Company campaigns show the latest completed campaign plus running or planned campaigns by default, with older/other campaigns expandable. Agreements show only rows expiring after the moment of viewing by default, with expired or undated rows expandable. Company logs replace Change history, show notes and forecast changes, and display the latest three logs before expansion. The Revenue by Business Unit detail, Monthly forecast rows, Annual forecast rows and AI forecast cache support tables are visible only to users with `petyr:admin`.
 
 ## Important rule
 
@@ -172,9 +173,9 @@ POST /api/petyr/forecast-entry/batch/save
 ```
 
 The read endpoint requires `petyr:read`; the save endpoint and normal
-`/forecasting/entry` page require `petyr:forecast:write`. The normal page works
-only on the current server month/year, exposes only a CSM filter, official Petyr
-Business Units, current-month active forecast cells, read-only Closed Revenue
+`/forecasting/entry` page require `petyr:forecast:write`. The normal page defaults
+to the current server month/year, exposes a CSM filter plus Month and Year controls with a same-row `Load` button, official Petyr
+Business Units, active forecast cells for the loaded month, read-only Closed Revenue
 YTD and one note per company. Monthly Business Unit groups start collapsed; the
 Expand/Collapse control is rendered as a button at the right edge of the group
 header. When a Business Unit is expanded, Previous Month Forecast appears to the
@@ -183,7 +184,7 @@ Forecast. The CSM filter area and Monthly table headers stay sticky while
 scrolling the portfolio table. Monthly saves use a floating bottom-right `Save`
 button that remains visible while scrolling and turns green for five seconds
 after an effective save. Monthly data is loaded on the initial page render
-through a portfolio-scoped batch read model. Company lists use all Company
+through a portfolio-scoped batch read model. Changing the CSM dropdown reloads immediately; changing Month or Year updates the controls only until the user presses `Load`. Company lists use all Company
 Ownership company-CSM workspace associations whose `workspace_updated_on` is
 within the last 6 months, so one company can appear under multiple CSMs when
 multiple recent workspace associations exist; if none are available, Petyr
@@ -200,7 +201,7 @@ GET /api/petyr/forecast-entry/annual-batch?csmName=...&year=YYYY
 POST /api/petyr/forecast-entry/annual-batch/save
 ```
 
-The annual section is a separate tab inside `/forecasting/entry`. It exposes CSM and Year filters, and its CSM selector stays synchronized with Monthly Forecast Entry when both sections are loaded. It stores customer + year Forecast Initial and Confidence in
+The annual section is a separate tab inside `/forecasting/entry`. It exposes CSM and Year filters, and its CSM selector stays synchronized with Monthly Forecast Entry when both sections are loaded. The Annual table shows a compact horizontally scrollable summary row above the legend and table with the selected CSM year total plus one selected-year total for each official Business Unit. The Annual table keeps Customer and Confidence visible during horizontal scroll, keeps headers fixed during vertical scroll, marks editable/manual-entry columns with a subtle background, and includes a legend-row button to collapse or show all Business Unit columns. Collapsed mode keeps only Active through Confidence plus Closed Revenue YTD through Logs visible. It stores customer + year Forecast Initial and Confidence in
 `forecast_annual_entry`, stores annual BU values in `forecast_annual`, and
 audits effective changes through `forecast_save_session` /
 `forecast_change_log` with source `Annual Forecast Entry`. Annual saves use the same floating bottom-right `Save` button pattern and do not show separate top or bottom inline save buttons. Its read endpoint uses a portfolio-scoped PostgreSQL read model for the selected CSM/year instead of loading full Company Detail for each customer. After schema changes,

@@ -90,6 +90,10 @@ Redash-derived data is the source of truth for:
 - campaign links / deal links from Master Campaigns;
 - no direct agreement link from Master Agreements.
 
+Campaign display names in Petyr come from
+`redash_raw_master_campaigns_latest.customer_title`. The Redash column name is
+counterintuitive, but Petyr keeps the user-facing label `Campaign name`.
+
 Petyr must not manually edit these values.
 
 Petyr must not call Redash directly from the UI. It must read from PostgreSQL tables materialized by the Redash Ingestor.
@@ -457,7 +461,15 @@ Table rules:
   second, inactive customers without Revenue or Planned last;
 - inactive customers remain visible with muted styling;
 - customer names link to Company Detail;
-- History opens Company Detail at the change-history anchor in a new tab;
+- Logs opens Company Detail at the company logs anchor in a new tab and each
+  row action is labelled `See latest logs of <company>`;
+- the Customer and Confidence columns remain visible during horizontal scroll,
+  and table headers stay fixed during vertical scroll;
+- a button to the right of the legend collapses or shows all Business Unit
+  columns, leaving only Active through Confidence and Closed Revenue YTD through
+  Logs visible when collapsed;
+- editable/manual-entry columns use a subtle manual-entry background so users can
+  distinguish CSM-entered or to-be-entered values from consolidated/read-only data;
 - active status is manual and stored through `company_forecast_status`.
 
 Annual values:
@@ -480,11 +492,13 @@ Annual values:
 
 Annual Revenue / Planned:
 
-- Revenue is selected-year campaign revenue closed through today;
-- Planned is selected-year future campaign revenue from tomorrow through
+- Closed Revenue YTD is selected-year campaign revenue closed through today;
+- Planned This Year is selected-year future campaign revenue from tomorrow through
   December 31 for statuses `Setup`, `Recruiting` and `Running` in the Annual
   Forecast Entry workflow;
-- both read from PostgreSQL materialized Redash-derived data, never Redash
+- ratio columns are labelled `Revenue / Forecast Ongoing`,
+  `Planned / Forecast Ongoing` and `Uncovered / Forecast Ongoing`;
+- both revenue and planned values read from PostgreSQL materialized Redash-derived data, never Redash
   directly.
 
 Audit:
@@ -994,17 +1008,16 @@ It must show:
 - total Initial Forecast for the selected year as a primary KPI;
 - monthly trend;
 - Business Unit summary with orange closed revenue, gray Initial Forecast and previous-month forecast markers colored green/yellow against Initial Forecast;
-- Business Unit month-by-month view across the 12 selected-year months, with closed revenue, previous-month forecast, ongoing forecast and AI Forecast;
+- Business Unit current-year view showing Business Unit totals with Ongoing Forecast, AI Forecast and Closed Revenue YTD; users can expand a Business Unit to show the individual selected-year months with closed revenue, previous-month forecast, ongoing forecast and AI Forecast;
 - relevant company insights, showing only active rule-based categories;
-- real campaign detail;
-- agreement and residual evidence;
-- change history directly below agreement/residual evidence, showing the latest two save sessions by default with an expansion control for older history;
-- monthly forecast rows, meaning saved CSM monthly rows shown read-only;
-- annual forecast rows, meaning CSM-owned annual rows by Business Unit/year and not Management Objectives;
+- company note form below Business Unit current-year view and above Relevant company insights, saving note-only company log entries without changing forecast values;
+- company campaigns showing the latest chronologically completed campaign plus running or planned campaigns by default, with all other campaigns behind an explicit expansion control;
+- agreements and residual evidence showing agreements whose expiry date is after the moment of viewing by default, with expired or undated agreements behind an explicit expansion control;
+- Company logs directly below agreement/residual evidence, containing notes and forecast changes, showing the latest three logs by default with an expansion control for previous logs;
 - company active status;
-- AI forecast cache as read-only evidence.
+- admin-only Revenue by Business Unit detail, Monthly forecast rows, Annual forecast rows and AI forecast cache support tables.
 
-Company Detail must show change history but must not be the main monthly forecast editing area. It must not expose the AI Forecast apply action, numeric AI Forecast row generation or CSM-facing Forecast Intelligence generation; those actions belong outside Company Detail. Company Detail must not load or render the latest successful Forecast Intelligence sentinel row for the selected company and year. Any future company-level intelligence experience must be redesigned in separate documented scope. Admin-only Data diagnostics must be available from the floating bottom-right menu instead of a support card in the body.
+Company Detail must show Company logs, including note-only entries and forecast save sessions, but must not be the main monthly forecast editing area. It must not expose the AI Forecast apply action, numeric AI Forecast row generation or CSM-facing Forecast Intelligence generation; those actions belong outside Company Detail. Company Detail must not load or render the latest successful Forecast Intelligence sentinel row for the selected company and year. Any future company-level intelligence experience must be redesigned in separate documented scope. Admin-only Data diagnostics must be available from the floating bottom-right menu instead of a support card in the body.
 
 Campaign detail should show:
 
@@ -1042,6 +1055,7 @@ Forecast Entry FAQ lives on a separate page:
 ```
 
 The shared Petyr workspace header must expose the top-right `?` help control in every workspace section, not only Forecast Entry. The FAQ page must use the same four-section workspace navigation so users can continue to Management, CSM Overview, Company Detail when context exists, or Forecast Entry without losing selected query context when available.
+The help control must also show the visible text `FAQ` next to the question mark so the destination is explicit. The FAQ content must explain Forecast Ongoing, Previous Month Forecast, Forecast Initial, change logs and the input deadline windows, in addition to the existing forecast-ordering, editability, deterministic preview and Forecast Intelligence boundaries.
 
 A separate `Management Objectives` section lives at the bottom of Management View.
 The legacy route may remain available for management users:
@@ -1059,6 +1073,7 @@ Forecast is the CSM-owned annual forecast.
 It must support:
 
 - selecting/filtering CSM;
+- selecting Month and Year for Monthly Forecast Entry and pressing `Load` to load a non-default period;
 - selecting company;
 - navigating previous/next company;
 - seeing the company counter;

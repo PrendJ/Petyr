@@ -141,7 +141,7 @@ export function PetyrWorkspaceShell({
   return (
     <PetyrPageShell {...props}>
       <div className="relative rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
-        <div className={cn(helpHref ? "pr-14" : undefined)}>
+        <div className={cn(helpHref ? "pr-24" : undefined)}>
           <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-600">
             UNGUESS · Petyr
           </div>
@@ -153,11 +153,12 @@ export function PetyrWorkspaceShell({
         {helpHref ? (
           <a
             aria-label="Open Forecast Entry FAQ"
-            className="absolute right-6 top-6 inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-base font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300 md:right-8 md:top-8"
+            className="absolute right-6 top-6 inline-flex h-10 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300 md:right-8 md:top-8"
             href={helpHref}
             title="Forecast Entry FAQ"
           >
-            ?
+            <span className="text-base leading-none">?</span>
+            <span>FAQ</span>
           </a>
         ) : null}
       </div>

@@ -24,10 +24,68 @@ export function ForecastEntryFaq() {
     <section id="forecast-entry-faq" className="space-y-4" aria-labelledby="forecast-entry-faq-title">
       <PetyrSectionTitle
         title={<span id="forecast-entry-faq-title">Forecast Entry FAQ</span>}
-        description="How Petyr ranks forecast urgency and explains deterministic preview, AI Forecast and Forecast Intelligence boundaries."
+        description="How Petyr explains monthly and annual forecast fields, input windows, logs, deterministic preview, AI Forecast and Forecast Intelligence boundaries."
         actions={<Badge variant="outline">FAQ</Badge>}
       />
       <div className="space-y-3">
+        <ForecastEntryFaqItem question="What is Forecast Ongoing?">
+          <p>
+            Forecast Ongoing is the current working forecast for the selected period. It represents the latest CSM-owned estimate that can keep
+            changing as new information arrives, and it is the value Management uses as the live Ongoing Forecast reference.
+          </p>
+          <p>
+            In Monthly Forecast Entry, Ongoing Forecast becomes the active editable field from day 16 of the month onward. In Annual Forecast Entry,
+            Ongoing Forecast is the annual forecast value that remains editable after the Forecast Initial window closes.
+          </p>
+        </ForecastEntryFaqItem>
+
+        <ForecastEntryFaqItem question="What is Previous Month Forecast?">
+          <p>
+            Previous Month Forecast is the monthly forecast value entered for the loaded month before the Ongoing Forecast window opens. It captures
+            the CSM expectation while the month is still in its first half, before day 16 switches editing to Ongoing Forecast.
+          </p>
+          <p>
+            For the current month, days 1-15 edit Previous Month Forecast. Future months also edit Previous Month Forecast. Past months are locked
+            and remain visible for audit and comparison only.
+          </p>
+        </ForecastEntryFaqItem>
+
+        <ForecastEntryFaqItem question="What is Forecast Initial?">
+          <p>
+            Forecast Initial is the first annual forecast for a company and year. It is entered through Annual Forecast Entry and then freezes after
+            the initial planning window, so Management can compare the fixed Initial Forecast with the later Ongoing Forecast.
+          </p>
+          <p>
+            The normal Forecast Initial window runs from December 10 of the previous year through January 10 of the target year. Admins can unlock a
+            target year from Petyr Admin when an exceptional correction window is needed; locking the year again restores the normal rule without
+            changing saved Initial Forecast values.
+          </p>
+        </ForecastEntryFaqItem>
+
+        <ForecastEntryFaqItem question="What are logs?">
+          <p>
+            Logs are Petyr's audit trail for effective forecast changes. When a Monthly or Annual Forecast Entry save actually changes a value or
+            supported status field, Petyr creates a save session and change-log rows that record what changed, the source workflow, who saved it and
+            when it happened.
+          </p>
+          <p>
+            Logs stay intentionally sparse: unchanged rows do not create synthetic log entries. They support traceability for forecast updates without
+            replacing the forecast tables themselves.
+          </p>
+        </ForecastEntryFaqItem>
+
+        <ForecastEntryFaqItem question="What are the input deadlines?">
+          <p>
+            Monthly Forecast Entry follows the loaded month. Days 1-15 are for Previous Month Forecast input; from day 16 onward, input moves to
+            Ongoing Forecast. Past months are locked, while future months allow Previous Month Forecast input.
+          </p>
+          <p>
+            Annual Forecast Entry uses December 10 through January 10 as the normal Forecast Initial input window for the target year. After that
+            window closes, Forecast Initial is frozen and annual updates continue through Ongoing Forecast, unless an admin explicitly unlocks the
+            target year for exceptional Initial Forecast entry.
+          </p>
+        </ForecastEntryFaqItem>
+
         <ForecastEntryFaqItem question="How does forecast urgency ordering work?">
           <p>
             The dedicated Forecast Entry route sorts companies by a server-side priority score: active companies receive a positive base score,

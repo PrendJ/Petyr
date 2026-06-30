@@ -13,6 +13,8 @@ export async function GET(request: Request) {
   const result = await getForecastEntryBatch({
     csmName: searchParams.get("csmName"),
     preferredCsmName: auth.user.displayName,
+    year: searchParams.get("year"),
+    month: searchParams.get("month"),
     warmup: searchParams.get("warmup")
   });
 
