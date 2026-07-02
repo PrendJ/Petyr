@@ -13,6 +13,26 @@ Each decision should include:
 
 ---
 
+## 2026-07-02 - Make Petyr Intelligence admin-only for MVP
+
+- **Status:** Accepted.
+- **Context:** The first separated Petyr Intelligence MVP exposed `/intelligence`, `/intelligence/company/[companyName]` and CSM-style read/feedback APIs with `petyr:read` or `petyr:forecast:write`. Product clarified that the new Intelligence section must be accessible and visible only to users with admin permissions.
+- **Decision:** The separated Petyr Intelligence section and its read/detail/feedback APIs require `petyr:admin` for the MVP. Public gateway launcher copy must not advertise `/intelligence` as a normal user-facing tool. Admin scan, budget, calibration and worker controls continue to require `petyr:admin`, with `APP_INTERNAL_SECRET` where already required.
+- **Alternatives discarded:** Keeping `/intelligence` CSM-facing behind `petyr:read`; adding new dedicated `petyr:intelligence:*` permissions in this task; relying only on hidden navigation while leaving APIs readable.
+- **Reason:** Admin-only access matches the explicit product requirement and avoids exposing external-signal insight data before dedicated Intelligence permissions and row-level CSM scoping are documented.
+- **Consequences:** Non-admin Petyr users no longer access the Intelligence section or its insight/feedback APIs. Future non-admin Intelligence rollout requires a new documented Access Layer permission/scoping decision.
+- **Related docs:** `apps/forecasting-app/src/app/intelligence/*`, `apps/forecasting-app/src/app/api/petyr/intelligence/*`, `platform-home/index.html`, `docs/API.md`, `docs/UX.md`, `docs/SECURITY.md`, `docs/SCOPE.md`, `docs/ARCHITECTURE.md`, `BACKLOG.md`, `DEVLOG.md`.
+
+## 2026-07-01 - Keep Petyr Intelligence external-signal based and isolated from Forecasting
+
+- **Status:** Accepted.
+- **Context:** Petyr needs a future company-level Intelligence module after the old Company Detail Intelligence section was removed. Product clarified that this new module must use external company/news signals and must not blur with Forecasting or with deterministic numeric forecast analysis.
+- **Decision:** Petyr Intelligence will be implemented as a separated module/section inside Petyr, isolated from Forecasting. It will use Exa for external web/company signal retrieval and OpenRouter for LLM-based interpretation. Forecasting remains deterministic and must not depend on LLM-generated analysis. Petyr Intelligence must not use LLMs to analyze deterministic numeric data such as revenue, margin, forecast, campaign count or mathematical trends; those remain handled by SQL, formulas, deterministic services and existing Forecasting logic.
+- **Alternatives discarded:** Reusing the existing Forecast Entry Forecast Intelligence cache/sentinel model as the main company-intelligence surface; adding Intelligence back into Forecasting Company Detail; running naive company x Business Unit external searches; asking OpenRouter to analyze or explain deterministic Forecasting numbers.
+- **Reason:** External market/company signals are a different product surface from Forecasting. Keeping the module isolated reduces regression risk, keeps provider cost controllable and preserves the trusted deterministic ownership of Petyr forecast data.
+- **Consequences:** The module should use separate routes, services, worker naming and database tables such as `CompanyIntelligenceRun`, `CompanySignalItem`, `CompanyIntelligenceInsight`, `CompanyInsightFeedback` and `IntelligenceCalibrationReport`. The first MVP must use low default limits: `INTELLIGENCE_MAX_COMPANIES_PER_RUN=10`, `INTELLIGENCE_MAX_RESULTS_PER_COMPANY=5`, `INTELLIGENCE_SEARCH_RECENCY_DAYS=30` and `INTELLIGENCE_DAILY_BUDGET_REQUESTS=100`.
+- **Related docs:** `CURRENT_STATE.md`, `docs/SCOPE.md`, `docs/ARCHITECTURE.md`, `docs/DOMAIN.md`, `docs/DB.md`, `docs/API.md`, `docs/UX.md`, `docs/SECURITY.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md`, `BACKLOG.md`, `DEVLOG.md`.
+
 ## 2026-06-29 - Use recent workspace associations for Petyr CSM company lists
 
 - **Status:** Accepted.

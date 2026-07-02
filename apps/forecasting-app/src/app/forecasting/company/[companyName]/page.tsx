@@ -972,7 +972,12 @@ export default async function CompanyDetailPage({ params, searchParams }: Compan
   const canAddCompanyNotes = hasPetyrPermission(identity, PETYR_PERMISSIONS.forecastWrite);
 
   return (
-    <PetyrWorkspaceShell activeSection="company" companyDetailHref={companyDetailHref} forecastEntryHref={forecastEntryHref}>
+    <PetyrWorkspaceShell
+      activeSection="company"
+      companyDetailHref={companyDetailHref}
+      forecastEntryHref={forecastEntryHref}
+      canViewCsmOverview={canViewAdminTools}
+    >
       <PetyrSectionTitle
         title="Company Detail"
         description={`Analytical company sheet for ${displayCompanyName}: agreement, closed revenue, residual, AI and company logs context.`}

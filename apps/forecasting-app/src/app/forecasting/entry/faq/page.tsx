@@ -1,7 +1,7 @@
 import { ForecastEntryFaq } from "@/components/petyr/ForecastEntryFaq";
 import { PetyrWorkspaceShell } from "@/components/petyr/PetyrLayoutPrimitives";
 import { requirePetyrPagePermission } from "@/lib/petyr/auth";
-import { PETYR_PERMISSIONS } from "@/lib/petyr/authCore";
+import { hasPetyrPermission, PETYR_PERMISSIONS } from "@/lib/petyr/authCore";
 
 export const dynamic = "force-dynamic";
 
@@ -66,15 +66,17 @@ function buildCompanyDetailHref(query: Pick<ForecastEntryFaqQuery, "companyName"
 }
 
 export default async function ForecastEntryFaqPage({ searchParams }: ForecastEntryFaqPageProps) {
-  await requirePetyrPagePermission(PETYR_PERMISSIONS.read);
+  const identity = await requirePetyrPagePermission(PETYR_PERMISSIONS.read);
   const resolvedSearchParams = (await searchParams) ?? {};
   const query = getForecastEntryFaqQuery(resolvedSearchParams);
+  const canViewCsmOverview = hasPetyrPermission(identity, PETYR_PERMISSIONS.admin);
 
   return (
     <PetyrWorkspaceShell
       activeSection="entry"
       companyDetailHref={buildCompanyDetailHref(query)}
       forecastEntryHref={buildForecastEntryHref(query)}
+      canViewCsmOverview={canViewCsmOverview}
     >
       <ForecastEntryFaq />
     </PetyrWorkspaceShell>

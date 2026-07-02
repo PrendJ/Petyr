@@ -18,6 +18,51 @@ Each entry must include:
 
 ---
 
+## 2026-07-02
+
+- **Area:** Petyr / Intelligence permissions
+- **Change:** Restricted the separated Petyr Intelligence pages and non-admin-looking Intelligence read/detail/feedback APIs to `petyr:admin`. Removed the public gateway launcher card for `/intelligence` and updated Intelligence API, UX, Security, Scope, Architecture and app docs to state the admin-only MVP model.
+- **Reason:** Product asked whether the new Intelligence section was visible only to admins and requested it be made admin-only if not.
+- **Impact:** Non-admin users with `petyr:read` or `petyr:forecast:write` can no longer access `/intelligence`, `/intelligence/company/[companyName]`, `GET /api/petyr/intelligence/insights`, `GET /api/petyr/intelligence/insights/[insightId]` or `POST /api/petyr/intelligence/feedback`. Intelligence workers, admin scan controls, provider configuration, schema, Forecasting data flow and forecast logic are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/app/intelligence/page.tsx`, `apps/forecasting-app/src/app/intelligence/company/[companyName]/page.tsx`, `apps/forecasting-app/src/app/api/petyr/intelligence/insights/route.ts`, `apps/forecasting-app/src/app/api/petyr/intelligence/insights/[insightId]/route.ts`, `apps/forecasting-app/src/app/api/petyr/intelligence/feedback/route.ts`, `platform-home/index.html`, `README.md`, `apps/forecasting-app/README.md`, `docs/API.md`, `docs/UX.md`, `docs/SECURITY.md`, `docs/SCOPE.md`, `docs/ARCHITECTURE.md`, `BACKLOG.md`, `DECISIONS.md`, `DEVLOG.md`.
+- **Follow-up:** Any future non-admin Intelligence rollout must first define dedicated Access Layer permissions and row-level scoping.
+
+## 2026-07-02
+
+- **Area:** Petyr / Forecasting navigation permissions
+- **Change:** Made the shared Petyr workspace navigation fail closed for CSM Overview visibility and passed the explicit `petyr:admin` check from Forecast Entry, Forecast Entry FAQ, legacy Forecast Entry and Company Detail routes.
+- **Reason:** Non-admin users must never see the CSM Overview navigator item. The dedicated Forecast Entry route was relying on the shell default, so the item could appear there until clicked.
+- **Impact:** UI navigation behavior changed only. CSM Overview remains admin-only; no schema, API contract, Redash/PostgreSQL data flow or forecast save behavior changed.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/PetyrLayoutPrimitives.tsx`, `apps/forecasting-app/src/app/forecasting/entry/page.tsx`, `apps/forecasting-app/src/components/petyr/ForecastEntryMonthlyBatchWorkspace.tsx`, `apps/forecasting-app/src/app/forecasting/entry/faq/page.tsx`, `apps/forecasting-app/src/components/petyr/ForecastEntryWorkspace.tsx`, `apps/forecasting-app/src/components/petyr/ForecastEntryWorkspaceOld.tsx`, `apps/forecasting-app/src/app/forecasting/company/[companyName]/page.tsx`, `DEVLOG.md`.
+- **Follow-up:** None.
+
+## 2026-07-01
+
+- **Area:** Petyr / Intelligence / Scheduled worker
+- **Change:** Implemented the scheduled `intelligence-scan` worker as a separate Petyr app worker entrypoint and Compose service. Added persisted Admin enable/disable control through `app_setting`, worker status API, protected toggle action, advisory-lock execution, daily provider request budget enforcement from `company_intelligence_provider_request_log`, bounded provider retry logging, skipped run statuses for disabled/lock cases, worker npm scripts and Admin budget/status UI updates.
+- **Reason:** Product requested a controlled scheduled Petyr Intelligence worker with daily budget enforcement, retry policy, admin-visible run status and the ability for Admin to enable/disable the worker or trigger one capped manual run.
+- **Impact:** Petyr Intelligence can now refresh external company signals automatically when enabled, while manual real runs share the same lock and budget guard. Forecasting business logic, deterministic forecast calculations and Forecasting tables were not changed.
+- **Files/documents involved:** `apps/forecasting-app/src/worker/intelligenceScanWorker.ts`, `apps/forecasting-app/src/services/intelligence/*`, `apps/forecasting-app/src/app/api/petyr/admin/intelligence/*`, `apps/forecasting-app/src/components/intelligence/IntelligenceAdminRunControl.tsx`, `apps/forecasting-app/src/app/petyr-admin/intelligence/page.tsx`, `apps/forecasting-app/prisma/schema.prisma`, `apps/forecasting-app/prisma/migrations/202607010002_add_intelligence_worker_statuses/migration.sql`, `apps/forecasting-app/package.json`, `.env.example`, `apps/forecasting-app/.env.example`, `docker-compose.yml`, `CURRENT_STATE.md`, `BACKLOG.md`, `docs/ARCHITECTURE.md`, `docs/API.md`, `docs/DB.md`, `docs/UX.md`, `docs/SECURITY.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md`, `docs/SCOPE.md`, `DEVLOG.md`.
+- **Follow-up:** Run a real provider smoke test with low limits before enabling the worker broadly, then implement persisted calibration report generation.
+
+## 2026-07-01
+
+- **Area:** Petyr / Intelligence / MVP implementation
+- **Change:** Implemented the first separated Petyr Intelligence MVP. Added Prisma models and migration for Intelligence runs, raw Exa results, deduplicated signal items, Business Unit classifications, generated insights, insight-source links, CSM feedback, provider request logs and calibration reports. Added isolated services under `src/services/intelligence`, Exa and OpenRouter adapters, structured JSON insight validation, capped manual admin runs, CSM insight UI at `/intelligence`, company Intelligence detail, admin Intelligence view at `/petyr-admin/intelligence`, gateway routing, env placeholders and focused tests.
+- **Reason:** Product requested an isolated external-signal Intelligence module using Exa and OpenRouter while keeping Forecasting deterministic and untouched.
+- **Impact:** New Intelligence functionality is available behind existing Petyr permissions. Forecasting business logic, forecast calculations and existing Forecast Intelligence cache behavior were not modified. Real provider runs require `INTELLIGENCE_ENABLED=true`, provider keys and `APP_INTERNAL_SECRET` for non-dry-run admin execution.
+- **Files/documents involved:** `apps/forecasting-app/prisma/schema.prisma`, `apps/forecasting-app/prisma/migrations/202607010001_add_petyr_intelligence/migration.sql`, `apps/forecasting-app/src/services/intelligence/*`, `apps/forecasting-app/src/app/intelligence/*`, `apps/forecasting-app/src/app/petyr-admin/intelligence/page.tsx`, `apps/forecasting-app/src/app/api/petyr/intelligence/*`, `apps/forecasting-app/src/app/api/petyr/admin/intelligence/*`, `apps/forecasting-app/src/components/intelligence/*`, `.env.example`, `apps/forecasting-app/.env.example`, `docker-compose.yml`, `platform-home/nginx.conf`, `platform-home/index.html`, `apps/forecasting-app/package.json`, `apps/forecasting-app/tests/intelligence.test.ts`, `CURRENT_STATE.md`, `BACKLOG.md`, `docs/API.md`, `docs/DB.md`, `docs/UX.md`, `docs/SECURITY.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md`, `DEVLOG.md`.
+- **Follow-up:** Completed by the later scheduled worker entry above; remaining follow-up is persisted calibration report generation and low-limit provider smoke testing.
+
+## 2026-07-01
+
+- **Area:** Petyr / Intelligence / Documentation planning
+- **Change:** Documented Petyr Intelligence as a planned, isolated Petyr module for external company-signal discovery. Added missing root/template documentation files for scope, architecture, domain, database, API, UX, security, testing and deployment. Added the accepted decision that Intelligence uses Exa for external retrieval and OpenRouter for qualitative interpretation, while Forecasting remains deterministic and independent from LLM-generated numeric analysis. Added phased backlog items for schema, Exa ingestion, deduplication/classification, CSM UX, admin calibration and permissions.
+- **Reason:** Product requested a documentation-only design for a new `intelligence` module before implementation, with explicit isolation from Forecasting and low default MVP provider limits.
+- **Impact:** No runtime behavior, routes, schema, environment files, workers or application code changed. Future implementation now has documented module boundaries, proposed table names, endpoint contracts, UX surfaces, provider-secret handling, retry/budget strategy and test strategy.
+- **Files/documents involved:** `CURRENT_STATE.md`, `DECISIONS.md`, `BACKLOG.md`, `docs/SCOPE.md`, `docs/ARCHITECTURE.md`, `docs/DOMAIN.md`, `docs/DB.md`, `docs/API.md`, `docs/UX.md`, `docs/SECURITY.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md`, `DEVLOG.md`.
+- **Follow-up:** Implement the MVP with schema and isolated service skeleton first, using the exact prompt in the task handoff.
+
 ## 2026-06-30
 
 - **Area:** Petyr / Forecast Entry / Monthly sticky scroll context

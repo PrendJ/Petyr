@@ -587,7 +587,12 @@ export default function ForecastEntryWorkspace({
   const forecastEntryHref = buildEntryPageUrl(selectionFromEntry(entry));
 
   return (
-    <PetyrWorkspaceShell activeSection="entry" companyDetailHref={companyDetailUrl} forecastEntryHref={forecastEntryHref}>
+    <PetyrWorkspaceShell
+      activeSection="entry"
+      companyDetailHref={companyDetailUrl}
+      forecastEntryHref={forecastEntryHref}
+      canViewCsmOverview={canViewAdminTools}
+    >
       <PetyrForecastNavigatorShell
         sticky
         csmSlot={

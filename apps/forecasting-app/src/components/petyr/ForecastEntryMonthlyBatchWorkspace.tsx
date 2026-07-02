@@ -180,11 +180,13 @@ function LegendChip({ className, label }: { className: string; label: string }) 
 export default function ForecastEntryMonthlyBatchWorkspace({
   initialBatch,
   initialAnnualYear,
-  initialAnnualBatch = null
+  initialAnnualBatch = null,
+  canViewCsmOverview = false
 }: {
   initialBatch: ForecastEntryBatchDataResult;
   initialAnnualYear?: string;
   initialAnnualBatch?: AnnualForecastEntryBatchDataResult | null;
+  canViewCsmOverview?: boolean;
 }) {
   const [batch, setBatch] = useState(initialBatch);
   const [selectedCsm, setSelectedCsm] = useState(initialBatch.data.selectedCsm);
@@ -439,6 +441,7 @@ export default function ForecastEntryMonthlyBatchWorkspace({
       activeSection="entry"
       companyDetailHref={companyDetailHref}
       forecastEntryHref={buildEntryPageUrl(batch.data.selectedCsm, batch.data.year, batch.data.month)}
+      canViewCsmOverview={canViewCsmOverview}
       contentClassName="max-w-[1800px]"
     >
       <section>

@@ -12,6 +12,7 @@ This base app includes:
 - the approved Petyr visual rendering at `/forecasting`;
 - Management Objectives in Management View, with `/forecasting/entry/objectives` kept as a management-only compatibility route;
 - PostgreSQL database backup export/import in `/petyr-admin`;
+- admin-only separated Petyr Intelligence at `/intelligence` and `/petyr-admin/intelligence`;
 - Excel-first monthly forecast import/export in `/petyr-admin`;
 - persisted sanitized performance results in `/petyr-admin`;
 - local UI components needed by the rendering;
@@ -154,6 +155,23 @@ Petyr Admin records each manual or scheduled Daily AI Forecast run in
 `petyr_performance_measurement` under operation `Daily AI Forecast run`, showing
 duration, run source, selected/processed/failed company counts, saved/skipped
 rows and the daily model version.
+
+Petyr Intelligence scheduled worker:
+
+```bash
+npm run worker:intelligence:once
+npm run worker:intelligence:loop
+```
+
+The Docker Compose service `intelligence-scan` runs the loop every day at
+`INTELLIGENCE_SCAN_DAILY_TIME=03:00` in `INTELLIGENCE_SCAN_TIMEZONE=Europe/Rome`.
+It defaults to disabled through `INTELLIGENCE_WORKER_ENABLED=false` and can be
+enabled or disabled from `/petyr-admin/intelligence` with `APP_INTERNAL_SECRET`.
+Real scans require `INTELLIGENCE_ENABLED=true`, `EXA_API_KEY`,
+`OPENROUTER_API_KEY`, low run caps and the persisted daily provider request
+budget. The worker writes only Intelligence tables and provider request logs; it
+does not write Forecasting forecast tables or ask OpenRouter to analyze revenue,
+margin, forecast values, campaign counts or numeric trends.
 
 Management Objectives use:
 

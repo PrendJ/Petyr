@@ -23,6 +23,7 @@ export const PETYR_PERFORMANCE_CHECKS = [
   "readAiForecastCacheRows",
   "loadOverviewInputs rows loaded",
   "Daily AI Forecast run",
+  "Intelligence scan run",
   "Redash sync execution",
   "Redash latest table materialization"
 ] as const;
