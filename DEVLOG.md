@@ -20,6 +20,15 @@ Each entry must include:
 
 ## 2026-07-02
 
+- **Area:** Petyr / Forecasting / Company Detail navigation
+- **Change:** Aligned the Company Detail CSM/company navigator with Forecast Entry Monthly and Annual portfolio selection. Company Detail navigation now uses all recent Company Ownership company-CSM workspace associations whose `workspace_updated_on` is within the last 6 months, allowing the same company to appear under multiple CSM filters when the source data has multiple recent associations. It falls back to the latest owner per company only when no recent workspace associations are available.
+- **Reason:** Product reported that the Company Detail company filter did not appear to associate the correct CSM company list with the same rules already defined for Monthly and Annual Forecast Entry.
+- **Impact:** UI navigation/read-model behavior changed only. Company Detail remains read-only; forecast calculations, save contracts, schema, Redash sources, PostgreSQL data flow and permissions are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/services/petyrDataService.ts`, `apps/forecasting-app/README.md`, `docs/05_forecasting_product_spec.md`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `DEVLOG.md`.
+- **Follow-up:** None.
+
+## 2026-07-02
+
 - **Area:** Petyr / Intelligence permissions
 - **Change:** Restricted the separated Petyr Intelligence pages and non-admin-looking Intelligence read/detail/feedback APIs to `petyr:admin`. Removed the public gateway launcher card for `/intelligence` and updated Intelligence API, UX, Security, Scope, Architecture and app docs to state the admin-only MVP model.
 - **Reason:** Product asked whether the new Intelligence section was visible only to admins and requested it be made admin-only if not.

@@ -503,7 +503,7 @@ Validation:
 
 Company detail.
 
-Company Detail uses the shared Petyr workspace shell and remains read-only for data edits. It must expose the Forecast Entry-style navigator for CSM filter, company selection, previous/next company and year load, using the same Forecast Entry company ordering. The year/load control appears to the left of previous/next company navigation; the previous/next helper must not repeat the CSM name. It must not expose the manual AI Forecast apply action, numeric AI Forecast generation or the CSM-facing `Intelligence` section. Company Detail must not load or render the Forecast Intelligence sentinel row for the selected company/year. Any future company-level intelligence experience belongs to separate documented scope.
+Company Detail uses the shared Petyr workspace shell and remains read-only for data edits. It must expose the Forecast Entry-style navigator for CSM filter, company selection, previous/next company and year load, using the same Forecast Entry company ordering and the same recent Company Ownership workspace association rule used by Forecast Entry Monthly and Annual. The year/load control appears to the left of previous/next company navigation; the previous/next helper must not repeat the CSM name. It must not expose the manual AI Forecast apply action, numeric AI Forecast generation or the CSM-facing `Intelligence` section. Company Detail must not load or render the Forecast Intelligence sentinel row for the selected company/year. Any future company-level intelligence experience belongs to separate documented scope.
 
 Sections:
 - Forecast Entry-style navigator with CSM filter, company selection, year/load on the left, and previous/next company navigation without repeating the CSM name;

@@ -998,7 +998,7 @@ It must not be the main editing area.
 
 Company Detail is analytical and read-only.
 
-Company Detail uses the shared Petyr workspace shell with the same descriptive header card and section navigation as Management View, CSM Overview and Forecast Entry. It remains read-only for forecast data edits, but users must be able to change CSM filter, company, previous/next company and year through the Forecast Entry-style navigator backed by the Forecast Entry company ordering. The year/load control appears to the left of previous/next company navigation, and previous/next navigation must not repeat the CSM name.
+Company Detail uses the shared Petyr workspace shell with the same descriptive header card and section navigation as Management View, CSM Overview and Forecast Entry. It remains read-only for forecast data edits, but users must be able to change CSM filter, company, previous/next company and year through the Forecast Entry-style navigator backed by the Forecast Entry company ordering and the same recent Company Ownership workspace association rule used by Forecast Entry Monthly and Annual. The year/load control appears to the left of previous/next company navigation, and previous/next navigation must not repeat the CSM name.
 
 It must show:
 
