@@ -460,15 +460,22 @@ Year rules:
 
 Table rules:
 
-- rows are all customers assigned to the selected CSM;
-- sorting is active customers first, inactive customers with Revenue or Planned
-  second, inactive customers without Revenue or Planned last;
-- inactive customers remain visible with muted styling;
-- customer names link to Company Detail;
+- rows are all companies assigned to the selected CSM;
+- sorting is active companies first, inactive companies with Revenue or Planned
+  second, inactive companies without Revenue or Planned last;
+- inactive companies remain visible with muted styling;
+- company names link to Company Detail;
 - Logs opens Company Detail at the company logs anchor in a new tab and each
   row action is labelled `See latest logs of <company>`;
-- the Customer and Confidence columns remain visible during horizontal scroll,
-  and table headers stay fixed during vertical scroll;
+- the Company and Confidence columns remain visible during horizontal scroll,
+  the legend row spans the full horizontal table width, and table headers stay
+  fixed during vertical scroll;
+- the selected CSM annual summary is shown as a highlighted total row at the
+  bottom of the table, with no Active, Confidence or Logs value, and with
+  Forecast Initial, Forecast Ongoing, visible Business Unit totals, Closed
+  Revenue YTD, Planned This Year and ratio values aligned under their columns;
+- Forecast Entry may display the official `Experience` Business Unit as `UX`
+  while preserving `Experience` as the stored Business Unit value;
 - a button to the right of the legend collapses or shows all Business Unit
   columns, leaving only Active through Confidence and Closed Revenue YTD through
   Logs visible when collapsed;
@@ -478,11 +485,11 @@ Table rules:
 
 Annual values:
 
-- FC Initial is stored by customer + year in `forecast_annual_entry`;
+- FC Initial is stored by company + year in `forecast_annual_entry`;
 - FC Initial is editable only from December 10 of year N-1 through January 10 of
   year N, or while Petyr Admin has unlocked that selected target year, then
   read-only;
-- FC Ongoing Confidence is stored by customer + year and accepts only `01 High`,
+- FC Ongoing Confidence is stored by company + year and accepts only `01 High`,
   `02 Mid` and `03 Low`;
 - confidence is required when a row is modified;
 - Business Unit annual forecast values use the official Petyr Business Units and

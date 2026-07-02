@@ -234,7 +234,7 @@ GET /api/petyr/forecast-entry/batch
 The batch read endpoint requires `petyr:read`. It must use a portfolio-scoped PostgreSQL read model for the selected CSM and selected monthly target period, not one full per-company Forecast Entry context read per customer.
 
 Annual Forecast Entry reads the selected annual portfolio, annual year options, official Business
-Units, customer active status, customer + year metadata, saved annual BU values,
+Units, company active status, company + year metadata, saved annual BU values,
 AI annual placeholders, selected-year Revenue, selected-year Planned, derived
 percentages and Company Detail history links through:
 
@@ -322,16 +322,23 @@ Annual Forecast Entry rules:
   Company Ownership workspaces updated in the last 6 months; a company may
   appear under more than one CSM when multiple recent company-CSM associations
   exist;
-- ordering is active customers first, then inactive customers with Revenue or
-  Planned, then inactive customers without Revenue or Planned;
+- ordering is active companies first, then inactive companies with Revenue or
+  Planned, then inactive companies without Revenue or Planned;
 - inactive rows remain visible with muted styling;
-- customer names link to Company Detail; the Logs action opens Company Detail
+- company names link to Company Detail; the Logs action opens Company Detail
   at the company logs anchor in a new tab and is labelled `See latest logs of <company>`;
 - the Annual table uses its own vertical scroll area so only the legend row and
   table headers stay visible while users scroll down the portfolio; the section
-  title, filters, selected-CSM annual summary and Forecast Initial window notice
-  scroll away above the table, and the Customer and Confidence columns remain
-  visible during horizontal scroll;
+  title, filters and Forecast Initial window notice scroll away above the table,
+  the legend row extends across the full horizontal table width, and the Company
+  and Confidence columns remain visible during horizontal scroll;
+- the selected CSM annual summary is rendered as a highlighted total row at the
+  bottom of the Annual table. The total row is not a company row: Active,
+  Confidence and Logs remain empty, while Forecast Initial, Forecast Ongoing,
+  visible Business Unit totals, Closed Revenue YTD, Planned This Year and ratio
+  values align under their respective columns;
+- Forecast Entry headers may display the official `Experience` Business Unit as
+  `UX` while preserving `Experience` as the stored Business Unit value;
 - a button to the right of the legend collapses or shows all Business Unit columns,
   so the collapsed table shows only Active through Confidence and Closed Revenue YTD through Logs;
 - editable/manual-entry columns use a subtle manual-entry background to distinguish
@@ -350,9 +357,9 @@ Annual Forecast Entry rules:
   value;
 - Forecast Ongoing is derived as the sum of saved/confirmed BU values, not from the
   old Excel BU formula;
-- a compact horizontally scrollable summary row above the legend and table shows
-  the selected CSM total forecast for the selected year plus one total for each
-  official Business Unit, using the same live Annual Entry values shown in the table;
+- a highlighted total row at the bottom of the table shows the selected CSM
+  totals for the selected year, using the same live Annual Entry values shown in
+  the table and aligning totals under their respective visible columns;
 - Closed Revenue YTD is selected-year campaign revenue closed through today, read from
   PostgreSQL-backed materialized data;
 - Planned This Year is selected-year campaign revenue with end date from tomorrow through
@@ -503,7 +510,7 @@ Validation:
 
 Company detail.
 
-Company Detail uses the shared Petyr workspace shell and remains read-only for data edits. It must expose the Forecast Entry-style navigator for CSM filter, company selection, previous/next company and year load, using the same Forecast Entry company ordering and the same recent Company Ownership workspace association rule used by Forecast Entry Monthly and Annual. The year/load control appears to the left of previous/next company navigation; the previous/next helper must not repeat the CSM name. It must not expose the manual AI Forecast apply action, numeric AI Forecast generation or the CSM-facing `Intelligence` section. Company Detail must not load or render the Forecast Intelligence sentinel row for the selected company/year. Any future company-level intelligence experience belongs to separate documented scope.
+Company Detail uses the shared Petyr workspace shell and remains read-only for data edits. It must expose the Forecast Entry-style navigator for CSM filter, company selection, previous/next company and year load, using the same Forecast Entry company ordering and the same recent Company Ownership workspace association rule used by Forecast Entry Monthly and Annual. Company Detail links and navigator actions preserve the selected `csmName` query context so the CSM filter and company list stay aligned when a company appears in multiple recent CSM portfolios. The year/load control appears to the left of previous/next company navigation; the previous/next helper must not repeat the CSM name. It must not expose the manual AI Forecast apply action, numeric AI Forecast generation or the CSM-facing `Intelligence` section. Company Detail must not load or render the Forecast Intelligence sentinel row for the selected company/year. Any future company-level intelligence experience belongs to separate documented scope.
 
 Sections:
 - Forecast Entry-style navigator with CSM filter, company selection, year/load on the left, and previous/next company navigation without repeating the CSM name;

@@ -79,7 +79,9 @@ Rules:
   Unclicked FC AI placeholders are not saved and do not contribute.
 - FC Ongoing Confidence is required on modified rows and accepts only `01 High`,
   `02 Mid` and `03 Low`.
-- Annual Entry table headers stay fixed during vertical scroll, and Customer plus Confidence stay visible during horizontal scroll.
+- Annual Entry table headers stay fixed during vertical scroll, the legend row spans the full horizontal table width, and Company plus Confidence stay visible during horizontal scroll.
+- Annual Entry shows the selected CSM annual summary as a highlighted total row at the bottom of the table. The total row is not a company row: Active, Confidence and Logs remain empty, while Forecast Initial, Forecast Ongoing, visible Business Unit totals, Closed Revenue YTD, Planned This Year and ratio values align under their respective columns.
+- Forecast Entry headers may display the official `Experience` Business Unit as `UX` while preserving `Experience` as the stored Business Unit value.
 - The legend row includes a Business Unit collapse/show button; collapsed mode hides all BU input columns and keeps Active through Confidence plus Closed Revenue YTD through Logs visible.
 - Editable Annual Entry columns use a subtle manual-entry background, while consolidated/read-only columns remain visually quieter.
 - Annual Entry revenue/planned columns are labelled Closed Revenue YTD and Planned This Year; ratio columns explicitly use Forecast Ongoing; the history action is labelled Logs and each row link says `See latest logs of <company>`.

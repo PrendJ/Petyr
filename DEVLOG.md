@@ -20,6 +20,24 @@ Each entry must include:
 
 ## 2026-07-02
 
+- **Area:** Petyr / Forecast Entry / Annual table layout and copy
+- **Change:** Moved the Annual Forecast Entry selected-CSM year summary from the compact row above the legend into a highlighted total row at the bottom of the annual table. The total row leaves Active, Confidence and Logs empty and aligns Forecast Initial, Forecast Ongoing, visible Business Unit totals, Closed Revenue YTD, Planned This Year and ratio values under their table columns. The annual legend row now spans the full horizontal table width while scrolling right. Forecast Entry table copy now shows `Company` instead of `Customer`, and displays the official `Experience` Business Unit as `UX` in table headers while preserving `Experience` as the stored value.
+- **Reason:** Product requested that the Annual legend/collapse row continue to cover the table when horizontally scrolled, that annual totals live at the bottom of the table as a clearly non-company total, and that the visible labels use Company and UX.
+- **Impact:** UI layout and copy changed only. Annual read/save APIs, schema, permissions, Redash/PostgreSQL data flow, stored Business Unit values, forecast calculations and audit persistence are unchanged.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/AnnualForecastEntryBatchWorkspace.tsx`, `apps/forecasting-app/src/components/petyr/ForecastEntryMonthlyBatchWorkspace.tsx`, `apps/forecasting-app/src/lib/petyr/businessUnitDisplay.ts`, `PETYR_PRODUCT_AND_DATA_LOGIC.md`, `docs/05_forecasting_product_spec.md`, `docs/petyr/03_petyr_business_rules.md`, `apps/forecasting-app/README.md`, `DEVLOG.md`.
+- **Follow-up:** None.
+
+## 2026-07-02
+
+- **Area:** Petyr / Forecasting / Company Detail CSM navigation
+- **Change:** Preserved `csmName` query context across Company Detail entry links and in-page navigator actions. Company Detail now honors a valid requested CSM navigation context, keeps the CSM filter synchronized after route changes, and carries the selected CSM through company, previous/next and year navigation.
+- **Reason:** Product reported that changing CSM inside Company Detail could leave the CSM filter or the company filter list stuck on the previous CSM, especially when companies have multiple recent CSM associations.
+- **Impact:** UI navigation behavior changed only. Company Detail remains read-only for forecast values; CSM portfolio data still uses the documented recent Company Ownership association rule. No schema, API contract, Redash/PostgreSQL data flow, permissions or forecast calculations changed.
+- **Files/documents involved:** `apps/forecasting-app/src/components/petyr/CompanyDetailNavigator.tsx`, `apps/forecasting-app/src/app/forecasting/company/[companyName]/page.tsx`, `apps/forecasting-app/src/components/petyr/ForecastEntryMonthlyBatchWorkspace.tsx`, `apps/forecasting-app/src/components/petyr/AnnualForecastEntryBatchWorkspace.tsx`, `apps/forecasting-app/src/components/petyr/CsmOverviewWorkspace.tsx`, `apps/forecasting-app/src/components/petyr/ForecastEntryWorkspace.tsx`, `apps/forecasting-app/src/components/petyr/ForecastEntryWorkspaceOld.tsx`, `apps/forecasting-app/src/app/forecasting/entry/faq/page.tsx`, `apps/forecasting-app/README.md`, `docs/05_forecasting_product_spec.md`, `DEVLOG.md`.
+- **Follow-up:** None.
+
+## 2026-07-02
+
 - **Area:** Petyr / Forecasting / Company Detail navigation
 - **Change:** Aligned the Company Detail CSM/company navigator with Forecast Entry Monthly and Annual portfolio selection. Company Detail navigation now uses all recent Company Ownership company-CSM workspace associations whose `workspace_updated_on` is within the last 6 months, allowing the same company to appear under multiple CSM filters when the source data has multiple recent associations. It falls back to the latest owner per company only when no recent workspace associations are available.
 - **Reason:** Product reported that the Company Detail company filter did not appear to associate the correct CSM company list with the same rules already defined for Monthly and Annual Forecast Entry.

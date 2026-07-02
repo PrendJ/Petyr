@@ -51,7 +51,7 @@ function buildForecastEntryHref(query: ForecastEntryFaqQuery) {
   return queryString ? `/forecasting/entry?${queryString}` : "/forecasting/entry";
 }
 
-function buildCompanyDetailHref(query: Pick<ForecastEntryFaqQuery, "companyName" | "year">) {
+function buildCompanyDetailHref(query: Pick<ForecastEntryFaqQuery, "companyName" | "csmName" | "year">) {
   if (!query.companyName) {
     return null;
   }
@@ -59,6 +59,9 @@ function buildCompanyDetailHref(query: Pick<ForecastEntryFaqQuery, "companyName"
   const params = new URLSearchParams();
   if (query.year) {
     params.set("year", query.year);
+  }
+  if (query.csmName) {
+    params.set("csmName", query.csmName);
   }
 
   const queryString = params.toString();
